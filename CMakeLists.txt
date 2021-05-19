@@ -4,7 +4,9 @@ project(magma)
 set(SOURCES
   src/main.c
 
+  src/asm-lang.c
   src/c-lang.c
+  src/lang.c
   src/parse.c
 )
 

@@ -1,12 +1,17 @@
-#include "parse.h"
+#include "lang.h"
 #include "common.h"
 
+#include "asm-lang.h"
+#include "c-lang.h"
+
 int verbose = 1;
-#include <stdio.h>
+
 int
 main(int argc, char **argv)
 {
-  parse_file("examples/test.ma");
+  struct LanguageSpec asm_lang = get_asm_spec();
+
+  compile("examples/hello_world.asm", &asm_lang);
 
   return 0;
 }
