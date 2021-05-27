@@ -3,21 +3,10 @@
 
 #include <stdlib.h>
 
-struct LexSpec
-{
-  const char **keywords;
-  size_t keywords_n;
-
-  const char **symbols;
-  size_t symbols_n;
-
-  const char **line_comment_symbols;
-  size_t line_comment_symbols_n;
-};
-
 enum TokenType
 {
-  TokenTypeKeyword = 0,
+  TokenTypeIntermediate = 0,
+  TokenTypeKeyword,
   TokenTypeIdentifier,
   TokenTypeSymbol,
   TokenTypeStringLiteral,
@@ -30,6 +19,7 @@ struct Token
   unsigned int id;
   enum TokenType type;
   char *value;
+  int identified;
 };
 
 struct LexResult
@@ -41,11 +31,48 @@ struct LexResult
 void
 snprint_token(char *s, size_t n, const struct Token *tok);
 
-struct LexResult
-lex_file(const char *file_path, const struct LexSpec *spec);
+void
+file_to_lines(struct LexResult *dst, const char *file_path);
 
 void
-tokenize_line(const char *line, const struct LexSpec *spec,
-  struct LexResult *result);
+tokenize_strings(struct LexResult *dst, const struct LexResult *src,
+  const char *string_delimiter);
+
+void
+separate_symbols(struct LexResult *dst, const struct LexResult *src);
+
+void
+remove_whitespace(struct LexResult *dst, const struct LexResult *src);
+
+void
+identify_symbol(struct LexResult *dst, const struct LexResult *src,
+  const char *symbol);
+
+/* `symbols` must be NULL-terminated. */
+void
+identify_symbols(struct LexResult *dst, const struct LexResult *src,
+  const char **symbols);
+
+/* TODO: verify symbols, check that all are identified. */
+
+void
+separate_identifiers(struct LexResult *dst, const struct LexResult *src);
+
+void
+identify_keyword(struct LexResult *dst, struct LexResult *src,
+  const char *keyword);
+
+void
+identify_keywords(struct LexResult *dst, struct LexResult *src,
+  const char **keywords);
+
+void
+remove_line_comments(struct LexResult *dst, const struct LexResult *src,
+  const char *line_comment_symbol);
+
+/* TODO: option for nested comments? Or a separate function? */
+void
+remove_block_comments(struct LexResult *dst, const struct LexResult *src,
+  const char *block_comment_begin, const char *block_comment_end);
 
 #endif

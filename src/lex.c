@@ -6,6 +6,7 @@
 #include <ctype.h>
 
 const char *token_type_names[] = {
+  "Intermediate",
   "Keyword",
   "Identifier",
   "Symbol",
@@ -15,40 +16,354 @@ const char *token_type_names[] = {
 };
 
 static int
-is_keyword(const char *str, const struct LexSpec *spec)
+is_extended_alnum(char c)
 {
-  for (size_t i = 0; i < spec->keywords_n; ++i)
-  {
-    if (strcmp(str, spec->keywords[i]) == 0)
-      return 1;
-  }
-  return 0;
+  return isalnum(c) || (c == '_');
 }
 
-static int
-is_line_comment(const struct Token *token, const struct LexSpec *spec)
+void
+snprint_token(char *s, size_t n, const struct Token *tok)
 {
-  for (size_t i = 0; i < spec->line_comment_symbols_n; ++i)
-  {
-    if (token->type == TokenTypeSymbol &&
-        strcmp(token->value, spec->line_comment_symbols[i]) == 0)
-      return 1;
-  }
-  return 0;
+  if (tok->value != NULL)
+    snprintf(s, n, "Token<%s : \"%s\">", token_type_names[tok->type], tok->value);
+  else
+    snprintf(s, n, "Token<%s>", token_type_names[tok->type]);
 }
 
-static void
-remove_comments(struct LexResult *dst, const struct LexResult *src,
-  const struct LexSpec *spec)
+void
+file_to_lines(struct LexResult *dst, const char *file_path)
+{
+  if (dst->tokens != NULL)
+    ARRAY_FREE(dst->tokens, dst->tokens_n);
+  ARRAY_INIT(dst->tokens, dst->tokens_n);
+
+  if (verbose >= 1)
+    printf("Parsing file '%s'\n", file_path);
+
+  FILE *file = fopen(file_path, "r");
+  if (file == NULL)
+  {
+    printf("Could not open file '%s'\n", file_path);
+    return;
+  }
+
+  struct Token tok = {};
+  tok.id = 0;
+  tok.type = TokenTypeIntermediate;
+
+  char line_buf[4096];
+  while (fgets(line_buf, 4096, file) != NULL)
+  {
+    tok.value = strdup(line_buf);
+    ARRAY_APPEND(tok, dst->tokens, dst->tokens_n);
+  }
+
+  fclose(file);
+}
+
+void
+remove_whitespace(struct LexResult *dst, const struct LexResult *src)
 {
   struct LexResult result = {};
   ARRAY_INIT(result.tokens, result.tokens_n);
 
-  /* First, remove line comments */
+  struct Token tok = {};
+  tok.id = 0;
+  for (size_t i = 0; i < src->tokens_n; ++i)
+  {
+    if (src->tokens[i].type == TokenTypeIntermediate)
+    {
+      const char *token_start = NULL;
+      for (const char *c = src->tokens[i].value; ; ++c)
+      {
+        if (token_start == NULL && !isspace(*c))
+          token_start = c;
+
+        if (token_start != NULL && isspace(*c))
+        {
+          /* Add the token */
+          size_t length = c - token_start;
+          tok.type = TokenTypeIntermediate;
+          tok.value = malloc(sizeof(char) * (length + 1));
+          strncpy(tok.value, token_start, length);
+          tok.value[length] = '\0';
+          ARRAY_APPEND(tok, result.tokens, result.tokens_n);
+
+          token_start = NULL;
+        }
+
+        if (*c == '\n')
+        {
+          /* Add the token */
+          tok.type = TokenTypeLineEnd;
+          tok.value = NULL;
+          ARRAY_APPEND(tok, result.tokens, result.tokens_n);
+        }
+
+        if (*c == '\0')
+          break;
+      }
+    }
+    else
+    {
+      ARRAY_APPEND(src->tokens[i], result.tokens, result.tokens_n);
+    }
+  }
+
+  if (dst->tokens != NULL)
+    ARRAY_FREE(dst->tokens, dst->tokens_n);
+
+  dst->tokens = result.tokens;
+  dst->tokens_n = result.tokens_n;
+}
+
+void
+separate_symbols(struct LexResult *dst, const struct LexResult *src)
+{
+  struct LexResult result = {};
+  ARRAY_INIT(result.tokens, result.tokens_n);
+
+  struct Token tok = {};
+  tok.id = 0;
+  tok.type = TokenTypeIntermediate;
+  for (size_t i = 0; i < src->tokens_n; ++i)
+  {
+    if (src->tokens[i].type == TokenTypeIntermediate)
+    {
+      const char *token_start = src->tokens[i].value;
+      int in_symbol = !is_extended_alnum(*token_start);
+      if (in_symbol)
+        tok.type = TokenTypeSymbol;
+      else
+        tok.type = TokenTypeIntermediate;
+      for (const char *c = src->tokens[i].value; ; ++c)
+      {
+        if ((!in_symbol && !is_extended_alnum(*c))
+            || (in_symbol && is_extended_alnum(*c))
+            || (*c == '\0'))
+        {
+          /* Add the token */
+          if (in_symbol)
+            tok.type = TokenTypeSymbol;
+          else
+            tok.type = TokenTypeIntermediate;
+          size_t length = c - token_start;
+          tok.value = malloc(sizeof(char) * (length + 1));
+          strncpy(tok.value, token_start, length);
+          tok.value[length] = '\0';
+          ARRAY_APPEND(tok, result.tokens, result.tokens_n);
+
+          token_start = c;
+        }
+        in_symbol = !is_extended_alnum(*c);
+
+        if (*c == '\0')
+          break;
+      }
+    }
+    else
+    {
+      ARRAY_APPEND(src->tokens[i], result.tokens, result.tokens_n);
+    }
+  }
+
+  if (dst->tokens != NULL)
+    ARRAY_FREE(dst->tokens, dst->tokens_n);
+
+  dst->tokens = result.tokens;
+  dst->tokens_n = result.tokens_n;
+}
+
+void
+identify_symbol(struct LexResult *dst, const struct LexResult *src,
+  const char *symbol)
+{
+  struct LexResult result = {};
+  ARRAY_INIT(result.tokens, result.tokens_n);
+
+  struct Token tok;
+  tok.id = 0;
+  tok.type = TokenTypeSymbol;
+  for (size_t i = 0; i < src->tokens_n; ++i)
+  {
+    if (src->tokens[i].type == TokenTypeSymbol &&
+        !src->tokens[i].identified)
+    {
+      /* Scan the token for the symbol as a substring, and cut it out if
+         it exists. */
+      const char *symbol_start = src->tokens[i].value;
+      const char *c = src->tokens[i].value;
+      while (1)
+      {
+        if (strncmp(c, symbol, strlen(symbol)) == 0)
+        {
+          size_t prev_length = c - symbol_start;
+          if (prev_length > 0)
+          {
+            tok.value = malloc(sizeof(char) * (prev_length + 1));
+            strncpy(tok.value, symbol_start, prev_length);
+            tok.value[prev_length] = '\0';
+            tok.identified = 0;
+            ARRAY_APPEND(tok, result.tokens, result.tokens_n);
+          }
+
+          tok.value = strdup(symbol);
+          tok.identified = 1;
+          ARRAY_APPEND(tok, result.tokens, result.tokens_n);
+
+          c += strlen(symbol);
+          symbol_start = c;
+          continue;
+        }
+        if (*c == '\0')
+        {
+          size_t prev_length = c - symbol_start;
+          if (prev_length > 0)
+          {
+            tok.value = malloc(sizeof(char) * (prev_length + 1));
+            strncpy(tok.value, symbol_start, prev_length);
+            tok.value[prev_length] = '\0';
+            tok.identified = 0;
+            ARRAY_APPEND(tok, result.tokens, result.tokens_n);
+          }
+
+          break;
+        }
+        ++c;
+      }
+    }
+    else
+    {
+      ARRAY_APPEND(src->tokens[i], result.tokens, result.tokens_n);
+    }
+  }
+
+  if (dst->tokens != NULL)
+    ARRAY_FREE(dst->tokens, dst->tokens_n);
+
+  dst->tokens = result.tokens;
+  dst->tokens_n = result.tokens_n;
+}
+
+void
+identify_symbols(struct LexResult *dst, const struct LexResult *src,
+  const char **symbols)
+{
+  struct LexResult result = {};
+  ARRAY_COPY(result.tokens, result.tokens_n, src->tokens, src->tokens_n);
+
+  for (const char **sym = symbols; *sym != NULL; ++sym)
+  {
+    identify_symbol(&result, &result, *sym);
+  }
+
+  if (dst->tokens != NULL)
+    ARRAY_FREE(dst->tokens, dst->tokens_n);
+
+  dst->tokens = result.tokens;
+  dst->tokens_n = result.tokens_n;
+}
+
+void
+separate_identifiers(struct LexResult *dst, const struct LexResult *src)
+{
+  struct LexResult result = {};
+  ARRAY_INIT(result.tokens, result.tokens_n);
+
+  struct Token tok = {};
+  tok.id = 0;
+  tok.type = TokenTypeIdentifier;
+  tok.identified = 1;
+  for (size_t i = 0; i < src->tokens_n; ++i)
+  {
+    if (src->tokens[i].type == TokenTypeIntermediate)
+    {
+      /* TODO: Don't be dumb here. */
+      tok.value = strdup(src->tokens[i].value);
+      ARRAY_APPEND(tok, result.tokens, result.tokens_n);
+    }
+    else
+    {
+      ARRAY_APPEND(src->tokens[i], result.tokens, result.tokens_n);
+    }
+  }
+
+  if (dst->tokens != NULL)
+    ARRAY_FREE(dst->tokens, dst->tokens_n);
+
+  dst->tokens = result.tokens;
+  dst->tokens_n = result.tokens_n;
+}
+
+void
+identify_keyword(struct LexResult *dst, struct LexResult *src,
+  const char *keyword)
+{
+  struct LexResult result = {};
+  ARRAY_INIT(result.tokens, result.tokens_n);
+
+  struct Token tok = {};
+  tok.id = 0;
+  tok.type = TokenTypeKeyword;
+  tok.identified = 1;
+  for (size_t i = 0; i < src->tokens_n; ++i)
+  {
+    if (src->tokens[i].type == TokenTypeIdentifier)
+    {
+      if (strcmp(src->tokens[i].value, keyword) == 0)
+      {
+        tok.value = strdup(keyword);
+        ARRAY_APPEND(tok, result.tokens, result.tokens_n);
+      }
+      else
+      {
+        ARRAY_APPEND(src->tokens[i], result.tokens, result.tokens_n);
+      }
+    }
+    else
+    {
+      ARRAY_APPEND(src->tokens[i], result.tokens, result.tokens_n);
+    }
+  }
+
+  if (dst->tokens != NULL)
+    ARRAY_FREE(dst->tokens, dst->tokens_n);
+
+  dst->tokens = result.tokens;
+  dst->tokens_n = result.tokens_n;
+}
+
+void
+identify_keywords(struct LexResult *dst, struct LexResult *src,
+  const char **keywords)
+{
+  struct LexResult result = {};
+  ARRAY_COPY(result.tokens, result.tokens_n, src->tokens, src->tokens_n);
+
+  for (const char **keyword = keywords; *keyword != NULL; ++keyword)
+  {
+    identify_keyword(&result, &result, *keyword);
+  }
+
+  if (dst->tokens != NULL)
+    ARRAY_FREE(dst->tokens, dst->tokens_n);
+
+  dst->tokens = result.tokens;
+  dst->tokens_n = result.tokens_n;
+}
+
+void
+remove_line_comments(struct LexResult *dst, const struct LexResult *src,
+  const char *line_comment_symbol)
+{
+  struct LexResult result = {};
+  ARRAY_INIT(result.tokens, result.tokens_n);
+
   int in_comment = 0;
   for (size_t i = 0; i < src->tokens_n; ++i)
   {
-    if (is_line_comment(&src->tokens[i], spec))
+    if (src->tokens[i].type == TokenTypeSymbol &&
+        strcmp(src->tokens[i].value, line_comment_symbol) == 0)
       in_comment = 1;
     if (src->tokens[i].type == TokenTypeLineEnd)
       in_comment = 0;
@@ -65,167 +380,30 @@ remove_comments(struct LexResult *dst, const struct LexResult *src,
 }
 
 void
-snprint_token(char *s, size_t n, const struct Token *tok)
+remove_block_comments(struct LexResult *dst, const struct LexResult *src,
+  const char *block_comment_begin, const char *block_comment_end)
 {
-  snprintf(s, n, "Token<%s : \"%s\">", token_type_names[tok->type], tok->value);
-}
+  struct LexResult result = {};
+  ARRAY_INIT(result.tokens, result.tokens_n);
 
-struct LexResult
-lex_file(const char *file_path,
-  const struct LexSpec *spec)
-{
-  struct LexResult lex = {};
-
-  ARRAY_INIT(lex.tokens, lex.tokens_n);
-
-  if (verbose >= 1)
-    printf("Parsing file '%s'\n", file_path);
-
-  FILE *file = fopen(file_path, "r");
-  if (file == NULL)
+  int in_comment = 0;
+  for (size_t i = 0; i < src->tokens_n; ++i)
   {
-    printf("Could not open file '%s'\n", file_path);
-    return lex;
+    if (src->tokens[i].type == TokenTypeSymbol &&
+        strcmp(src->tokens[i].value, block_comment_begin) == 0)
+      in_comment = 1;
+
+    if (!in_comment)
+      ARRAY_APPEND(src->tokens[i], result.tokens, result.tokens_n);
+
+    if (src->tokens[i].type == TokenTypeSymbol &&
+        strcmp(src->tokens[i].value, block_comment_end) == 0)
+      in_comment = 0;
   }
 
-  char line_buf[4096];
-  while (fgets(line_buf, 4096, file) != NULL)
-  {
-    tokenize_line(line_buf, spec, &lex);
-  }
+  if (dst->tokens != NULL)
+    ARRAY_FREE(dst->tokens, dst->tokens_n);
 
-  fclose(file);
-
-  remove_comments(&lex, &lex, spec);
-
-  ARRAY_FREE(lex.tokens, lex.tokens_n);
-
-  return lex;
-}
-
-void
-tokenize_line(const char *line, const struct LexSpec *spec,
-  struct LexResult *result)
-{
-  struct Token tok = {};
-
-  enum ParseMode {
-    ParseModeNone = 0,
-    ParseModeIdentifier,
-    ParseModeNumeric,
-    ParseModeString,
-    ParseModeSymbol
-  };
-
-  enum ParseMode mode = ParseModeNone;
-  const char *token_start = NULL;
-  for (const char *c = line; *c != '\0'; ++c)
-  {
-    switch (mode)
-    {
-      case ParseModeNone:
-        break;
-      case ParseModeIdentifier:
-        if (!isalnum(*c) && *c != '_')
-        {
-          size_t length = (c - token_start);
-          char *token = malloc(sizeof(char) * (length + 1));
-          strncpy(token, token_start, length);
-          token[length] = '\0';
-
-          if (is_keyword(token, spec))
-            tok.type = TokenTypeKeyword;
-          else
-            tok.type = TokenTypeIdentifier;
-          tok.value = token;
-
-          ARRAY_APPEND(tok, result->tokens, result->tokens_n);
-          mode = ParseModeNone;
-        }
-        break;
-      case ParseModeNumeric:
-        /* Numerics contain alphanumerics + '_', so we end when we encounter
-           something else. */
-        if (!isalnum(*c) && *c != '_')
-        {
-          size_t length = (c - token_start);
-          char *token = malloc(sizeof(char) * (length + 1));
-          strncpy(token, token_start, length);
-          token[length] = '\0';
-
-          tok.type = TokenTypeNumericLiteral;
-          tok.value = token;
-
-          ARRAY_APPEND(tok, result->tokens, result->tokens_n);
-          mode = ParseModeNone;
-        }
-        break;
-      case ParseModeString:
-        /* Wait until we have an end quote. */
-        if (*c == '"')
-        {
-          size_t length = (c - token_start) - 1;
-          char *token = malloc(sizeof(char) * (length + 1));
-          strncpy(token, token_start + 1, length);
-          token[length] = '\0';
-
-          tok.type = TokenTypeStringLiteral;
-          tok.value = token;
-
-          ARRAY_APPEND(tok, result->tokens, result->tokens_n);
-          mode = ParseModeNone;
-        }
-        break;
-      case ParseModeSymbol:
-        /* Wait until we encounter and alphanumeric or '_', or whitespace. */
-        if (isalnum(*c) || isspace(*c) || *c == '_')
-        {
-          size_t length = (c - token_start);
-          char *token = malloc(sizeof(char) * (length + 1));
-          strncpy(token, token_start, length);
-          token[length] = '\0';
-
-          tok.type = TokenTypeSymbol;
-          tok.value = token;
-
-          ARRAY_APPEND(tok, result->tokens, result->tokens_n);
-          mode = ParseModeNone;
-        }
-        break;
-    }
-
-    if (mode == ParseModeNone)
-    {
-      /* Start a new token, if possible. */
-      /* First, check for keywords and identifiers, then literals, then
-         symbols. */
-      /* Keywords/literals are alphanumeric strings that start with letters
-         or an underscore. */
-      /* Numeric literals always start with a number, and string literals
-         always start with a single or double quote. */
-      /* Symbols are anything else that doesn't start with whitespace,
-         and end with a space or alphanumeric character. */
-      if (isalpha(*c) || *c == '_')
-      {
-        mode = ParseModeIdentifier;
-      }
-      else if (isdigit(*c))
-      {
-        mode = ParseModeNumeric;
-      }
-      else if (*c == '"')
-      {
-        mode = ParseModeString;
-      }
-      else if (!isspace(*c))
-      {
-        mode = ParseModeSymbol;
-      }
-      token_start = c;
-    }
-  }
-
-  tok.type = TokenTypeLineEnd;
-  tok.value = "";
-  ARRAY_APPEND(tok, result->tokens, result->tokens_n);
+  dst->tokens = result.tokens;
+  dst->tokens_n = result.tokens_n;
 }

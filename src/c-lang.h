@@ -3,7 +3,4 @@
 
 #include "lex.h"
 
-struct LexSpec
-get_c_lex_spec();
-
 #endif

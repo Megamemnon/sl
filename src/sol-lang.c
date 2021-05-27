@@ -3,48 +3,52 @@
 #include <string.h>
 
 const char *sol_keywords[] = {
-  "section",
-  "global"
+  "namespace",
+  "import",
+  "formula",
+  "Formula",
+  "hypothesis",
+  "infer",
+  "rule",
+  "axiom",
+  "theorem",
+  "step",
+  "Var",
+  NULL
 };
 const char *sol_symbols[] = {
-  "("
-  ")",
-  "[",
-  "]",
-  "{",
-  "}",
-  "/*",
-  "*/"
-  "//"
-};
-const char *sol_line_comment_symbols[] = {
-  "//"
+  "(", ")",
+  "[", "]",
+  "{", "}",
+  ".", ",", ";", ":",
+  "/*", "*/",
+  "//",
+  NULL
 };
 
-struct LexSpec
-get_sol_lex_spec()
-{
-  struct LexSpec spec = {};
-
-  spec.keywords = sol_keywords;
-  spec.keywords_n = sizeof(sol_keywords) / sizeof(sol_keywords[0]);
-
-  spec.symbols = sol_symbols;
-  spec.symbols_n = sizeof(sol_symbols) / sizeof(sol_symbols[0]);
-
-  spec.line_comment_symbols = sol_line_comment_symbols;
-  spec.line_comment_symbols_n = sizeof(sol_line_comment_symbols) /
-    sizeof(sol_line_comment_symbols[0]);
-
-  return spec;
-}
+#include <stdio.h>
 
 int
 sol_verify(const char *file_path)
 {
-  struct LexSpec lex_spec = get_sol_lex_spec();
+  struct LexResult lex;
 
-  lex_file(file_path, &lex_spec);
+  file_to_lines(&lex, file_path);
+  remove_whitespace(&lex, &lex);
+  separate_symbols(&lex, &lex);
+  identify_symbols(&lex, &lex, sol_symbols);
+  remove_line_comments(&lex, &lex, "//");
+  remove_block_comments(&lex, &lex, "/*", "*/");
+  separate_identifiers(&lex, &lex);
+  identify_keywords(&lex, &lex, sol_keywords);
+
+  /* TMP: Print out results after lexing. */
+  char buf[1024];
+  for (size_t i = 0; i < lex.tokens_n; ++i)
+  {
+    snprint_token(buf, 1024, &lex.tokens[i]);
+    printf("%s\n", buf);
+  }
 
   return 0;
 }

@@ -90,42 +90,42 @@ prop
   implies(phi: Formula, psi: Formula);
 
   rule
-  modus_ponens(phi, psi)
+  modus_ponens(phi: Formula, psi: Formula)
   {
     hypothesis minor phi;
     hypothesis major implies(phi, psi);
     infer psi;
   }
 
-  axiom
-  simplification(phi, psi)
+  rule
+  simplification(phi: Formula, psi: Formula)
   {
-    implies(phi, implies(psi, phi));
+    infer implies(phi, implies(psi, phi));
   }
 
-  axiom
-  distributive(psi, phi, chi)
+  rule
+  distributive(psi: Formula, phi: Formula, chi: Formula)
   {
-    implies(implies(phi, implies(psi, chi)),
+    infer implies(implies(phi, implies(psi, chi)),
       implies(implies(phi, psi), implies(phi, chi)));
   }
 
-  axiom
-  transposition(phi, psi)
+  rule
+  transposition(phi: Formula, psi: Formula)
   {
-    implies(implies(not(psi), not(phi)),
+    infer implies(implies(not(psi), not(phi)),
       implies(phi, psi));
   }
 
   theorem
-  double_modus_ponens(phi, psi, chi)
+  double_modus_ponens(phi: Formula, psi: Formula, chi: Formula)
   {
     hypothesis minor_1 phi;
     hypothesis minor_2 psi;
     hypothesis major implies(phi, implies(psi, chi));
     infer chi;
 
-    formula major_2 implies(psi, chi);
+    major_2: Formula = implies(psi, chi);
     step conclusion_2 modus_ponens(phi, major)[_minor=phi, _major=major, _infer=major_2];
     step conclusion modus_ponens(psi, major_2)[_minor=psi, _major=major_2, _infer=chi];
   }
@@ -160,27 +160,33 @@ pred
   import prop;
 
   formula
-  univ(x: Var, phi: Formula);
+  any(x: Var)(phi: Formula);
 
   formula
-  exists(x: Var, phi: Formula)
+  exists(x: Var)(phi: Formula)
   {
-    not(any(x, not(phi)));
+    not(any(x)(not(phi)));
+  }
+
+  /* Convenience */
+
+  formula
+  any_2(x: Var, y: Var)(phi: Formula)
+  {
+    any(x)(any(y)(phi));
   }
 
   rule
   generalization(phi: Formula)
   {
     hypothesis main phi;
-    infer univ(x, phi);
+    infer any(x)(phi);
   }
 }
 
 /*
 
 ZFC Set Theory:
-
-TODO: Use quantifiers instead of metavariables for ZFC axioms?
 
 */
 namespace
@@ -195,22 +201,22 @@ zfc
   formula
   subset(x, y)
   {
-    any(z, implies(in(z, x), in(z, y)));
+    any(z)(implies(in(z, x), in(z, y)));
   }
 
   formula
   eq(x, y);
 
   axiom
-  extensionality(x, y)
+  extensionality()
   {
-    implies(any(z, iff(in(z, x), in(z, y))), eq(x, y));
+    any2(x, y)(implies(any(z, iff(in(z, x), in(z, y))), eq(x, y)));
   }
 
   formula
-  empty(x)
+  empty(x: Var)
   {
-    any(z, not(in(z, x)));
+    any(z)(not(in(z, x)));
   }
 
 }

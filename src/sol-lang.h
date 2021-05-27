@@ -3,9 +3,6 @@
 
 #include "lex.h"
 
-struct LexSpec
-get_sol_lex_spec();
-
 int
 sol_verify(const char *file_path);
 

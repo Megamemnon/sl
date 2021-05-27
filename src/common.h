@@ -25,6 +25,14 @@ do { \
 } \
 while(0)
 
+#define ARRAY_COPY(dst_array, dst_len, src_array, src_len) \
+do { \
+  dst_len = src_len; \
+  dst_array = malloc(sizeof(*dst_array) * dst_len); \
+  memcpy(dst_array, src_array, sizeof(*dst_array) * dst_len); \
+} \
+while(0)
+
 extern int verbose;
 
 #endif
