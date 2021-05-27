@@ -3,15 +3,22 @@
 
 #include "asm-lang.h"
 #include "c-lang.h"
+#include "sol-lang.h"
+
+#include <stdio.h>
 
 int verbose = 1;
 
 int
 main(int argc, char **argv)
 {
-  struct LanguageSpec asm_lang = get_asm_spec();
+  /*struct LanguageSpec sol_lang = get_sol_spec();
 
-  compile("examples/hello_world.asm", &asm_lang);
+  compile("examples/zfc.sol", &sol_lang);*/
+
+  int result = sol_verify("examples/zfc.sol");
+
+  printf("result: %s\n", result ? "valid" : "invalid");
 
   return 0;
 }

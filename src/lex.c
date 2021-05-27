@@ -1,4 +1,4 @@
-#include "parse.h"
+#include "lex.h"
 #include "common.h"
 
 #include <stdio.h>
@@ -15,7 +15,7 @@ const char *token_type_names[] = {
 };
 
 static int
-is_keyword(const char *str, const struct ParseSpec *spec)
+is_keyword(const char *str, const struct LexSpec *spec)
 {
   for (size_t i = 0; i < spec->keywords_n; ++i)
   {
@@ -25,10 +25,43 @@ is_keyword(const char *str, const struct ParseSpec *spec)
   return 0;
 }
 
-static void
-remove_comments(struct LexResult *result)
+static int
+is_line_comment(const struct Token *token, const struct LexSpec *spec)
 {
+  for (size_t i = 0; i < spec->line_comment_symbols_n; ++i)
+  {
+    if (token->type == TokenTypeSymbol &&
+        strcmp(token->value, spec->line_comment_symbols[i]) == 0)
+      return 1;
+  }
+  return 0;
+}
 
+static void
+remove_comments(struct LexResult *dst, const struct LexResult *src,
+  const struct LexSpec *spec)
+{
+  struct LexResult result = {};
+  ARRAY_INIT(result.tokens, result.tokens_n);
+
+  /* First, remove line comments */
+  int in_comment = 0;
+  for (size_t i = 0; i < src->tokens_n; ++i)
+  {
+    if (is_line_comment(&src->tokens[i], spec))
+      in_comment = 1;
+    if (src->tokens[i].type == TokenTypeLineEnd)
+      in_comment = 0;
+
+    if (!in_comment)
+      ARRAY_APPEND(src->tokens[i], result.tokens, result.tokens_n);
+  }
+
+  if (dst->tokens != NULL)
+    ARRAY_FREE(dst->tokens, dst->tokens_n);
+
+  dst->tokens = result.tokens;
+  dst->tokens_n = result.tokens_n;
 }
 
 void
@@ -37,12 +70,11 @@ snprint_token(char *s, size_t n, const struct Token *tok)
   snprintf(s, n, "Token<%s : \"%s\">", token_type_names[tok->type], tok->value);
 }
 
-struct ParseResult
-parse_file(const char *file_path,
-  const struct ParseSpec *spec)
+struct LexResult
+lex_file(const char *file_path,
+  const struct LexSpec *spec)
 {
   struct LexResult lex = {};
-  struct ParseResult result = {};
 
   ARRAY_INIT(lex.tokens, lex.tokens_n);
 
@@ -53,7 +85,7 @@ parse_file(const char *file_path,
   if (file == NULL)
   {
     printf("Could not open file '%s'\n", file_path);
-    return result;
+    return lex;
   }
 
   char line_buf[4096];
@@ -64,21 +96,15 @@ parse_file(const char *file_path,
 
   fclose(file);
 
-  /* TMP: print the tokens */
-  char buf[1024];
-  for (size_t i = 0; i < lex.tokens_n; ++i)
-  {
-    snprint_token(buf, 1024, &lex.tokens[i]);
-    printf("%s\n", buf);
-  }
+  remove_comments(&lex, &lex, spec);
 
   ARRAY_FREE(lex.tokens, lex.tokens_n);
 
-  return result;
+  return lex;
 }
 
 void
-tokenize_line(const char *line, const struct ParseSpec *spec,
+tokenize_line(const char *line, const struct LexSpec *spec,
   struct LexResult *result)
 {
   struct Token tok = {};

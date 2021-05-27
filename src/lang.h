@@ -1,13 +1,13 @@
 #ifndef LANG_H
 #define LANG_H
 
-#include "parse.h"
+#include "lex.h"
 
-typedef struct ParseSpec (* get_parse_spec_t)();
+typedef struct LexSpec (* get_lex_spec_t)();
 
 struct LanguageSpec
 {
-  get_parse_spec_t get_parse;
+  get_lex_spec_t get_parse;
 };
 
 struct ParseSpec

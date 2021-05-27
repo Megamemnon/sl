@@ -1,15 +1,18 @@
-#ifndef PARSE_H
-#define PARSE_H
+#ifndef LEX_H
+#define LEX_H
 
 #include <stdlib.h>
 
-struct ParseSpec
+struct LexSpec
 {
   const char **keywords;
   size_t keywords_n;
 
   const char **symbols;
   size_t symbols_n;
+
+  const char **line_comment_symbols;
+  size_t line_comment_symbols_n;
 };
 
 enum TokenType
@@ -35,19 +38,14 @@ struct LexResult
   size_t tokens_n;
 };
 
-struct ParseResult
-{
-
-};
-
 void
 snprint_token(char *s, size_t n, const struct Token *tok);
 
-struct ParseResult
-parse_file(const char *file_path, const struct ParseSpec *spec);
+struct LexResult
+lex_file(const char *file_path, const struct LexSpec *spec);
 
 void
-tokenize_line(const char *line, const struct ParseSpec *spec,
+tokenize_line(const char *line, const struct LexSpec *spec,
   struct LexResult *result);
 
 #endif

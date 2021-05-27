@@ -1,12 +1,9 @@
 #ifndef C_LANG_H
 #define C_LANG_H
 
-#include "lang.h"
+#include "lex.h"
 
-struct ParseSpec
-get_c_parse_spec();
-
-struct LanguageSpec
-get_c_spec();
+struct LexSpec
+get_c_lex_spec();
 
 #endif

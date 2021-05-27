@@ -1,12 +1,9 @@
 #ifndef ASM_LANG_H
 #define ASM_LANG_H
 
-#include "lang.h"
+#include "lex.h"
 
-struct ParseSpec
+struct LexSpec
 get_asm_parse_spec();
-
-struct LanguageSpec
-get_asm_spec();
 
 #endif

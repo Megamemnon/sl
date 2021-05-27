@@ -32,10 +32,10 @@ const char *c_keywords[] = {
 };
 //const char *c_separators = "()[]{}<>,;&|%+-=#/'\"?:! *\t\n";
 
-struct ParseSpec
-get_c_parse_spec()
+struct LexSpec
+get_c_lex_spec()
 {
-  struct ParseSpec spec = {};
+  struct LexSpec spec = {};
 
   spec.keywords = c_keywords;
   spec.keywords_n = sizeof(c_keywords) / sizeof(c_keywords[0]);
@@ -45,13 +45,5 @@ get_c_parse_spec()
   spec.symbols = NULL;
   spec.symbols_n = 0;
 
-  return spec;
-}
-
-struct LanguageSpec
-get_c_spec()
-{
-  struct LanguageSpec spec = {};
-  spec.get_parse = &get_c_parse_spec;
   return spec;
 }
