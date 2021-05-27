@@ -407,3 +407,23 @@ remove_block_comments(struct LexResult *dst, const struct LexResult *src,
   dst->tokens = result.tokens;
   dst->tokens_n = result.tokens_n;
 }
+
+void
+remove_line_ends(struct LexResult *dst, const struct LexResult *src)
+{
+  struct LexResult result = {};
+  ARRAY_INIT(result.tokens, result.tokens_n);
+
+  int in_comment = 0;
+  for (size_t i = 0; i < src->tokens_n; ++i)
+  {
+    if (src->tokens[i].type != TokenTypeLineEnd)
+      ARRAY_APPEND(src->tokens[i], result.tokens, result.tokens_n);
+  }
+
+  if (dst->tokens != NULL)
+    ARRAY_FREE(dst->tokens, dst->tokens_n);
+
+  dst->tokens = result.tokens;
+  dst->tokens_n = result.tokens_n;
+}

@@ -75,4 +75,7 @@ void
 remove_block_comments(struct LexResult *dst, const struct LexResult *src,
   const char *block_comment_begin, const char *block_comment_end);
 
+void
+remove_line_ends(struct LexResult *dst, const struct LexResult *src);
+
 #endif

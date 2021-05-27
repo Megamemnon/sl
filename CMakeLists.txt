@@ -7,6 +7,7 @@ set(SOURCES
   src/asm-lang.c
   src/c-lang.c
   src/lex.c
+  src/parse.c
   src/sol-lang.c
 )
 
