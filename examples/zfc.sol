@@ -20,13 +20,13 @@ FORMULAS:
 To declare a schema for a valid formula, write:
 ``
 formula
-[FORMULA_NAME]([FORMULA_1], ..., [FORMULA_N])
+[FORMULA_NAME]([VAR_1], ..., [VAR_N])
 {
   [FORMULA];
 }
 ``
 The parameters can take any valid identifier name, and the formula is just
-a string where formulas will be substituted as parameters.
+a string where variables will be substituted as parameters.
 
 RULES OF INFERENCE:
 Postulate a rule of inference, with the hypothesis that
@@ -80,48 +80,41 @@ Define rules for forming formulas, such as negation and implication. Then
 add the axioms for propositional calculus.
 
 */
-
 namespace
 prop
 {
+  formula
+  not(phi: Formula);
 
   formula
-  not(phi)
-  {
-    not phi;
-  }
-
-  formula
-  implies(phi, psi)
-  {
-    (phi implies psi);
-  }
+  implies(phi: Formula, psi: Formula);
 
   rule
   modus_ponens(phi, psi)
   {
     hypothesis minor phi;
-    hypothesis major (phi implies psi);
+    hypothesis major implies(phi, psi);
     infer psi;
   }
 
   axiom
   simplification(phi, psi)
   {
-    (phi implies (psi implies phi));
+    implies(phi, implies(psi, phi));
   }
 
   axiom
   distributive(psi, phi, chi)
   {
-    ((phi implies (psi implies chi)) implies
-      ((phi implies psi) implies (phi implies chi)));
+    implies(implies(phi, implies(psi, chi)),
+      implies(implies(phi, psi), implies(phi, chi)));
   }
 
   axiom
   transposition(phi, psi)
   {
-    ((not psi implies not phi) implies (phi implies psi));
+    implies(implies(not(psi), not(phi)),
+      implies(phi, psi));
   }
 
   theorem
@@ -129,14 +122,31 @@ prop
   {
     hypothesis minor_1 phi;
     hypothesis minor_2 psi;
-    hypothesis major (phi implies (psi implies chi))
+    hypothesis major implies(phi, implies(psi, chi));
     infer chi;
 
-    formula major_2 implies(psi, chi); // (psi implies chi)
-    step conclusion_2 modus_ponens(phi, major)[_minor=phi, _major=major]; // prove major_2
-    step conclusion modus_ponens(psi, major_2)[_minor=psi, _major=major_2]; // prove the conclusion
+    formula major_2 implies(psi, chi);
+    step conclusion_2 modus_ponens(phi, major)[_minor=phi, _major=major, _infer=major_2];
+    step conclusion modus_ponens(psi, major_2)[_minor=psi, _major=major_2, _infer=chi];
   }
 
+  formula
+  or(phi: Formula, psi: Formula)
+  {
+    implies(not(phi), psi);
+  }
+
+  formula
+  and(phi: Formula, psi: Formula)
+  {
+    not(implies(phi, not(psi)));
+  }
+
+  formula
+  iff(phi: Formula, psi: Formula)
+  {
+    and(implies(phi, psi), implies(psi, phi));
+  }
 }
 
 /*
@@ -144,65 +154,63 @@ prop
 First Order Logic:
 
 */
+namespace
+pred
+{
+  import prop;
 
+  formula
+  univ(x: Var, phi: Formula);
+
+  formula
+  exists(x: Var, phi: Formula)
+  {
+    not(any(x, not(phi)));
+  }
+
+  rule
+  generalization(phi: Formula)
+  {
+    hypothesis main phi;
+    infer univ(x, phi);
+  }
+}
 
 /*
-axiom
-zfc-extensionality(x, y, &z)
-{
-  any x any y [any z(z in x iff z in y) implies x = y].
-}
 
-axiom
-zfc-regularity(x, y, &a)
-{
-  any x [exists a (a in x) implies exists y (y in x and not exists z (
-    z in y and z in x))].
-}
+ZFC Set Theory:
 
-axiomschema
-zfc-specification(x, z)
-{
-
-}
-
-/* TODO: Is the axiom of pairing necessary? It can be proved as a theorem from
-   the rest of ZFC. */
+TODO: Use quantifiers instead of metavariables for ZFC axioms?
 
 */
-axiom
-zfc-pairing()
+namespace
+zfc
 {
 
-}
+  import prop, pred;
 
-axiom
-zfc-union(F)
-{
-  any F exists A any Y any x [(x in Y and Y in F) implies x in A].
-}
+  formula
+  in(x, y);
 
-axiomschema
-zfc-replacement()
-{
+  formula
+  subset(x, y)
+  {
+    any(z, implies(in(z, x), in(z, y)));
+  }
 
-}
+  formula
+  eq(x, y);
 
-axiom
-zfc-infinity()
-{
+  axiom
+  extensionality(x, y)
+  {
+    implies(any(z, iff(in(z, x), in(z, y))), eq(x, y));
+  }
 
-}
-
-axiom
-zfc-power-set()
-{
-
-}
-
-axiom
-zfc-well-ordering()
-{
+  formula
+  empty(x)
+  {
+    any(z, not(in(z, x)));
+  }
 
 }
-*/
