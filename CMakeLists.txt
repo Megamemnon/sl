@@ -19,3 +19,5 @@ if(APPLE)
 endif()
 
 add_executable(magma ${SOURCES})
+
+set(CMAKE_BUILD_TYPE Debug)

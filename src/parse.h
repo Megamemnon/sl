@@ -3,7 +3,8 @@
 
 #include <stdlib.h>
 
-#include "lex.h"
+/* Generally parsers need to be written per language, so these are just
+   general functions for manipulating ASTs. */
 
 struct ASTNode
 {
@@ -17,16 +18,7 @@ free_tree(struct ASTNode *root);
 void
 print_tree(struct ASTNode *root);
 
-struct ParseResult
-{
-  struct ASTNode *ast_root;
-};
-
-typedef void (* parse_node_callback_t)(struct ASTNode *parent,
-  const struct Token *token);
-
-void
-parse(struct ParseResult *dst, const struct LexResult *src,
-  parse_node_callback_t callback);
+struct ASTNode *
+new_child(struct ASTNode *parent);
 
 #endif

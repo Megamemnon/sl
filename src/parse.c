@@ -18,7 +18,6 @@ free_tree(struct ASTNode *root)
 {
   /* Recursively free the children of this node. */
   free_children(root);
-  free(root);
 }
 
 static void
@@ -39,18 +38,13 @@ print_tree(struct ASTNode *root)
   print_children(root, 0);
 }
 
-void
-parse(struct ParseResult *dst, const struct LexResult *src,
-  parse_node_callback_t callback)
+struct ASTNode *
+new_child(struct ASTNode *parent)
 {
-  struct ParseResult result = {};
-  result.ast_root = malloc(sizeof(struct ASTNode));
-  result.ast_root->children = NULL;
-  result.ast_root->children_n = 0;
+  struct ASTNode child = {};
+  ARRAY_INIT(child.children, child.children_n);
 
-  callback(result.ast_root, &src->tokens[0]);
+  ARRAY_APPEND(child, parent->children, parent->children_n);
 
-  if (dst->ast_root != NULL)
-    free_tree(dst->ast_root);
-  dst->ast_root = result.ast_root;
+  return &parent->children[parent->children_n - 1];
 }

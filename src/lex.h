@@ -20,6 +20,9 @@ struct Token
   enum TokenType type;
   char *value;
   int identified;
+
+  unsigned int line;
+  unsigned int char_offset;
 };
 
 struct LexResult
@@ -30,6 +33,15 @@ struct LexResult
 
 void
 snprint_token(char *s, size_t n, const struct Token *tok);
+
+struct Token
+duplicate_token(const struct Token *src);
+
+void
+copy_lex_result(struct LexResult *dst, const struct LexResult *src);
+
+void
+free_lex_result(struct LexResult *result);
 
 void
 file_to_lines(struct LexResult *dst, const char *file_path);
