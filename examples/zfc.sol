@@ -89,7 +89,7 @@ prop
   formula
   implies(phi: Formula, psi: Formula);
 
-  rule
+  axiom
   modus_ponens(phi: Formula, psi: Formula)
   {
     hypothesis minor phi;
@@ -97,20 +97,20 @@ prop
     infer psi;
   }
 
-  rule
+  axiom
   simplification(phi: Formula, psi: Formula)
   {
     infer implies(phi, implies(psi, phi));
   }
 
-  rule
+  axiom
   distributive(psi: Formula, phi: Formula, chi: Formula)
   {
     infer implies(implies(phi, implies(psi, chi)),
       implies(implies(phi, psi), implies(phi, chi)));
   }
 
-  rule
+  axiom
   transposition(phi: Formula, psi: Formula)
   {
     infer implies(implies(not(psi), not(phi)),
@@ -125,7 +125,7 @@ prop
     hypothesis major implies(phi, implies(psi, chi));
     infer chi;
 
-    major_2: Formula = implies(psi, chi);
+    let major_2 implies(psi, chi);
     step conclusion_2 modus_ponens(phi, major)[_minor=phi, _major=major, _infer=major_2];
     step conclusion modus_ponens(psi, major_2)[_minor=psi, _major=major_2, _infer=chi];
   }
@@ -176,7 +176,7 @@ pred
     any(x, any(y, phi));
   }
 
-  rule
+  axiom
   generalization(phi: Formula)
   {
     hypothesis main phi;
@@ -210,7 +210,7 @@ zfc
   axiom
   extensionality()
   {
-    any2(x, y, implies(any(z, iff(in(z, x), in(z, y))), eq(x, y)));
+    infer any2(x, y, implies(any(z, iff(in(z, x), in(z, y))), eq(x, y)));
   }
 
   formula

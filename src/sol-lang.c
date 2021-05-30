@@ -13,9 +13,9 @@ const char *sol_keywords[] = {
   "formula",
   "hypothesis",
   "infer",
-  "rule",
   "axiom",
   "theorem",
+  "let",
   "step",
   NULL
 };
@@ -37,13 +37,16 @@ enum SolASTNodeType
   NodeTypeImport,
   NodeTypeIdentifierPath,
   NodeTypeIdentifierPathSegment,
-  NodeTypeRule,
+  NodeTypeAxiom,
   NodeTypeHypothesis,
   NodeTypeInfer,
   NodeTypeFormula,
   NodeTypeFormulaExpression,
   NodeTypeTheorem,
-  NodeTypeAxiom,
+  NodeTypeLet,
+  NodeTypeStep,
+  NodeTypeSubstitutionMap,
+  NodeTypeSubstitution,
   NodeTypeParameterList,
   NodeTypeParameter
 };
@@ -112,7 +115,7 @@ static int
 parse_formula_expression(struct ParserState *state);
 
 static int
-parse_rule(struct ParserState *state);
+parse_axiom(struct ParserState *state);
 
 static int
 parse_hypothesis(struct ParserState *state);
@@ -124,7 +127,16 @@ static int
 parse_theorem(struct ParserState *state);
 
 static int
-parse_axiom(struct ParserState *state);
+parse_let(struct ParserState *state);
+
+static int
+parse_step(struct ParserState *state);
+
+static int
+parse_substitution_map(struct ParserState *state);
+
+static int
+parse_substitution(struct ParserState *state);
 
 static int
 parse_parameter_list(struct ParserState *state);
@@ -194,14 +206,6 @@ parse_namespace_interior(struct ParserState *state)
       add_child_and_descend(state);
       init_sol_node(state->ast_current);
       err = parse_import(state);
-      ascend(state);
-      PROPAGATE_ERROR(err);
-    }
-    else if (consume_keyword(state, "rule"))
-    {
-      add_child_and_descend(state);
-      init_sol_node(state->ast_current);
-      err = parse_rule(state);
       ascend(state);
       PROPAGATE_ERROR(err);
     }
@@ -326,8 +330,9 @@ parse_formula(struct ParserState *state)
   }
   add_child_and_descend(state);
   init_sol_node(state->ast_current);
-  parse_parameter_list(state);
+  int err = parse_parameter_list(state);
   ascend(state);
+  PROPAGATE_ERROR(err);
 
   /* If we have a semicolon, the formula is atomic (no definition in terms of
      other formulas). */
@@ -343,8 +348,9 @@ parse_formula(struct ParserState *state)
 
   add_child_and_descend(state);
   init_sol_node(state->ast_current);
-  parse_formula_expression(state);
+  err = parse_formula_expression(state);
   ascend(state);
+  PROPAGATE_ERROR(err);
 
   /* Expect a semicolon after the expression. */
   if (!consume_symbol(state, ";"))
@@ -389,13 +395,15 @@ parse_formula_expression(struct ParserState *state)
     /* Subsequent arguments have commas. */
     if (!first_arg && !consume_symbol(state, ","))
     {
-      /* TODO: error: no separator. */
+      add_error(state, "Arguments must be comma-separated.");
+      return 1;
     }
 
     add_child_and_descend(state);
     init_sol_node(state->ast_current);
-    parse_formula_expression(state);
+    int err = parse_formula_expression(state);
     ascend(state);
+    PROPAGATE_ERROR(err);
 
     if (first_arg)
       first_arg = 0;
@@ -405,33 +413,36 @@ parse_formula_expression(struct ParserState *state)
 }
 
 int
-parse_rule(struct ParserState *state)
+parse_axiom(struct ParserState *state)
 {
-  const char *rule_name;
-  if (!consume_identifier(state, &rule_name))
+  const char *axiom_name;
+  if (!consume_identifier(state, &axiom_name))
   {
-    /* TODO: Error, no name provided. */
+    add_error(state, "Axioms must have a name.");
+    return 1;
   }
-  get_sol_node_data(state->ast_current)->type = NodeTypeRule;
-  get_sol_node_data(state->ast_current)->name = strdup(rule_name);
+  get_sol_node_data(state->ast_current)->type = NodeTypeAxiom;
+  get_sol_node_data(state->ast_current)->name = strdup(axiom_name);
 
   /* After the name, there should be a parameter list. */
   if (!consume_symbol(state, "("))
   {
-    /* TODO: Error, no parameter list. */
+    add_error(state, "Axioms must have a list of parameters.");
+    return 1;
   }
   add_child_and_descend(state);
   init_sol_node(state->ast_current);
-  parse_parameter_list(state);
+  int err = parse_parameter_list(state);
   ascend(state);
+  PROPAGATE_ERROR(err);
 
   /* Expect a definition inside curly brackets. */
   if (!consume_symbol(state, "{"))
   {
-    /* TODO: Error, no definition. */
+    add_error(state, "Axioms must have a definition");
+    return 1;
   }
 
-  int err = 0;
   while (state->token_index < state->input->tokens_n
          && !consume_symbol(state, "}"))
   {
@@ -476,8 +487,9 @@ parse_hypothesis(struct ParserState *state)
   /* After the name, there should be a formula expression. */
   add_child_and_descend(state);
   init_sol_node(state->ast_current);
-  parse_formula_expression(state);
+  int err = parse_formula_expression(state);
   ascend(state);
+  PROPAGATE_ERROR(err);
 
   /* Expect a semicolon. */
   if (!consume_symbol(state, ";"))
@@ -496,7 +508,8 @@ parse_infer(struct ParserState *state)
   /* After the keyword, there should be a formula expression. */
   add_child_and_descend(state);
   init_sol_node(state->ast_current);
-  parse_formula_expression(state);
+  int err = parse_formula_expression(state);
+  PROPAGATE_ERROR(err);
   ascend(state);
 
   /* Expect a semicolon. */
@@ -514,7 +527,8 @@ parse_theorem(struct ParserState *state)
   const char *theorem_name;
   if (!consume_identifier(state, &theorem_name))
   {
-    /* TODO: Error, no name provided. */
+    add_error(state, "No theorem name provided.");
+    return 1;
   }
   get_sol_node_data(state->ast_current)->type = NodeTypeTheorem;
   get_sol_node_data(state->ast_current)->name = strdup(theorem_name);
@@ -522,62 +536,193 @@ parse_theorem(struct ParserState *state)
   /* After the name, there should be a parameter list. */
   if (!consume_symbol(state, "("))
   {
-    /* TODO: Error, no parameter list. */
+    add_error(state, "No parameter list provided.");
+    return 1;
   }
   add_child_and_descend(state);
   init_sol_node(state->ast_current);
-  parse_parameter_list(state);
+  int err = parse_parameter_list(state);
   ascend(state);
+  PROPAGATE_ERROR(err);
 
   /* Expect a definition inside curly brackets. */
   if (!consume_symbol(state, "{"))
   {
-    /* TODO: Error, no definition. */
+    add_error(state, "Theorems must have a statement and proof.");
+    return 1;
   }
 
-  /* For now, ignore what's inside and wait until a closing bracket. */
-  while (!consume_symbol(state, "}"))
+  while (state->token_index < state->input->tokens_n
+         && !consume_symbol(state, "}"))
   {
-    /* TODO: out of bounds checking! */
-    ++state->token_index;
+    if (consume_keyword(state, "hypothesis"))
+    {
+      add_child_and_descend(state);
+      init_sol_node(state->ast_current);
+      err = parse_hypothesis(state);
+      ascend(state);
+      PROPAGATE_ERROR(err);
+    }
+    else if (consume_keyword(state, "infer"))
+    {
+      add_child_and_descend(state);
+      init_sol_node(state->ast_current);
+      err = parse_infer(state);
+      ascend(state);
+      PROPAGATE_ERROR(err);
+    }
+    else if (consume_keyword(state, "step"))
+    {
+      add_child_and_descend(state);
+      init_sol_node(state->ast_current);
+      err = parse_step(state);
+      ascend(state);
+      PROPAGATE_ERROR(err);
+    }
+    else if (consume_keyword(state, "let"))
+    {
+      add_child_and_descend(state);
+      init_sol_node(state->ast_current);
+      err = parse_let(state);
+      ascend(state);
+      PROPAGATE_ERROR(err);
+    }
+    else
+    {
+      add_error(state, "Unrecognized token.");
+      return 1;
+      break;
+    }
   }
 
   return 0;
 }
 
 int
-parse_axiom(struct ParserState *state)
+parse_let(struct ParserState *state)
 {
-  const char *axiom_name;
-  if (!consume_identifier(state, &axiom_name))
+  const char *let_name;
+  if (!consume_identifier(state, &let_name))
   {
-    /* TODO: Error, no name provided. */
+    add_error(state, "No name provided.");
+    return 1;
   }
-  get_sol_node_data(state->ast_current)->type = NodeTypeAxiom;
-  get_sol_node_data(state->ast_current)->name = strdup(axiom_name);
+  get_sol_node_data(state->ast_current)->type = NodeTypeLet;
+  get_sol_node_data(state->ast_current)->name = strdup(let_name);
 
-  /* After the name, there should be a parameter list. */
-  if (!consume_symbol(state, "("))
+  /* After the name, there should be a formula expression. */
+  add_child_and_descend(state);
+  init_sol_node(state->ast_current);
+  int err = parse_formula_expression(state);
+  ascend(state);
+  PROPAGATE_ERROR(err);
+
+  /* Expect a semicolon. */
+  if (!consume_symbol(state, ";"))
   {
-    /* TODO: Error, no parameter list. */
+    add_error(state, "Expected ';' after 'let' definition.");
+    return 1;
+  }
+  return 0;
+}
+
+int
+parse_step(struct ParserState *state)
+{
+  const char *step_name;
+  if (!consume_identifier(state, &step_name))
+  {
+    add_error(state, "No step name provided.");
+    return 1;
+  }
+  get_sol_node_data(state->ast_current)->type = NodeTypeStep;
+  get_sol_node_data(state->ast_current)->name = strdup(step_name);
+
+  /* After the name, there should be a formula expression. */
+  add_child_and_descend(state);
+  init_sol_node(state->ast_current);
+  int err = parse_formula_expression(state);
+  ascend(state);
+  PROPAGATE_ERROR(err);
+
+  /* In square brackets, we will then have a substitution map. */
+  if (!consume_symbol(state, "["))
+  {
+    add_error(state, "Proof steps must have a substitution map.");
+    return 1;
   }
   add_child_and_descend(state);
   init_sol_node(state->ast_current);
-  parse_parameter_list(state);
+  err = parse_substitution_map(state);
   ascend(state);
+  PROPAGATE_ERROR(err);
 
-  /* Expect a definition inside curly brackets. */
-  if (!consume_symbol(state, "{"))
+  /* Expect a semicolon. */
+  if (!consume_symbol(state, ";"))
   {
-    /* TODO: Error, no definition. */
+    add_error(state, "Expected ';' after step.");
+    return 1;
   }
 
-  /* For now, ignore what's inside and wait until a closing bracket. */
-  while (!consume_symbol(state, "}"))
+  return 0;
+}
+
+int
+parse_substitution_map(struct ParserState *state)
+{
+  get_sol_node_data(state->ast_current)->type = NodeTypeSubstitutionMap;
+
+  /* Iterate through the list until we get a closing ']' */
+  int first_param = 1;
+  while (!consume_symbol(state, "]"))
   {
-    /* TODO: out of bounds checking! */
-    ++state->token_index;
+    /* Subsequent substitutions have commas. */
+    if (!first_param && !consume_symbol(state, ","))
+    {
+      add_error(state, "Substitutions must be comma-separated.");
+      return 1;
+    }
+
+    add_child_and_descend(state);
+    init_sol_node(state->ast_current);
+    int err = parse_substitution(state);
+    ascend(state);
+    PROPAGATE_ERROR(err);
+
+    if (first_param)
+      first_param = 0;
   }
+
+  return 0;
+}
+
+static int
+parse_substitution(struct ParserState *state)
+{
+  get_sol_node_data(state->ast_current)->type = NodeTypeSubstitution;
+
+  /* Parameters always have the form `[SUBSTITUTION_DEST] = [SUBSTITUTION_SRC]`. */
+  const char *dst_name;
+  if (!consume_identifier(state, &dst_name))
+  {
+    add_error(state, "No destination provided.");
+    return 1;
+  }
+  get_sol_node_data(state->ast_current)->name = strdup(dst_name);
+
+  /* After the name, there should be a parameter list. */
+  if (!consume_symbol(state, "="))
+  {
+    add_error(state, "After the substitution destination, the substitution source follows a '='.");
+    return 1;
+  }
+
+  /* Then the source is an expression. */
+  add_child_and_descend(state);
+  init_sol_node(state->ast_current);
+  int err = parse_formula_expression(state);
+  ascend(state);
+  PROPAGATE_ERROR(err);
 
   return 0;
 }
@@ -594,13 +739,15 @@ parse_parameter_list(struct ParserState *state)
     /* Subsequent parameters have commas. */
     if (!first_param && !consume_symbol(state, ","))
     {
-      /* TODO: error: no separator. */
+      add_error(state, "Parameters must be comma-separated.");
+      return 1;
     }
 
     add_child_and_descend(state);
     init_sol_node(state->ast_current);
-    parse_parameter(state);
+    int err = parse_parameter(state);
     ascend(state);
+    PROPAGATE_ERROR(err);
 
     if (first_param)
       first_param = 0;
@@ -619,20 +766,23 @@ parse_parameter(struct ParserState *state)
   const char *parameter_name;
   if (!consume_identifier(state, &parameter_name))
   {
-    /* TODO: Error, no name provided. */
+    add_error(state, "No parameter name provided.");
+    return 1;
   }
   get_sol_node_data(state->ast_current)->name = strdup(parameter_name);
 
   /* After the name, there should be a parameter list. */
   if (!consume_symbol(state, ":"))
   {
-    /* TODO: Error, no formula list. */
+    add_error(state, "After a parameter name, the type must be declared following a ':'.");
+    return 1;
   }
 
   const char *parameter_type;
   if (!consume_identifier(state, &parameter_type))
   {
-    /* TODO: Error, no name provided. */
+    add_error(state, "No parameter type provided.");
+    return 1;
   }
   get_sol_node_data(state->ast_current)->data_type = strdup(parameter_type);
 
@@ -668,8 +818,8 @@ print_sol_node(char *buf, size_t len, const struct ASTNode *node)
     case NodeTypeIdentifierPathSegment:
       snprintf(buf, len, "Path Segment<Identifier: \"%s\">", name);
       break;
-    case NodeTypeRule:
-      snprintf(buf, len, "Rule<Name: \"%s\">", name);
+    case NodeTypeAxiom:
+      snprintf(buf, len, "Axiom<Name: \"%s\">", name);
       break;
     case NodeTypeHypothesis:
       snprintf(buf, len, "Hypothesis<Name: \"%s\">", name);
@@ -680,8 +830,17 @@ print_sol_node(char *buf, size_t len, const struct ASTNode *node)
     case NodeTypeTheorem:
       snprintf(buf, len, "Theorem<Name: \"%s\">", name);
       break;
-    case NodeTypeAxiom:
-      snprintf(buf, len, "Axiom<Name: \"%s\">", name);
+    case NodeTypeLet:
+      snprintf(buf, len, "Let<Name: \"%s\">", name);
+      break;
+    case NodeTypeStep:
+      snprintf(buf, len, "Step<Name: \"%s\">", name);
+      break;
+    case NodeTypeSubstitutionMap:
+      snprintf(buf, len, "Substitution Map");
+      break;
+    case NodeTypeSubstitution:
+      snprintf(buf, len, "Substitution<Destination=\"%s\">", name);
       break;
     case NodeTypeParameterList:
       snprintf(buf, len, "Parameter List");
