@@ -1,6 +1,16 @@
 #ifndef COMMON_H
 #define COMMON_H
 
+extern int verbose;
+
+/* Misc helpers */
+#define PROPAGATE_ERROR(err) \
+do { \
+  if (err) \
+    return err; \
+} \
+while(0)
+
 /* Array helpers */
 #define ARRAY_INIT(array, array_len) \
 do { \
@@ -32,7 +42,5 @@ do { \
   memcpy(dst_array, src_array, sizeof(*dst_array) * dst_len); \
 } \
 while(0)
-
-extern int verbose;
 
 #endif

@@ -160,27 +160,27 @@ pred
   import prop;
 
   formula
-  any(x: Var)(phi: Formula);
+  any(x: Var, phi: Formula);
 
   formula
-  exists(x: Var)(phi: Formula)
+  exists(x: Var, phi: Formula)
   {
-    not(any(x)(not(phi)));
+    not(any(x, not(phi)));
   }
 
   /* Convenience */
 
   formula
-  any_2(x: Var, y: Var)(phi: Formula)
+  any_2(x: Var, y: Var, phi: Formula)
   {
-    any(x)(any(y)(phi));
+    any(x, any(y, phi));
   }
 
   rule
   generalization(phi: Formula)
   {
     hypothesis main phi;
-    infer any(x)(phi);
+    infer any(x, phi);
   }
 }
 
@@ -196,27 +196,27 @@ zfc
   import prop, pred;
 
   formula
-  in(x, y);
+  in(x: Var, y: Var);
 
   formula
-  subset(x, y)
+  subset(x: Var, y: Var)
   {
-    any(z)(implies(in(z, x), in(z, y)));
+    any(z, implies(in(z, x), in(z, y)));
   }
 
   formula
-  eq(x, y);
+  eq(x: Var, y: Var);
 
   axiom
   extensionality()
   {
-    any2(x, y)(implies(any(z, iff(in(z, x), in(z, y))), eq(x, y)));
+    any2(x, y, implies(any(z, iff(in(z, x), in(z, y))), eq(x, y)));
   }
 
   formula
   empty(x: Var)
   {
-    any(z)(not(in(z, x)));
+    any(z, not(in(z, x)));
   }
 
 }
