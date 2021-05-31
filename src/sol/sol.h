@@ -1,8 +1,8 @@
-#ifndef SOL_LANG_H
-#define SOL_LANG_H
+#ifndef SOL_H
+#define SOL_H
 
-#include "lex.h"
-#include "parse.h"
+#include <lex.h>
+#include <parse.h>
 
 int
 sol_verify(const char *file_path);

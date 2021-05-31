@@ -1,4 +1,4 @@
-#include "asm-lang.h"
+#include "asm.h"
 
 #include <string.h>
 

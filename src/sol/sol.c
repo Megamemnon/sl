@@ -1,6 +1,6 @@
-#include "sol-lang.h"
-#include "parse.h"
-#include "common.h"
+#include "sol.h"
+#include <parse.h>
+#include <common.h>
 
 #include <string.h>
 
