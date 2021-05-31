@@ -1,6 +1,8 @@
 #ifndef COMMON_H
 #define COMMON_H
 
+#include <stdint.h>
+
 extern int verbose;
 
 /* Misc helpers */
@@ -16,6 +18,13 @@ while(0)
 do { \
   array = malloc(sizeof(*array)); \
   array_len = 0; \
+} \
+while(0)
+
+#define ARRAY_INIT_WITH_SIZE(array, array_len, size) \
+do { \
+  array = malloc(sizeof(*array) * size); \
+  array_len = size; \
 } \
 while(0)
 

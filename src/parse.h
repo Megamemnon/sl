@@ -10,6 +10,9 @@ struct ASTNode;
 
 typedef void (* free_node_callback_t)(struct ASTNode *);
 
+ /* Copy the user data from the source to the destination. */
+typedef void (* copy_node_callback_t)(struct ASTNode *, const struct ASTNode *);
+
 struct ASTNode
 {
   struct ASTNode *parent;
@@ -19,10 +22,14 @@ struct ASTNode
   void *data;
 
   free_node_callback_t free_callback;
+  copy_node_callback_t copy_callback;
 };
 
 void
 free_tree(struct ASTNode *root);
+
+void
+copy_tree(struct ASTNode *dst, const struct ASTNode *src);
 
 typedef void (* print_node_callback_t)(char *, size_t, const struct ASTNode *);
 

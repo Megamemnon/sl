@@ -30,36 +30,7 @@ const char *sol_symbols[] = {
   NULL
 };
 
-enum SolASTNodeType
-{
-  NodeTypeUnidentified = 0,
-  NodeTypeNamespace,
-  NodeTypeImport,
-  NodeTypeIdentifierPath,
-  NodeTypeIdentifierPathSegment,
-  NodeTypeAxiom,
-  NodeTypeHypothesis,
-  NodeTypeInfer,
-  NodeTypeFormula,
-  NodeTypeFormulaExpression,
-  NodeTypeTheorem,
-  NodeTypeLet,
-  NodeTypeStep,
-  NodeTypeSubstitutionMap,
-  NodeTypeSubstitution,
-  NodeTypeParameterList,
-  NodeTypeParameter
-};
-
-struct SolASTNodeData
-{
-  enum SolASTNodeType type;
-
-  char *name;
-  char *data_type;
-};
-
-static void
+void
 free_sol_node(struct ASTNode *node)
 {
   struct SolASTNodeData *data = (struct SolASTNodeData *)node->data;
@@ -72,77 +43,50 @@ free_sol_node(struct ASTNode *node)
   free(data);
 }
 
-static void
+void
+copy_sol_node(struct ASTNode *dst, const struct ASTNode *src)
+{
+  struct SolASTNodeData *dst_data = malloc(sizeof(struct SolASTNodeData));
+  memset(dst_data, 0, sizeof(struct SolASTNodeData));
+
+  const struct SolASTNodeData *src_data =
+    (const struct SolASTNodeData *)src->data;
+  dst_data->type = src_data->type;
+
+  if (src_data->name != NULL)
+    dst_data->name = strdup(src_data->name);
+  else
+    dst_data->name = NULL;
+
+  if (src_data->data_type != NULL)
+    dst_data->data_type = strdup(src_data->data_type);
+  else
+    dst_data->data_type = NULL;
+
+  dst->data = dst_data;
+}
+
+void
 init_sol_node(struct ASTNode *node)
 {
   struct SolASTNodeData *data = malloc(sizeof(struct SolASTNodeData));
   memset(data, 0, sizeof(struct SolASTNodeData));
   node->data = data;
   node->free_callback = &free_sol_node;
+  node->copy_callback = &copy_sol_node;
 }
 
-static struct SolASTNodeData *
+struct SolASTNodeData *
 get_sol_node_data(struct ASTNode *node)
 {
   return (struct SolASTNodeData *)node->data;
 }
 
-static const struct SolASTNodeData *
+const struct SolASTNodeData *
 get_sol_node_data_c(const struct ASTNode *node)
 {
   return (struct SolASTNodeData *)node->data;
 }
-
-static int
-parse_program(struct ParserState *state);
-
-static int
-parse_namespace(struct ParserState *state);
-
-static int
-parse_namespace_interior(struct ParserState *state);
-
-static int
-parse_import(struct ParserState *state);
-
-static int
-parse_identifier_path(struct ParserState *state);
-
-static int
-parse_formula(struct ParserState *state);
-
-static int
-parse_formula_expression(struct ParserState *state);
-
-static int
-parse_axiom(struct ParserState *state);
-
-static int
-parse_hypothesis(struct ParserState *state);
-
-static int
-parse_infer(struct ParserState *state);
-
-static int
-parse_theorem(struct ParserState *state);
-
-static int
-parse_let(struct ParserState *state);
-
-static int
-parse_step(struct ParserState *state);
-
-static int
-parse_substitution_map(struct ParserState *state);
-
-static int
-parse_substitution(struct ParserState *state);
-
-static int
-parse_parameter_list(struct ParserState *state);
-
-static int
-parse_parameter(struct ParserState *state);
 
 /* Called at the start of parsing. Almost equivalent to
    `parse_namespace`, except no curly braces. */
@@ -696,7 +640,7 @@ parse_substitution_map(struct ParserState *state)
   return 0;
 }
 
-static int
+int
 parse_substitution(struct ParserState *state)
 {
   get_sol_node_data(state->ast_current)->type = NodeTypeSubstitution;
@@ -789,7 +733,7 @@ parse_parameter(struct ParserState *state)
   return 0;
 }
 
-static void
+void
 print_sol_node(char *buf, size_t len, const struct ASTNode *node)
 {
   const struct SolASTNodeData *data = get_sol_node_data_c(node);
@@ -855,71 +799,7 @@ print_sol_node(char *buf, size_t len, const struct ASTNode *node)
   }
 }
 
-enum ParameterType
-{
-  ParameterTypeFormula = 0,
-  ParameterTypeVar
-};
-
-struct Parameter
-{
-  char *name;
-  enum ParameterType type;
-};
-
-struct Formula
-{
-  char *global_name;
-
-  struct Parameter *parameters;
-  size_t parameters_n;
-
-  struct ASTNode *expression; /* NULL if the formula is atomic. */
-};
-
-static void
-snprint_formula(char *buf, size_t len, const struct Formula *formula)
-{
-  snprintf(buf, len, "Formula<Name: \"%s\">", formula->global_name);
-}
-
-struct Hypothesis
-{
-  char *name;
-  struct ASTNode *expression;
-};
-
-struct Axiom
-{
-  char *global_name;
-
-  struct Parameter *parameters;
-  size_t parameters_n;
-};
-
-struct Theorem
-{
-  char *global_name;
-
-  struct Parameter *parameters;
-  size_t parameters_n;
-};
-
-struct ValidationState
-{
-  const struct ParserState *input;
-
-  struct Formula *formulas;
-  size_t formulas_n;
-
-  struct Axiom *axioms;
-  size_t axioms_n;
-
-  struct Theorem *theorems;
-  size_t theorems_n;
-};
-
-static void
+void
 traverse_tree_for_formulas(const struct ASTNode *node, void *userdata)
 {
   struct ValidationState *state = (struct ValidationState *)userdata;
@@ -929,6 +809,89 @@ traverse_tree_for_formulas(const struct ASTNode *node, void *userdata)
     struct Formula formula = {};
 
     formula.global_name = strdup(data->name);
+
+    /* First, find the relevant children. */
+    const struct ASTNode *params = NULL;
+    const struct ASTNode *expression = NULL;
+
+    for (size_t i = 0; i < node->children_n; ++i)
+    {
+      const struct SolASTNodeData *child_data =
+        get_sol_node_data_c(&node->children[i]);
+
+      if (child_data->type == NodeTypeParameterList)
+        params = &node->children[i];
+      if (child_data->type == NodeTypeFormulaExpression)
+        expression = &node->children[i];
+    }
+
+    /* TODO: check to make sure these nodes exist! (These checks should have
+       been made during parsing, but should still be made in the case that
+       we are provided with an AST constructed differently). */
+    /* Enumerate all the parameters. */
+    for (size_t i = 0; i < params->children_n; ++i)
+    {
+      struct Parameter param = {};
+      param.name = strdup(get_sol_node_data_c(&params->children[i])->name);
+      const char *type = get_sol_node_data_c(&params->children[i])->data_type;
+      if (strcmp(type, "Formula") == 0)
+      {
+        param.type = ParameterTypeFormula;
+      }
+      else if (strcmp(type, "Var") == 0)
+      {
+        param.type = ParameterTypeVar;
+      }
+      else
+      {
+        /* TODO: error, unknown type. */
+      }
+      ARRAY_APPEND(param, formula.parameters, formula.parameters_n);
+    }
+
+    /* Copy over the expression, if the formula is not atomic. */
+    if (expression != NULL)
+    {
+      struct ASTNode *expression_copy = malloc(sizeof(struct ASTNode));
+      memset(expression_copy, 0, sizeof(struct ASTNode));
+      copy_tree(expression_copy, expression);
+      formula.expression = expression_copy;
+    }
+
+    /* Finally, validate the formula before adding it. */
+    if (!validate_new_formula(state, &formula))
+    {
+      /* TODO: Error, invalid formula. */
+    }
+
+    ARRAY_APPEND(formula, state->formulas, state->formulas_n);
+  }
+}
+
+int
+validate_new_formula(const struct ValidationState *state,
+  const struct Formula *formula)
+{
+  /* First, check for uniqueness issues (this is the only formula of this
+     exact name in the namespace), then in the case that the formula is not
+     atomic, check that its definition is well-formed, by verifying that the
+     formulas referenced exist and agree in type signature. */
+  /* TODO: Allow formulas to be overloaded. */
+
+  return 0;
+}
+
+void
+traverse_tree_for_axioms(const struct ASTNode *node, void *userdata)
+{
+  struct ValidationState *state = (struct ValidationState *)userdata;
+  const struct SolASTNodeData *data = get_sol_node_data_c(node);
+  if (data->type == NodeTypeAxiom)
+  {
+#if 0
+    struct Axiom axiom = {};
+    ARRAY_INIT(axiom.parameters, axiom.parameters_n);
+    ARRAY_INIT(axiom.hypotheses, axiom.hypotheses_n);
 
     /* First, find the relevant children. */
     const struct ASTNode *params = NULL;
@@ -969,26 +932,21 @@ traverse_tree_for_formulas(const struct ASTNode *node, void *userdata)
       ARRAY_APPEND(param, formula.parameters, formula.parameters_n);
     }
 
-    formula.atomic = (expression == NULL);
-
-    ARRAY_APPEND(formula, state->formulas, state->formulas_n);
-  }
-}
-
-static void
-traverse_tree_for_axioms(const struct ASTNode *node, void *userdata)
-{
-  struct ValidationState *state = (struct ValidationState *)userdata;
-  const struct SolASTNodeData *data = get_sol_node_data_c(node);
-  if (data->type == NodeTypeAxiom)
-  {
-    struct Axiom axiom = {};
+    /* Copy over the expression, if the formula is not atomic. */
+    if (expression != NULL)
+    {
+      struct ASTNode *expression_copy = malloc(sizeof(struct ASTNode));
+      memset(expression_copy, 0, sizeof(struct ASTNode));
+      copy_tree(expression_copy, expression);
+      formula.expression = expression_copy;
+    }
 
     ARRAY_APPEND(axiom, state->axioms, state->axioms_n);
+#endif
   }
 }
 
-static void
+void
 traverse_tree_for_theorems(const struct ASTNode *node, void *userdata)
 {
   struct ValidationState *state = (struct ValidationState *)userdata;
@@ -1001,7 +959,7 @@ traverse_tree_for_theorems(const struct ASTNode *node, void *userdata)
   }
 }
 
-static int
+int
 validate_program(struct ValidationState *state)
 {
   /* Traverse the tree in three steps: formulas, axioms, and theorems. Each step
@@ -1057,13 +1015,6 @@ sol_verify(const char *file_path)
   ARRAY_INIT(validation_out.theorems, validation_out.theorems_n);
 
   validate_program(&validation_out);
-
-  char buf[1024];
-  for (size_t i = 0; i < validation_out.formulas_n; ++i)
-  {
-    snprint_formula(buf, 1024, &validation_out.formulas[i]);
-    printf("%s\n", buf);
-  }
 
   /* Free the AST. */
   free_tree(&parse_out.ast_root);

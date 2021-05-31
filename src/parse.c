@@ -24,6 +24,31 @@ free_tree(struct ASTNode *root)
 }
 
 static void
+copy_node_and_children(struct ASTNode *dst, const struct ASTNode *src)
+{
+  dst->free_callback = src->free_callback;
+  dst->copy_callback = src->copy_callback;
+  ARRAY_INIT_WITH_SIZE(dst->children, dst->children_n, src->children_n);
+  for (size_t i = 0; i < src->children_n; ++i)
+  {
+    copy_node_and_children(&dst->children[i], &src->children[i]);
+    dst->children[i].parent = dst;
+  }
+  if (dst->copy_callback != NULL)
+    dst->copy_callback(dst, src);
+}
+
+void
+copy_tree(struct ASTNode *dst, const struct ASTNode *src)
+{
+  struct ASTNode result = {};
+  copy_node_and_children(&result, src);
+
+  free_tree(dst);
+  *dst = result;
+}
+
+static void
 print_children(struct ASTNode *root, unsigned int depth,
   print_node_callback_t print_callback)
 {
