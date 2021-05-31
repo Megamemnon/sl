@@ -16,9 +16,9 @@ main(int argc, char **argv)
 
   compile("examples/zfc.sol", &sol_lang);*/
 
-  int result = sol_verify("examples/zfc.sol");
+  int err = sol_verify("examples/zfc.sol");
 
-  printf("result: %s\n", result ? "valid" : "invalid");
+  printf("result: %s\n", err ? "invalid" : "valid");
 
   return 0;
 }

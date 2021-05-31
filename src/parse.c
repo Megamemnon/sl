@@ -56,6 +56,15 @@ new_child(struct ASTNode *parent)
   return &parent->children[parent->children_n - 1];
 }
 
+void
+traverse_tree(const struct ASTNode *root,
+  traverse_node_callback_t node_callback, void *user_data)
+{
+  for (size_t i = 0; i < root->children_n; ++i)
+    traverse_tree(&root->children[i], node_callback, user_data);
+  node_callback(root, user_data);
+}
+
 struct Token *
 get_current_token(struct ParserState *state)
 {
@@ -112,7 +121,7 @@ consume_identifier(struct ParserState *state, const char **identifier)
   return 0;
 }
 
-int
+void
 add_error(struct ParserState *state, const char *msg)
 {
   struct ParserError error = {};

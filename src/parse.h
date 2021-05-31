@@ -32,6 +32,12 @@ print_tree(struct ASTNode *root, print_node_callback_t print_callback);
 struct ASTNode *
 new_child(struct ASTNode *parent);
 
+typedef void (* traverse_node_callback_t)(const struct ASTNode *, void *);
+
+void
+traverse_tree(const struct ASTNode *root, traverse_node_callback_t node_callback,
+  void *user_data);
+
 struct ParserError
 {
   char *error_msg;
@@ -68,7 +74,7 @@ consume_symbol(struct ParserState *state, const char *symbol);
 int
 consume_identifier(struct ParserState *state, const char **identifier);
 
-int
+void
 add_error(struct ParserState *state, const char *msg);
 
 #endif

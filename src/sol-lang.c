@@ -855,6 +855,167 @@ print_sol_node(char *buf, size_t len, const struct ASTNode *node)
   }
 }
 
+enum ParameterType
+{
+  ParameterTypeFormula = 0,
+  ParameterTypeVar
+};
+
+struct Parameter
+{
+  char *name;
+  enum ParameterType type;
+};
+
+struct Formula
+{
+  char *global_name;
+
+  struct Parameter *parameters;
+  size_t parameters_n;
+
+  struct ASTNode *expression; /* NULL if the formula is atomic. */
+};
+
+static void
+snprint_formula(char *buf, size_t len, const struct Formula *formula)
+{
+  snprintf(buf, len, "Formula<Name: \"%s\">", formula->global_name);
+}
+
+struct Hypothesis
+{
+  char *name;
+  struct ASTNode *expression;
+};
+
+struct Axiom
+{
+  char *global_name;
+
+  struct Parameter *parameters;
+  size_t parameters_n;
+};
+
+struct Theorem
+{
+  char *global_name;
+
+  struct Parameter *parameters;
+  size_t parameters_n;
+};
+
+struct ValidationState
+{
+  const struct ParserState *input;
+
+  struct Formula *formulas;
+  size_t formulas_n;
+
+  struct Axiom *axioms;
+  size_t axioms_n;
+
+  struct Theorem *theorems;
+  size_t theorems_n;
+};
+
+static void
+traverse_tree_for_formulas(const struct ASTNode *node, void *userdata)
+{
+  struct ValidationState *state = (struct ValidationState *)userdata;
+  const struct SolASTNodeData *data = get_sol_node_data_c(node);
+  if (data->type == NodeTypeFormula)
+  {
+    struct Formula formula = {};
+
+    formula.global_name = strdup(data->name);
+
+    /* First, find the relevant children. */
+    const struct ASTNode *params = NULL;
+    const struct ASTNode *expression = NULL;
+
+    for (size_t i = 0; i < node->children_n; ++i)
+    {
+      const struct SolASTNodeData *child_data =
+        get_sol_node_data_c(&node->children[i]);
+
+      if (child_data->type == NodeTypeParameterList)
+        params = &node->children[i];
+      if (child_data->type == NodeTypeFormulaExpression)
+        expression = &node->children[i];
+    }
+
+    /* TODO: check to make sure these exist! (These checks should have
+       been made during parsing, but should still be made in the case that
+       we are provided with an AST constructed differently). */
+    /* Enumerate all the parameters. */
+    for (size_t i = 0; i < params->children_n; ++i)
+    {
+      struct Parameter param = {};
+      param.name = strdup(get_sol_node_data_c(&params->children[i])->name);
+      const char *type = get_sol_node_data_c(&params->children[i])->data_type;
+      if (strcmp(type, "Formula") == 0)
+      {
+        param.type = ParameterTypeFormula;
+      }
+      else if (strcmp(type, "Var") == 0)
+      {
+        param.type = ParameterTypeVar;
+      }
+      else
+      {
+        /* TODO: error, unknown type. */
+      }
+      ARRAY_APPEND(param, formula.parameters, formula.parameters_n);
+    }
+
+    formula.atomic = (expression == NULL);
+
+    ARRAY_APPEND(formula, state->formulas, state->formulas_n);
+  }
+}
+
+static void
+traverse_tree_for_axioms(const struct ASTNode *node, void *userdata)
+{
+  struct ValidationState *state = (struct ValidationState *)userdata;
+  const struct SolASTNodeData *data = get_sol_node_data_c(node);
+  if (data->type == NodeTypeAxiom)
+  {
+    struct Axiom axiom = {};
+
+    ARRAY_APPEND(axiom, state->axioms, state->axioms_n);
+  }
+}
+
+static void
+traverse_tree_for_theorems(const struct ASTNode *node, void *userdata)
+{
+  struct ValidationState *state = (struct ValidationState *)userdata;
+  const struct SolASTNodeData *data = get_sol_node_data_c(node);
+  if (data->type == NodeTypeTheorem)
+  {
+    struct Theorem theorem = {};
+
+    ARRAY_APPEND(theorem, state->theorems, state->theorems_n);
+  }
+}
+
+static int
+validate_program(struct ValidationState *state)
+{
+  /* Traverse the tree in three steps: formulas, axioms, and theorems. Each step
+     is validated based on the previous steps (atomic formulas are always
+     valid, compound formulas are valid if they are syntactically valid,
+     then axioms are valid if they consist of well-formed formulas,
+     and theorems are valid if they have a valid proof from the axioms). */
+  traverse_tree(&state->input->ast_root, &traverse_tree_for_formulas, state);
+  traverse_tree(&state->input->ast_root, &traverse_tree_for_axioms, state);
+  traverse_tree(&state->input->ast_root, &traverse_tree_for_theorems, state);
+
+  return 0;
+}
+
 int
 sol_verify(const char *file_path)
 {
@@ -886,12 +1047,27 @@ sol_verify(const char *file_path)
 
   /* Free the token list. */
   free_lex_result(&lex_out);
+  PROPAGATE_ERROR(err);
 
-  /* TMP: Print the AST to console. */
-  print_tree(&parse_out.ast_root, &print_sol_node);
+  /* Validate the file. */
+  struct ValidationState validation_out = {};
+  validation_out.input = &parse_out;
+  ARRAY_INIT(validation_out.formulas, validation_out.formulas_n);
+  ARRAY_INIT(validation_out.axioms, validation_out.axioms_n);
+  ARRAY_INIT(validation_out.theorems, validation_out.theorems_n);
+
+  validate_program(&validation_out);
+
+  char buf[1024];
+  for (size_t i = 0; i < validation_out.formulas_n; ++i)
+  {
+    snprint_formula(buf, 1024, &validation_out.formulas[i]);
+    printf("%s\n", buf);
+  }
 
   /* Free the AST. */
   free_tree(&parse_out.ast_root);
+  PROPAGATE_ERROR(err);
 
   return 0;
 }
