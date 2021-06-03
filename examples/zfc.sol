@@ -9,10 +9,12 @@ add the axioms for propositional calculus.
 namespace
 prop
 {
-  formula
+  type Formula;
+
+  def Formula
   not(phi: Formula);
 
-  formula
+  def Formula
   implies(phi: Formula, psi: Formula);
 
   axiom
@@ -51,23 +53,38 @@ prop
     infer chi;
 
     let major_2 implies(psi, chi);
-    step conclusion_2 modus_ponens(phi, major)[_minor=phi, _major=major, _infer=major_2];
-    step conclusion modus_ponens(psi, major_2)[_minor=psi, _major=major_2, _infer=chi];
+    step conclusion_2 modus_ponens(phi, major);
+    step conclusion modus_ponens(psi, major_2);
   }
 
-  formula
+  theorem
+  identity(phi: Formula)
+  {
+    infer implies(phi, phi);
+
+    let p1 implies(implies(implies(phi, phi), phi), implies(phi, phi));
+
+    step s1 simplification(phi, implies(phi, phi));
+    step s2 distributive(phi, implies(phi, phi), phi);
+    step s3 modus_ponens(s1, p1);
+    step s4 simplification(phi, phi);
+    step conclusion modus_ponens(implies(phi, implies(phi, phi)),
+      implies(phi, phi));
+  }
+
+  def Formula
   or(phi: Formula, psi: Formula)
   {
     implies(not(phi), psi);
   }
 
-  formula
+  def Formula
   and(phi: Formula, psi: Formula)
   {
     not(implies(phi, not(psi)));
   }
 
-  formula
+  def Formula
   iff(phi: Formula, psi: Formula)
   {
     and(implies(phi, psi), implies(psi, phi));
@@ -76,7 +93,7 @@ prop
 
 /*
 
-First Order Logic:
+First Order Logic (with Equality):
 
 */
 namespace
@@ -84,29 +101,54 @@ pred
 {
   import prop;
 
-  formula
+  type Var;
+  type Term;
+
+  def Formula [x]
   any(x: Var, phi: Formula);
 
-  formula
+  def Formula [x]
   exists(x: Var, phi: Formula)
   {
     not(any(x, not(phi)));
   }
 
-  /* Convenience */
-
-  formula
-  any_2(x: Var, y: Var, phi: Formula)
+  axiom
+  instantiation(x: Var, t: Term, phi: Formula)
   {
-    any(x, any(y, phi));
+    require x free in phi;
+    infer implies(any(x, phi), phi[x=t]);
   }
 
   axiom
-  generalization(phi: Formula)
+  quantified_implication(x: Var, phi: Formula, psi: Formula)
   {
-    hypothesis main phi;
-    infer any(x, phi);
+    infer implies(any(x, implies(phi, psi)), implies(any(x, phi),
+      any(x, psi)));
   }
+
+  axiom
+  generalization(x: Var, phi: Formula)
+  {
+    require x bound in phi;
+    infer implies(phi, any(x, phi));
+  }
+
+  def Formula
+  eq(x: Var, y: Var);
+
+  axiom
+  identity2(x: Var)
+  {
+    infer eq(x, x);
+  }
+
+  axiom
+  equality_substitution(x: Var, y: Var, z: Var, phi: Formula)
+  {
+    infer implies(eq(x, y), implies(phi[z=x], phi[z=y]));
+  }
+
 }
 
 /*
@@ -128,9 +170,6 @@ zfc
   {
     any(z, implies(in(z, x), in(z, y)));
   }
-
-  formula
-  eq(x: Var, y: Var);
 
   axiom
   extensionality()

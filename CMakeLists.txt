@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.10)
 project(magma)
 
+set(CMAKE_BUILD_TYPE Debug)
+
 # Library
 add_library(magma
   src/lib/lex.c

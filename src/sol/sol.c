@@ -856,12 +856,14 @@ traverse_tree_for_formulas(const struct ASTNode *node, void *userdata)
       memset(expression_copy, 0, sizeof(struct ASTNode));
       copy_tree(expression_copy, expression);
       formula.expression = expression_copy;
-    }
 
-    /* Finally, validate the formula before adding it. */
-    if (!validate_new_formula(state, &formula))
-    {
-      /* TODO: Error, invalid formula. */
+      /* Finally, validate the formula before adding it. */
+      if (validate_expression(state, formula.expression, formula.parameters,
+          formula.parameters_n))
+      {
+        /* TODO: Error, invalid formula. */
+        printf("stummy hurt\n");
+      }
     }
 
     ARRAY_APPEND(formula, state->formulas, state->formulas_n);
@@ -869,14 +871,62 @@ traverse_tree_for_formulas(const struct ASTNode *node, void *userdata)
 }
 
 int
-validate_new_formula(const struct ValidationState *state,
-  const struct Formula *formula)
+validate_expression(const struct ValidationState *state,
+  const struct ASTNode *expression,
+  const struct Parameter *parameters, size_t parameters_n)
 {
-  /* First, check for uniqueness issues (this is the only formula of this
-     exact name in the namespace), then in the case that the formula is not
-     atomic, check that its definition is well-formed, by verifying that the
-     formulas referenced exist and agree in type signature. */
-  /* TODO: Allow formulas to be overloaded. */
+  const char *formula_name = get_sol_node_data_c(expression)->name;
+  /* The argument may be referencing a parameter, so in this case, defer
+     validation of this part until substitution. */
+  for (size_t i = 0; i < parameters_n; ++i)
+  {
+    if (strcmp(parameters[i].name, formula_name) == 0)
+      return 0;
+  }
+
+  const struct Formula *formula = NULL;
+  /* Locate the formula being referenced. */
+  for (size_t i = 0; i < state->formulas_n; ++i)
+  {
+    if (strcmp(state->formulas[i].global_name, formula_name) == 0)
+      formula = &state->formulas[i];
+  }
+
+  if (formula == NULL)
+  {
+    /* TODO: Error, formula referenced does not exist. */
+    return 1;
+  }
+
+  /* Now that we have located the formula, loop through the arguments provided
+     and recursively verify them. */
+  struct ASTNode *args_provided = NULL;
+  size_t args_provided_n = 0;
+  ARRAY_INIT(args_provided, args_provided_n);
+  for (size_t i = 0; i < expression->children_n; ++i)
+  {
+    if (get_sol_node_data_c(&expression->children[i])->type
+        == NodeTypeFormulaExpression)
+      ARRAY_APPEND(expression->children[i], args_provided, args_provided_n);
+  }
+
+  /* Do we have the correct number of arguments? */
+  if (args_provided_n != formula->parameters_n)
+  {
+    /* TODO: Error, incorrect number of arguments. */
+    return 1;
+  }
+
+  int err;
+  for (size_t i = 0; i < args_provided_n; ++i)
+  {
+    /* TODO: Do the types agree? */
+    err = validate_expression(state, &args_provided[i], parameters,
+      parameters_n);
+    PROPAGATE_ERROR(err);
+  }
+
+  ARRAY_FREE(args_provided, args_provided_n);
 
   return 0;
 }
@@ -1002,6 +1052,8 @@ sol_verify(const char *file_path)
   {
     printf("Error %s\n", parse_out.errors[0].error_msg);
   }
+
+  //print_tree(&parse_out.ast_root, &print_sol_node);
 
   /* Free the token list. */
   free_lex_result(&lex_out);

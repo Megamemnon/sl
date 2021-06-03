@@ -177,8 +177,9 @@ void
 traverse_tree_for_formulas(const struct ASTNode *node, void *userdata);
 
 int
-validate_new_formula(const struct ValidationState *state,
-  const struct Formula *formula);
+validate_expression(const struct ValidationState *state,
+  const struct ASTNode *expression,
+  const struct Parameter *parameters, size_t parameters_n);
 
 void
 traverse_tree_for_axioms(const struct ASTNode *node, void *userdata);
