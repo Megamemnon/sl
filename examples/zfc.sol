@@ -9,60 +9,95 @@ add the axioms for propositional calculus.
 namespace
 prop
 {
-  type Formula;
+  judgement
+  is_formula(phi);
 
-  def Formula
-  not(phi: Formula);
-
-  def Formula
-  implies(phi: Formula, psi: Formula);
+  judgement
+  has_proof(phi);
 
   axiom
-  modus_ponens(phi: Formula, psi: Formula)
+  negation(phi)
   {
-    hypothesis minor phi;
-    hypothesis major implies(phi, psi);
-    infer psi;
+    assume is_formula(phi);
+
+    infer is_formula(not phi);
   }
 
   axiom
-  simplification(phi: Formula, psi: Formula)
+  implication(phi, psi)
   {
-    infer implies(phi, implies(psi, phi));
+    assume is_formula(phi);
+    assume is_formula(psi);
+
+    infer is_formula( (phi implies psi) );
   }
 
   axiom
-  distributive(psi: Formula, phi: Formula, chi: Formula)
+  modus_ponens(phi, psi)
   {
-    infer implies(implies(phi, implies(psi, chi)),
-      implies(implies(phi, psi), implies(phi, chi)));
+    assume is_formula(phi);
+    assume is_formula(psi);
+
+    assume has_proof(phi);
+    assume has_proof( (phi implies psi) );
+
+    infer has_proof(psi);
   }
 
   axiom
-  transposition(phi: Formula, psi: Formula)
+  simplification(phi, psi)
   {
-    infer implies(implies(not(psi), not(phi)), implies(phi, psi));
+    assume is_formula(phi);
+    assume is_formula(psi);
+
+    infer has_proof( (phi implies (psi implies phi)) );
+  }
+
+  axiom
+  distributive(phi, psi, chi)
+  {
+    assume is_formula(phi);
+    assume is_formula(psi);
+    assume is_formula(chi);
+
+    infer has_proof( ((phi implies (psi implies chi)) implies
+      ((phi implies psi) implies (phi implies chi))) );
+  }
+
+  axiom
+  transposition(phi, psi)
+  {
+    assume is_formula(phi);
+    assume is_formula(psi);
+
+    infer has_proof( ((not psi implies not phi) implies (phi implies psi)) );
   }
 
   theorem
-  double_modus_ponens(phi: Formula, psi: Formula, chi: Formula)
+  double_modus_ponens(phi, psi, chi)
   {
-    hypothesis minor_1 phi;
-    hypothesis minor_2 psi;
-    hypothesis major implies(phi, implies(psi, chi));
-    infer chi;
+    assume is_formula(phi);
+    assume is_formula(psi);
+    assume is_formula(chi);
 
-    let major_2 implies(psi, chi);
-    step conclusion_2 modus_ponens(phi, major);
-    step conclusion modus_ponens(psi, major_2);
+    assume has_proof(phi);
+    assume has_proof(psi);
+    assume has_proof( (phi implies (psi implies chi)) );
+
+    infer has_proof(chi);
+
+    step implication(psi, chi);
+    step modus_ponens(phi, (psi implies chi) );
+    step modus_ponens(psi, chi);
   }
 
+/*
   theorem
-  identity(phi: Formula)
+  identity(phi)
   {
-    infer implies(phi, phi);
+    infer has_proof(implies(phi, phi));
 
-    let p1 implies(implies(implies(phi, phi), phi), implies(phi, phi));
+    step p1 implies(implies(implies(phi, phi), phi), implies(phi, phi));
 
     step s1 simplification(phi, implies(phi, phi));
     step s2 distributive(phi, implies(phi, phi), phi);
@@ -72,23 +107,25 @@ prop
       implies(phi, phi));
   }
 
-  def Formula
+  expression Formula
   or(phi: Formula, psi: Formula)
   {
     implies(not(phi), psi);
   }
 
-  def Formula
+  expression Formula
   and(phi: Formula, psi: Formula)
   {
     not(implies(phi, not(psi)));
   }
 
-  def Formula
+  expression Formula
   iff(phi: Formula, psi: Formula)
   {
     and(implies(phi, psi), implies(psi, phi));
   }
+*/
+
 }
 
 /*
@@ -101,54 +138,104 @@ pred
 {
   import prop;
 
-  type Var;
-  type Term;
+  judgement
+  is_term(t);
 
-  def Formula [x]
-  any(x: Var, phi: Formula);
+  judgement
+  is_variable(x);
 
-  def Formula [x]
+  axiom
+  variables_are_terms(x)
+  {
+    assume is_variable(x);
+
+    infer is_term(x);
+  }
+
+  axiom
+  universal_quantification(x, phi)
+  {
+    assume is_variable(x);
+    assume is_formula(phi);
+
+    infer is_formula(any x phi);
+  }
+
+  judgement
+  bound_in(x, phi);
+
+  judgement
+  free_in(x, phi);
+
+/*
+  expression Formula
   exists(x: Var, phi: Formula)
   {
     not(any(x, not(phi)));
   }
+*/
 
   axiom
-  instantiation(x: Var, t: Term, phi: Formula)
+  instantiation(x, t, phi)
   {
-    require x free in phi;
-    infer implies(any(x, phi), phi[x=t]);
+    assume is_variable(x);
+      assume is_term(t);
+    assume is_formula(phi);
+
+    assume free_in(t, phi);
+
+    infer has_proof( (any x phi) implies phi[x=t]) );
   }
 
   axiom
-  quantified_implication(x: Var, phi: Formula, psi: Formula)
+  quantified_implication(x, phi, psi)
   {
-    infer implies(any(x, implies(phi, psi)), implies(any(x, phi),
-      any(x, psi)));
+    assume is_variable(x);
+    assume is_formula(phi);
+    assume is_formula(psi);
+
+    infer has_proof( (any x (phi implies psi)) implies (any x phi
+      implies any x psi)) );
   }
 
   axiom
   generalization(x: Var, phi: Formula)
   {
-    require x bound in phi;
-    infer implies(phi, any(x, phi));
-  }
+    assume is_variable(x);
+    assume is_formula(phi);
 
-  def Formula
-  eq(x: Var, y: Var);
+    assume bound_in(x, phi);
 
-  axiom
-  identity2(x: Var)
-  {
-    infer eq(x, x);
+    infer has_proof( (phi implies any x phi) );
   }
 
   axiom
-  equality_substitution(x: Var, y: Var, z: Var, phi: Formula)
+  equality(x, y)
   {
-    infer implies(eq(x, y), implies(phi[z=x], phi[z=y]));
+    assume is_term(x);
+    assume is_term(y);
+
+    infer is_formula( x = y );
   }
 
+  axiom
+  equality_reflexive(x)
+  {
+    assume is_variable(x);
+
+    infer has_proof( x = x );
+  }
+
+  axiom
+  equality_substitution(x, y, z, phi)
+  {
+    assume is_term(x);
+    assume is_term(y);
+    assume is_variable(z);
+    assume is_formula(phi);
+
+    infer has_proof( (x = y implies (phi[z=x] implies phi[z=y])) );
+  }
 }
 
 /*
@@ -159,14 +246,20 @@ ZFC Set Theory:
 namespace
 zfc
 {
-
   import prop, pred;
 
-  formula
-  in(x: Var, y: Var);
+  axiom
+  membership(x, y)
+  {
+    assume is_term(x);
+    assume is_term(y);
 
+    infer is_formula(x in y);
+  }
+
+/*
   formula
-  subset(x: Var, y: Var)
+  subset(x: Term, y: Term)
   {
     any(z, implies(in(z, x), in(z, y)));
   }
@@ -178,9 +271,9 @@ zfc
   }
 
   formula
-  empty(x: Var)
+  empty(x: Term)
   {
     any(z, not(in(z, x)));
   }
-
+*/
 }
