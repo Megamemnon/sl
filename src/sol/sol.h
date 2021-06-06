@@ -12,28 +12,31 @@ enum SolASTNodeType
   NodeTypeUnidentified = 0,
   NodeTypeNamespace,
   NodeTypeImport,
+
+  NodeTypeJudgement,
+  NodeTypeAxiom,
+  NodeTypeTheorem,
+
+  NodeTypeAssume,
+  NodeTypeInfer,
+  NodeTypeStep,
+
   NodeTypeIdentifierPath,
   NodeTypeIdentifierPathSegment,
-  NodeTypeAxiom,
-  NodeTypeHypothesis,
-  NodeTypeInfer,
-  NodeTypeFormula,
-  NodeTypeFormulaExpression,
-  NodeTypeTheorem,
-  NodeTypeLet,
-  NodeTypeStep,
+  NodeTypeJudgementExpression,
+  NodeTypeExpression,
   NodeTypeSubstitutionMap,
   NodeTypeSubstitution,
   NodeTypeParameterList,
   NodeTypeParameter
 };
 
+/* Parser Methods */
 struct SolASTNodeData
 {
   enum SolASTNodeType type;
 
   char *name;
-  char *data_type;
 };
 
 void
@@ -58,37 +61,31 @@ int
 parse_namespace(struct ParserState *state);
 
 int
-parse_namespace_interior(struct ParserState *state);
-
-int
 parse_import(struct ParserState *state);
 
 int
-parse_identifier_path(struct ParserState *state);
-
-int
-parse_formula(struct ParserState *state);
-
-int
-parse_formula_expression(struct ParserState *state);
+parse_judgement(struct ParserState *state);
 
 int
 parse_axiom(struct ParserState *state);
 
 int
-parse_hypothesis(struct ParserState *state);
+parse_theorem(struct ParserState *state);
+
+int
+parse_assume(struct ParserState *state);
 
 int
 parse_infer(struct ParserState *state);
 
 int
-parse_theorem(struct ParserState *state);
-
-int
-parse_let(struct ParserState *state);
-
-int
 parse_step(struct ParserState *state);
+
+int
+parse_identifier_path(struct ParserState *state);
+
+int
+parse_judgement_expression(struct ParserState *state);
 
 int
 parse_substitution_map(struct ParserState *state);
@@ -104,6 +101,8 @@ parse_parameter(struct ParserState *state);
 
 void
 print_sol_node(char *buf, size_t len, const struct ASTNode *node);
+
+/* Validation Methods */
 
 enum ParameterType
 {

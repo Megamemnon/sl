@@ -2,8 +2,9 @@
 
 Propositional Calculus:
 
-Define rules for forming formulas, such as negation and implication. Then
-add the axioms for propositional calculus.
+Define rules for forming formulas, using negation and implication. Then
+add the axioms for propositional calculus. Finally, utility theorems are
+proven.
 
 */
 namespace
@@ -18,77 +19,78 @@ prop
   axiom
   negation(phi)
   {
-    assume is_formula(phi);
+    assume is_formula(\$phi\);
 
-    infer is_formula(not phi);
+    infer is_formula(\not $phi\);
   }
 
   axiom
   implication(phi, psi)
   {
-    assume is_formula(phi);
-    assume is_formula(psi);
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
 
-    infer is_formula( (phi implies psi) );
+    infer is_formula(\($phi implies $psi)\);
   }
 
   axiom
   modus_ponens(phi, psi)
   {
-    assume is_formula(phi);
-    assume is_formula(psi);
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
 
-    assume has_proof(phi);
-    assume has_proof( (phi implies psi) );
+    assume has_proof(\$phi\);
+    assume has_proof(\($phi implies $psi)\);
 
-    infer has_proof(psi);
+    infer has_proof(\$psi\);
   }
 
   axiom
   simplification(phi, psi)
   {
-    assume is_formula(phi);
-    assume is_formula(psi);
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
 
-    infer has_proof( (phi implies (psi implies phi)) );
+    infer has_proof(\($phi implies ($psi implies $phi))\);
   }
 
   axiom
   distributive(phi, psi, chi)
   {
-    assume is_formula(phi);
-    assume is_formula(psi);
-    assume is_formula(chi);
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+    assume is_formula(\$chi\);
 
-    infer has_proof( ((phi implies (psi implies chi)) implies
-      ((phi implies psi) implies (phi implies chi))) );
+    infer has_proof(\(($phi implies ($psi implies $chi)) implies
+      (($phi implies $psi) implies ($phi implies $chi)))\);
   }
 
   axiom
   transposition(phi, psi)
   {
-    assume is_formula(phi);
-    assume is_formula(psi);
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
 
-    infer has_proof( ((not psi implies not phi) implies (phi implies psi)) );
+    infer has_proof(\((not $psi implies not $phi)
+      implies ($phi implies $psi))\);
   }
 
   theorem
   double_modus_ponens(phi, psi, chi)
   {
-    assume is_formula(phi);
-    assume is_formula(psi);
-    assume is_formula(chi);
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+    assume is_formula(\$chi\);
 
-    assume has_proof(phi);
-    assume has_proof(psi);
-    assume has_proof( (phi implies (psi implies chi)) );
+    assume has_proof(\$phi\);
+    assume has_proof(\$psi\);
+    assume has_proof(\($phi implies ($psi implies $chi))\);
 
-    infer has_proof(chi);
+    infer has_proof(\$chi\);
 
-    step implication(psi, chi);
-    step modus_ponens(phi, (psi implies chi) );
-    step modus_ponens(psi, chi);
+    step implication(\$psi\, \$chi\);
+    step modus_ponens(\$phi\, \($psi implies $chi)\);
+    step modus_ponens(\$psi\, \$chi\);
   }
 
 /*
@@ -132,6 +134,10 @@ prop
 
 First Order Logic (with Equality):
 
+Define terms, variables, and quantification. After developing the rules
+for free and bound variables, add the axioms for first order logic with
+equality. Then prove utility theorems.
+
 */
 namespace
 pred
@@ -147,18 +153,18 @@ pred
   axiom
   variables_are_terms(x)
   {
-    assume is_variable(x);
+    assume is_variable(\$x\);
 
-    infer is_term(x);
+    infer is_term(\$x\);
   }
 
   axiom
   universal_quantification(x, phi)
   {
-    assume is_variable(x);
-    assume is_formula(phi);
+    assume is_variable(\$x\);
+    assume is_formula(\$phi\);
 
-    infer is_formula(any x phi);
+    infer is_formula(\any $x $phi\);
   }
 
   judgement
@@ -166,6 +172,124 @@ pred
 
   judgement
   free_in(x, phi);
+
+  judgement
+  is_atomic_formula(phi);
+
+  axiom
+  free_atomic(x, phi)
+  {
+    assume is_variable(\$x\);
+    assume is_atomic_formula(\$phi\);
+
+    assume @subexpression(\$x\, \$phi\);
+
+    infer free_in(\$x\, \$phi\);
+  }
+
+  axiom
+  bound_negation(x, phi)
+  {
+    assume is_variable(\$x\);
+    assume is_formula(\$phi\);
+
+    assume bound_in(\$x\, \$phi\);
+
+    infer bound_in(\$x\, \not $phi\);
+  }
+
+  axiom
+  free_negation(x, phi)
+  {
+    assume is_variable(\$x\);
+    assume is_formula(\$phi\);
+
+    assume free_in(\$x\, \$phi\);
+
+    infer free_in(\$x\, \not $phi\);
+  }
+
+  axiom
+  bound_implication_1(x, phi, psi)
+  {
+    assume is_variable(\$x\);
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+
+    assume bound_in(\$x\, \$phi\);
+
+    infer bound_in(\$x\, \($phi implies $psi)\);
+  }
+
+  axiom
+  bound_implication_2(x, phi, psi)
+  {
+    assume is_variable(x);
+    assume is_formula(phi);
+    assume is_formula(psi);
+
+    assume bound_in(x, psi);
+
+    infer bound_in(x, (phi implies psi));
+  }
+
+  axiom
+  free_implication_1(x, phi, psi)
+  {
+    assume is_variable(x);
+    assume is_formula(phi);
+    assume is_formula(psi);
+
+    assume free_in(x, phi);
+
+    infer free_in(x, (phi implies psi));
+  }
+
+  axiom
+  free_implication_2(x, phi, psi)
+  {
+    assume is_variable(x);
+    assume is_formula(phi);
+    assume is_formula(psi);
+
+    assume free_in(x, psi);
+
+    infer free_in(x, (phi implies psi));
+  }
+
+  axiom
+  free_universal(x, y, phi)
+  {
+    assume is_variable(x);
+    assume is_variable(y);
+    assume is_formula(phi);
+
+    assume free_in(x, phi);
+    assume distinct(x, y);
+
+    infer free_in(x, any y phi);
+  }
+
+  axiom
+  bound_universal_1(x, phi)
+  {
+    assume is_variable(x);
+    assume is_formula(phi);
+
+    infer bound_in(x, any x phi);
+  }
+
+  axiom
+  bound_universal_2(x, y, phi)
+  {
+    assume is_variable(x);
+    assume is_variable(y);
+    assume is_formula(phi);
+
+    assume bound_in(x, phi);
+
+    infer bound_in(x, any y phi);
+  }
 
 /*
   expression Formula
@@ -179,7 +303,7 @@ pred
   instantiation(x, t, phi)
   {
     assume is_variable(x);
-      assume is_term(t);
+    assume is_term(t);
     assume is_formula(phi);
 
     assume free_in(t, phi);
