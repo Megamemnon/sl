@@ -4,14 +4,21 @@
 #include <stdio.h>
 #include <string.h>
 
+void
+init_tree(struct ASTNode *root)
+{
+  root->parent = NULL;
+  ARRAY_INIT(root->children, struct ASTNode);
+}
+
 static void
 free_children(struct ASTNode *root)
 {
-  for (size_t i = 0; i < root->children_n; ++i)
+  for (size_t i = 0; i < ARRAY_LENGTH(root->children); ++i)
   {
-    free_children(&root->children[i]);
+    free_children(ARRAY_GET(root->children, struct ASTNode, i));
   }
-  ARRAY_FREE(root->children, root->children_n);
+  ARRAY_FREE(root->children);
   if (root->free_callback != NULL)
     root->free_callback(root);
 }
@@ -28,11 +35,15 @@ copy_node_and_children(struct ASTNode *dst, const struct ASTNode *src)
 {
   dst->free_callback = src->free_callback;
   dst->copy_callback = src->copy_callback;
-  ARRAY_INIT_WITH_SIZE(dst->children, dst->children_n, src->children_n);
-  for (size_t i = 0; i < src->children_n; ++i)
+  ARRAY_INIT_WITH_RESERVED(dst->children, struct ASTNode,
+    ARRAY_LENGTH(src->children));
+  for (size_t i = 0; i < ARRAY_LENGTH(src->children); ++i)
   {
-    copy_node_and_children(&dst->children[i], &src->children[i]);
-    dst->children[i].parent = dst;
+    struct ASTNode *dst_child = ARRAY_GET(dst->children, struct ASTNode, i);
+    const struct ASTNode *src_child =
+      ARRAY_GET(src->children, struct ASTNode, i);
+    copy_node_and_children(dst_child, src_child);
+    dst_child->parent = dst;
   }
   if (dst->copy_callback != NULL)
     dst->copy_callback(dst, src);
@@ -57,9 +68,10 @@ print_children(struct ASTNode *root, unsigned int depth,
   char buf[1024];
   print_callback(buf, 1024, root);
   printf("%s\n", buf);
-  for (size_t i = 0; i < root->children_n; ++i)
+  for (size_t i = 0; i < ARRAY_LENGTH(root->children); ++i)
   {
-    print_children(&root->children[i], depth + 1, print_callback);
+    print_children(ARRAY_GET(root->children, struct ASTNode, i),
+      depth + 1, print_callback);
   }
 }
 
@@ -74,26 +86,30 @@ new_child(struct ASTNode *parent)
 {
   struct ASTNode child = {};
   child.parent = parent;
-  ARRAY_INIT(child.children, child.children_n);
+  ARRAY_INIT(child.children, struct ASTNode);
 
-  ARRAY_APPEND(child, parent->children, parent->children_n);
+  ARRAY_APPEND(parent->children, struct ASTNode, child);
 
-  return &parent->children[parent->children_n - 1];
+  return ARRAY_GET(parent->children, struct ASTNode,
+    ARRAY_LENGTH(parent->children) - 1);
 }
 
 void
 traverse_tree(const struct ASTNode *root,
   traverse_node_callback_t node_callback, void *user_data)
 {
-  for (size_t i = 0; i < root->children_n; ++i)
-    traverse_tree(&root->children[i], node_callback, user_data);
+  for (size_t i = 0; i < ARRAY_LENGTH(root->children); ++i)
+  {
+    traverse_tree(ARRAY_GET(root->children, struct ASTNode, i), node_callback,
+      user_data);
+  }
   node_callback(root, user_data);
 }
 
 struct Token *
 get_current_token(struct ParserState *state)
 {
-  return &state->input->tokens[state->token_index];
+  return ARRAY_GET(state->input->tokens, struct Token, state->token_index);
 }
 
 void
@@ -149,9 +165,9 @@ consume_identifier(struct ParserState *state, const char **identifier)
 void
 add_error(struct ParserState *state, const char *msg)
 {
-  struct ParserError error = {};
+  /*struct ParserError error = {};
   error.error_msg = strdup(msg);
   error.error_location = get_current_token(state);
 
-  ARRAY_APPEND(error, state->errors, state->errors_n);
+  ARRAY_APPEND(error, state->errors, state->errors_n);*/
 }

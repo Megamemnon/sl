@@ -121,8 +121,7 @@ struct Formula
 {
   char *global_name;
 
-  struct Parameter *parameters;
-  size_t parameters_n;
+  Array parameters;
 
   struct ASTNode *expression; /* NULL if the formula is atomic. */
 };
@@ -137,11 +136,8 @@ struct Axiom
 {
   char *global_name;
 
-  struct Parameter *parameters;
-  size_t parameters_n;
-
-  struct Hypothesis *hypotheses;
-  size_t hypotheses_n;
+  Array parameters;
+  Array hypotheses;
 
   struct ASTNode *infer;
 };
@@ -150,11 +146,8 @@ struct Theorem
 {
   char *global_name;
 
-  struct Parameter *parameters;
-  size_t parameters_n;
-
-  struct Hypothesis *hypotheses;
-  size_t hypotheses_n;
+  Array parameters;
+  Array hypotheses;
 
   struct ASTNode *infer;
 };
@@ -163,14 +156,9 @@ struct ValidationState
 {
   const struct ParserState *input;
 
-  struct Formula *formulas;
-  size_t formulas_n;
-
-  struct Axiom *axioms;
-  size_t axioms_n;
-
-  struct Theorem *theorems;
-  size_t theorems_n;
+  Array formulas;
+  Array axioms;
+  Array theorems;
 };
 
 void

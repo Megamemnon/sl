@@ -1,5 +1,4 @@
 #include "lex.h"
-#include "common.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -44,31 +43,34 @@ copy_lex_result(struct LexResult *dst, const struct LexResult *src)
 {
   /* Copy the array of tokens, then duplicate the string contents. */
   free_lex_result(dst);
-  ARRAY_COPY(dst->tokens, dst->tokens_n, src->tokens, src->tokens_n);
-  for (size_t i = 0; i < src->tokens_n; ++i)
+  ARRAY_COPY(dst->tokens, src->tokens);
+  for (size_t i = 0; i < ARRAY_LENGTH(src->tokens); ++i)
   {
-    if (src->tokens[i].value != NULL)
-      dst->tokens[i].value = strdup(src->tokens[i].value);
+    const struct Token *src_tok = ARRAY_GET(src->tokens, struct Token, i);
+    struct Token *dst_tok = ARRAY_GET(dst->tokens, struct Token, i);
+    if (src_tok->value != NULL)
+      dst_tok->value = strdup(src_tok->value);
   }
 }
 
 void
 free_lex_result(struct LexResult *result)
 {
-  for (size_t i = 0; i < result->tokens_n; ++i)
+  for (size_t i = 0; i < ARRAY_LENGTH(result->tokens); ++i)
   {
-    if (result->tokens[i].value != NULL)
-      free(result->tokens[i].value);
+    struct Token *tok = ARRAY_GET(result->tokens, struct Token, i);
+    if (tok->value != NULL)
+      free(tok->value);
   }
-  if (result->tokens != NULL)
-    ARRAY_FREE(result->tokens, result->tokens_n);
+  if (result->tokens.data != NULL)
+    ARRAY_FREE(result->tokens);
 }
 
 void
 file_to_lines(struct LexResult *dst, const char *file_path)
 {
   free_lex_result(dst);
-  ARRAY_INIT(dst->tokens, dst->tokens_n);
+  ARRAY_INIT(dst->tokens, struct Token);
 
   if (verbose >= 1)
     printf("Parsing file '%s'\n", file_path);
@@ -92,7 +94,7 @@ file_to_lines(struct LexResult *dst, const char *file_path)
     tok.value = strdup(line_buf);
     tok.line = line;
     tok.char_offset = 0;
-    ARRAY_APPEND(tok, dst->tokens, dst->tokens_n);
+    ARRAY_APPEND(dst->tokens, struct Token, tok);
     ++line;
   }
 
@@ -103,16 +105,17 @@ void
 remove_whitespace(struct LexResult *dst, const struct LexResult *src)
 {
   struct LexResult result = {};
-  ARRAY_INIT(result.tokens, result.tokens_n);
+  ARRAY_INIT(result.tokens, struct Token);
 
   struct Token tok = {};
   tok.id = 0;
-  for (size_t i = 0; i < src->tokens_n; ++i)
+  for (size_t i = 0; i < ARRAY_LENGTH(src->tokens); ++i)
   {
-    if (src->tokens[i].type == TokenTypeIntermediate)
+    const struct Token *src_tok = ARRAY_GET(src->tokens, struct Token, i);
+    if (src_tok->type == TokenTypeIntermediate)
     {
       const char *token_start = NULL;
-      for (const char *c = src->tokens[i].value; ; ++c)
+      for (const char *c = src_tok->value; ; ++c)
       {
         if (token_start == NULL && !isspace(*c))
           token_start = c;
@@ -125,7 +128,7 @@ remove_whitespace(struct LexResult *dst, const struct LexResult *src)
           tok.value = malloc(sizeof(char) * (length + 1));
           strncpy(tok.value, token_start, length);
           tok.value[length] = '\0';
-          ARRAY_APPEND(tok, result.tokens, result.tokens_n);
+          ARRAY_APPEND(result.tokens, struct Token, tok);
 
           token_start = NULL;
         }
@@ -135,7 +138,7 @@ remove_whitespace(struct LexResult *dst, const struct LexResult *src)
           /* Add the token */
           tok.type = TokenTypeLineEnd;
           tok.value = NULL;
-          ARRAY_APPEND(tok, result.tokens, result.tokens_n);
+          ARRAY_APPEND(result.tokens, struct Token, tok);
         }
 
         if (*c == '\0')
@@ -144,37 +147,36 @@ remove_whitespace(struct LexResult *dst, const struct LexResult *src)
     }
     else
     {
-      ARRAY_APPEND(duplicate_token(&src->tokens[i]),
-        result.tokens, result.tokens_n);
+      ARRAY_APPEND(result.tokens, struct Token, duplicate_token(src_tok));
     }
   }
 
   free_lex_result(dst);
 
-  dst->tokens = result.tokens;
-  dst->tokens_n = result.tokens_n;
+  ARRAY_COPY(dst->tokens, result.tokens);
 }
 
 void
 separate_symbols(struct LexResult *dst, const struct LexResult *src)
 {
   struct LexResult result = {};
-  ARRAY_INIT(result.tokens, result.tokens_n);
+  ARRAY_INIT(result.tokens, struct Token);
 
   struct Token tok = {};
   tok.id = 0;
   tok.type = TokenTypeIntermediate;
-  for (size_t i = 0; i < src->tokens_n; ++i)
+  for (size_t i = 0; i < ARRAY_LENGTH(src->tokens); ++i)
   {
-    if (src->tokens[i].type == TokenTypeIntermediate)
+    const struct Token *src_tok = ARRAY_GET(src->tokens, struct Token, i);
+    if (src_tok->type == TokenTypeIntermediate)
     {
-      const char *token_start = src->tokens[i].value;
+      const char *token_start = src_tok->value;
       int in_symbol = !is_extended_alnum(*token_start);
       if (in_symbol)
         tok.type = TokenTypeSymbol;
       else
         tok.type = TokenTypeIntermediate;
-      for (const char *c = src->tokens[i].value; ; ++c)
+      for (const char *c = src_tok->value; ; ++c)
       {
         if ((!in_symbol && !is_extended_alnum(*c))
             || (in_symbol && is_extended_alnum(*c))
@@ -189,7 +191,7 @@ separate_symbols(struct LexResult *dst, const struct LexResult *src)
           tok.value = malloc(sizeof(char) * (length + 1));
           strncpy(tok.value, token_start, length);
           tok.value[length] = '\0';
-          ARRAY_APPEND(tok, result.tokens, result.tokens_n);
+          ARRAY_APPEND(result.tokens, struct Token, tok);
 
           token_start = c;
         }
@@ -201,15 +203,12 @@ separate_symbols(struct LexResult *dst, const struct LexResult *src)
     }
     else
     {
-      ARRAY_APPEND(duplicate_token(&src->tokens[i]),
-        result.tokens, result.tokens_n);
+      ARRAY_APPEND(result.tokens, struct Token, duplicate_token(src_tok));
     }
   }
 
   free_lex_result(dst);
-
-  dst->tokens = result.tokens;
-  dst->tokens_n = result.tokens_n;
+  ARRAY_COPY(dst->tokens, result.tokens);
 }
 
 void
@@ -217,20 +216,21 @@ identify_symbol(struct LexResult *dst, const struct LexResult *src,
   const char *symbol)
 {
   struct LexResult result = {};
-  ARRAY_INIT(result.tokens, result.tokens_n);
+  ARRAY_INIT(result.tokens, struct Token);
 
   struct Token tok;
   tok.id = 0;
   tok.type = TokenTypeSymbol;
-  for (size_t i = 0; i < src->tokens_n; ++i)
+  for (size_t i = 0; i < ARRAY_LENGTH(src->tokens); ++i)
   {
-    if (src->tokens[i].type == TokenTypeSymbol &&
-        !src->tokens[i].identified)
+    const struct Token *src_tok = ARRAY_GET(src->tokens, struct Token, i);
+    if (src_tok->type == TokenTypeSymbol &&
+        !src_tok->identified)
     {
       /* Scan the token for the symbol as a substring, and cut it out if
          it exists. */
-      const char *symbol_start = src->tokens[i].value;
-      const char *c = src->tokens[i].value;
+      const char *symbol_start = src_tok->value;
+      const char *c = src_tok->value;
       while (1)
       {
         if (strncmp(c, symbol, strlen(symbol)) == 0)
@@ -242,12 +242,12 @@ identify_symbol(struct LexResult *dst, const struct LexResult *src,
             strncpy(tok.value, symbol_start, prev_length);
             tok.value[prev_length] = '\0';
             tok.identified = 0;
-            ARRAY_APPEND(tok, result.tokens, result.tokens_n);
+            ARRAY_APPEND(result.tokens, struct Token, tok);
           }
 
           tok.value = strdup(symbol);
           tok.identified = 1;
-          ARRAY_APPEND(tok, result.tokens, result.tokens_n);
+          ARRAY_APPEND(result.tokens, struct Token, tok);
 
           c += strlen(symbol);
           symbol_start = c;
@@ -262,7 +262,7 @@ identify_symbol(struct LexResult *dst, const struct LexResult *src,
             strncpy(tok.value, symbol_start, prev_length);
             tok.value[prev_length] = '\0';
             tok.identified = 0;
-            ARRAY_APPEND(tok, result.tokens, result.tokens_n);
+            ARRAY_APPEND(result.tokens, struct Token, tok);
           }
 
           break;
@@ -272,15 +272,12 @@ identify_symbol(struct LexResult *dst, const struct LexResult *src,
     }
     else
     {
-      ARRAY_APPEND(duplicate_token(&src->tokens[i]),
-        result.tokens, result.tokens_n);
+      ARRAY_APPEND(result.tokens, struct Token, duplicate_token(src_tok));
     }
   }
 
   free_lex_result(dst);
-
-  dst->tokens = result.tokens;
-  dst->tokens_n = result.tokens_n;
+  ARRAY_COPY(dst->tokens, result.tokens);
 }
 
 void
@@ -296,40 +293,36 @@ identify_symbols(struct LexResult *dst, const struct LexResult *src,
   }
 
   free_lex_result(dst);
-
-  dst->tokens = result.tokens;
-  dst->tokens_n = result.tokens_n;
+  ARRAY_COPY(dst->tokens, result.tokens);
 }
 
 void
 separate_identifiers(struct LexResult *dst, const struct LexResult *src)
 {
   struct LexResult result = {};
-  ARRAY_INIT(result.tokens, result.tokens_n);
+  ARRAY_INIT(result.tokens, struct Token);
 
   struct Token tok = {};
   tok.id = 0;
   tok.type = TokenTypeIdentifier;
   tok.identified = 1;
-  for (size_t i = 0; i < src->tokens_n; ++i)
+  for (size_t i = 0; i < ARRAY_LENGTH(src->tokens); ++i)
   {
-    if (src->tokens[i].type == TokenTypeIntermediate)
+    const struct Token *src_tok = ARRAY_GET(src->tokens, struct Token, i);
+    if (src_tok->type == TokenTypeIntermediate)
     {
       /* TODO: Don't be dumb here. */
-      tok.value = strdup(src->tokens[i].value);
-      ARRAY_APPEND(tok, result.tokens, result.tokens_n);
+      tok.value = strdup(src_tok->value);
+      ARRAY_APPEND(result.tokens, struct Token, tok);
     }
     else
     {
-      ARRAY_APPEND(duplicate_token(&src->tokens[i]),
-        result.tokens, result.tokens_n);
+      ARRAY_APPEND(result.tokens, struct Token, duplicate_token(src_tok));
     }
   }
 
   free_lex_result(dst);
-
-  dst->tokens = result.tokens;
-  dst->tokens_n = result.tokens_n;
+  ARRAY_COPY(dst->tokens, result.tokens);
 }
 
 void
@@ -337,38 +330,35 @@ identify_keyword(struct LexResult *dst, struct LexResult *src,
   const char *keyword)
 {
   struct LexResult result = {};
-  ARRAY_INIT(result.tokens, result.tokens_n);
+  ARRAY_INIT(result.tokens, struct Token);
 
   struct Token tok = {};
   tok.id = 0;
   tok.type = TokenTypeKeyword;
   tok.identified = 1;
-  for (size_t i = 0; i < src->tokens_n; ++i)
+  for (size_t i = 0; i < ARRAY_LENGTH(src->tokens); ++i)
   {
-    if (src->tokens[i].type == TokenTypeIdentifier)
+    const struct Token *src_tok = ARRAY_GET(src->tokens, struct Token, i);
+    if (src_tok->type == TokenTypeIdentifier)
     {
-      if (strcmp(src->tokens[i].value, keyword) == 0)
+      if (strcmp(src_tok->value, keyword) == 0)
       {
         tok.value = strdup(keyword);
-        ARRAY_APPEND(tok, result.tokens, result.tokens_n);
+        ARRAY_APPEND(result.tokens, struct Token, tok);
       }
       else
       {
-        ARRAY_APPEND(duplicate_token(&src->tokens[i]),
-          result.tokens, result.tokens_n);
+        ARRAY_APPEND(result.tokens, struct Token, duplicate_token(src_tok));
       }
     }
     else
     {
-      ARRAY_APPEND(duplicate_token(&src->tokens[i]),
-        result.tokens, result.tokens_n);
+      ARRAY_APPEND(result.tokens, struct Token, duplicate_token(src_tok));
     }
   }
 
   free_lex_result(dst);
-
-  dst->tokens = result.tokens;
-  dst->tokens_n = result.tokens_n;
+  ARRAY_COPY(dst->tokens, result.tokens);
 }
 
 void
@@ -384,9 +374,7 @@ identify_keywords(struct LexResult *dst, struct LexResult *src,
   }
 
   free_lex_result(dst);
-
-  dst->tokens = result.tokens;
-  dst->tokens_n = result.tokens_n;
+  ARRAY_COPY(dst->tokens, result.tokens);
 }
 
 void
@@ -394,26 +382,26 @@ remove_line_comments(struct LexResult *dst, const struct LexResult *src,
   const char *line_comment_symbol)
 {
   struct LexResult result = {};
-  ARRAY_INIT(result.tokens, result.tokens_n);
+  ARRAY_INIT(result.tokens, struct Token);
 
   int in_comment = 0;
-  for (size_t i = 0; i < src->tokens_n; ++i)
+  for (size_t i = 0; i < ARRAY_LENGTH(src->tokens); ++i)
   {
-    if (src->tokens[i].type == TokenTypeSymbol &&
-        strcmp(src->tokens[i].value, line_comment_symbol) == 0)
+    const struct Token *src_tok = ARRAY_GET(src->tokens, struct Token, i);
+    if (src_tok->type == TokenTypeSymbol &&
+        strcmp(src_tok->value, line_comment_symbol) == 0)
       in_comment = 1;
-    if (src->tokens[i].type == TokenTypeLineEnd)
+    if (src_tok->type == TokenTypeLineEnd)
       in_comment = 0;
 
     if (!in_comment)
-      ARRAY_APPEND(duplicate_token(&src->tokens[i]),
-        result.tokens, result.tokens_n);
+    {
+      ARRAY_APPEND(result.tokens, struct Token, duplicate_token(src_tok));
+    }
   }
 
   free_lex_result(dst);
-
-  dst->tokens = result.tokens;
-  dst->tokens_n = result.tokens_n;
+  ARRAY_COPY(dst->tokens, result.tokens);
 }
 
 void
@@ -421,46 +409,46 @@ remove_block_comments(struct LexResult *dst, const struct LexResult *src,
   const char *block_comment_begin, const char *block_comment_end)
 {
   struct LexResult result = {};
-  ARRAY_INIT(result.tokens, result.tokens_n);
+  ARRAY_INIT(result.tokens, struct Token);
 
   int in_comment = 0;
-  for (size_t i = 0; i < src->tokens_n; ++i)
+  for (size_t i = 0; i < ARRAY_LENGTH(src->tokens); ++i)
   {
-    if (src->tokens[i].type == TokenTypeSymbol &&
-        strcmp(src->tokens[i].value, block_comment_begin) == 0)
+    const struct Token *src_tok = ARRAY_GET(src->tokens, struct Token, i);
+    if (src_tok->type == TokenTypeSymbol &&
+        strcmp(src_tok->value, block_comment_begin) == 0)
       in_comment = 1;
 
     if (!in_comment)
-      ARRAY_APPEND(duplicate_token(&src->tokens[i]),
-        result.tokens, result.tokens_n);
+    {
+      ARRAY_APPEND(result.tokens, struct Token, duplicate_token(src_tok));
+    }
 
-    if (src->tokens[i].type == TokenTypeSymbol &&
-        strcmp(src->tokens[i].value, block_comment_end) == 0)
+    if (src_tok->type == TokenTypeSymbol &&
+        strcmp(src_tok->value, block_comment_end) == 0)
       in_comment = 0;
   }
 
   free_lex_result(dst);
-
-  dst->tokens = result.tokens;
-  dst->tokens_n = result.tokens_n;
+  ARRAY_COPY(dst->tokens, result.tokens);
 }
 
 void
 remove_line_ends(struct LexResult *dst, const struct LexResult *src)
 {
   struct LexResult result = {};
-  ARRAY_INIT(result.tokens, result.tokens_n);
+  ARRAY_INIT(result.tokens, struct Token);
 
   int in_comment = 0;
-  for (size_t i = 0; i < src->tokens_n; ++i)
+  for (size_t i = 0; i < ARRAY_LENGTH(src->tokens); ++i)
   {
-    if (src->tokens[i].type != TokenTypeLineEnd)
-      ARRAY_APPEND(duplicate_token(&src->tokens[i]),
-        result.tokens, result.tokens_n);
+    const struct Token *src_tok = ARRAY_GET(src->tokens, struct Token, i);
+    if (src_tok->type != TokenTypeLineEnd)
+    {
+      ARRAY_APPEND(result.tokens, struct Token, duplicate_token(src_tok));
+    }
   }
 
   free_lex_result(dst);
-
-  dst->tokens = result.tokens;
-  dst->tokens_n = result.tokens_n;
+  ARRAY_COPY(dst->tokens, result.tokens);
 }

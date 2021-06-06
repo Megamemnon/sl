@@ -93,6 +93,8 @@ get_sol_node_data_c(const struct ASTNode *node)
 int
 parse_program(struct ParserState *state)
 {
+  init_tree(&state->ast_root);
+
   init_sol_node(state->ast_current);
   get_sol_node_data(state->ast_current)->type = NodeTypeNamespace;
   return parse_namespace_interior(state);
@@ -134,7 +136,7 @@ int
 parse_namespace_interior(struct ParserState *state)
 {
   int err = 0;
-  while (state->token_index < state->input->tokens_n
+  while (state->token_index < ARRAY_LENGTH(state->input->tokens)
          && !consume_symbol(state, "}"))
   {
     if (consume_keyword(state, "namespace"))
@@ -387,7 +389,7 @@ parse_axiom(struct ParserState *state)
     return 1;
   }
 
-  while (state->token_index < state->input->tokens_n
+  while (state->token_index < ARRAY_LENGTH(state->input->tokens)
          && !consume_symbol(state, "}"))
   {
     if (consume_keyword(state, "hypothesis"))
@@ -496,7 +498,7 @@ parse_theorem(struct ParserState *state)
     return 1;
   }
 
-  while (state->token_index < state->input->tokens_n
+  while (state->token_index < ARRAY_LENGTH(state->input->tokens)
          && !consume_symbol(state, "}"))
   {
     if (consume_keyword(state, "hypothesis"))
@@ -814,26 +816,30 @@ traverse_tree_for_formulas(const struct ASTNode *node, void *userdata)
     const struct ASTNode *params = NULL;
     const struct ASTNode *expression = NULL;
 
-    for (size_t i = 0; i < node->children_n; ++i)
+    for (size_t i = 0; i < ARRAY_LENGTH(node->children); ++i)
     {
+      const struct ASTNode *child =
+        ARRAY_GET(node->children, struct ASTNode, i);
       const struct SolASTNodeData *child_data =
-        get_sol_node_data_c(&node->children[i]);
+        get_sol_node_data_c(child);
 
       if (child_data->type == NodeTypeParameterList)
-        params = &node->children[i];
+        params = child;
       if (child_data->type == NodeTypeFormulaExpression)
-        expression = &node->children[i];
+        expression = child;
     }
 
     /* TODO: check to make sure these nodes exist! (These checks should have
        been made during parsing, but should still be made in the case that
        we are provided with an AST constructed differently). */
     /* Enumerate all the parameters. */
-    for (size_t i = 0; i < params->children_n; ++i)
+    for (size_t i = 0; i < ARRAY_LENGTH(params->children); ++i)
     {
+      const struct ASTNode *child =
+        ARRAY_GET(params->children, struct ASTNode, i);
       struct Parameter param = {};
-      param.name = strdup(get_sol_node_data_c(&params->children[i])->name);
-      const char *type = get_sol_node_data_c(&params->children[i])->data_type;
+      param.name = strdup(get_sol_node_data_c(child)->name);
+      const char *type = get_sol_node_data_c(child)->data_type;
       if (strcmp(type, "Formula") == 0)
       {
         param.type = ParameterTypeFormula;
@@ -846,7 +852,7 @@ traverse_tree_for_formulas(const struct ASTNode *node, void *userdata)
       {
         /* TODO: error, unknown type. */
       }
-      ARRAY_APPEND(param, formula.parameters, formula.parameters_n);
+      ARRAY_APPEND(formula.parameters, struct Parameter, param);
     }
 
     /* Copy over the expression, if the formula is not atomic. */
@@ -858,15 +864,15 @@ traverse_tree_for_formulas(const struct ASTNode *node, void *userdata)
       formula.expression = expression_copy;
 
       /* Finally, validate the formula before adding it. */
-      if (validate_expression(state, formula.expression, formula.parameters,
-          formula.parameters_n))
+      if (validate_expression(state, formula.expression,
+          formula.parameters.data, ARRAY_LENGTH(formula.parameters)))
       {
         /* TODO: Error, invalid formula. */
         printf("stummy hurt\n");
       }
     }
 
-    ARRAY_APPEND(formula, state->formulas, state->formulas_n);
+    ARRAY_APPEND(state->formulas, struct Formula, formula);
   }
 }
 
@@ -886,10 +892,12 @@ validate_expression(const struct ValidationState *state,
 
   const struct Formula *formula = NULL;
   /* Locate the formula being referenced. */
-  for (size_t i = 0; i < state->formulas_n; ++i)
+  for (size_t i = 0; i < ARRAY_LENGTH(state->formulas); ++i)
   {
-    if (strcmp(state->formulas[i].global_name, formula_name) == 0)
-      formula = &state->formulas[i];
+    const struct Formula *f =
+      ARRAY_GET(state->formulas, struct Formula, i);
+    if (strcmp(f->global_name, formula_name) == 0)
+      formula = f;
   }
 
   if (formula == NULL)
@@ -900,33 +908,36 @@ validate_expression(const struct ValidationState *state,
 
   /* Now that we have located the formula, loop through the arguments provided
      and recursively verify them. */
-  struct ASTNode *args_provided = NULL;
-  size_t args_provided_n = 0;
-  ARRAY_INIT(args_provided, args_provided_n);
-  for (size_t i = 0; i < expression->children_n; ++i)
+  Array args_provided;
+  ARRAY_INIT(args_provided, struct ASTNode);
+  for (size_t i = 0; i < ARRAY_LENGTH(expression->children); ++i)
   {
-    if (get_sol_node_data_c(&expression->children[i])->type
+    const struct ASTNode *child =
+      ARRAY_GET(expression->children, struct ASTNode, i);
+    if (get_sol_node_data_c(child)->type
         == NodeTypeFormulaExpression)
-      ARRAY_APPEND(expression->children[i], args_provided, args_provided_n);
+      ARRAY_APPEND(args_provided, struct ASTNode, *child);
   }
 
   /* Do we have the correct number of arguments? */
-  if (args_provided_n != formula->parameters_n)
+  if (ARRAY_LENGTH(args_provided) != ARRAY_LENGTH(formula->parameters))
   {
     /* TODO: Error, incorrect number of arguments. */
     return 1;
   }
 
   int err;
-  for (size_t i = 0; i < args_provided_n; ++i)
+  for (size_t i = 0; i < ARRAY_LENGTH(args_provided); ++i)
   {
     /* TODO: Do the types agree? */
-    err = validate_expression(state, &args_provided[i], parameters,
+    struct ASTNode *argument =
+      ARRAY_GET(args_provided, struct ASTNode, i);
+    err = validate_expression(state, argument, parameters,
       parameters_n);
     PROPAGATE_ERROR(err);
   }
 
-  ARRAY_FREE(args_provided, args_provided_n);
+  ARRAY_FREE(args_provided);
 
   return 0;
 }
@@ -1005,7 +1016,7 @@ traverse_tree_for_theorems(const struct ASTNode *node, void *userdata)
   {
     struct Theorem theorem = {};
 
-    ARRAY_APPEND(theorem, state->theorems, state->theorems_n);
+    ARRAY_APPEND(state->theorems, struct Theorem, theorem);
   }
 }
 
@@ -1017,6 +1028,10 @@ validate_program(struct ValidationState *state)
      valid, compound formulas are valid if they are syntactically valid,
      then axioms are valid if they consist of well-formed formulas,
      and theorems are valid if they have a valid proof from the axioms). */
+  ARRAY_INIT(state->formulas, struct Formula);
+  ARRAY_INIT(state->axioms, struct Axiom);
+  ARRAY_INIT(state->theorems, struct Theorem);
+
   traverse_tree(&state->input->ast_root, &traverse_tree_for_formulas, state);
   traverse_tree(&state->input->ast_root, &traverse_tree_for_axioms, state);
   traverse_tree(&state->input->ast_root, &traverse_tree_for_theorems, state);
@@ -1044,13 +1059,12 @@ sol_verify(const char *file_path)
   struct ParserState parse_out = {};
   parse_out.input = &lex_out;
   parse_out.ast_current = &parse_out.ast_root;
-  ARRAY_INIT(parse_out.ast_root.children, parse_out.ast_root.children_n);
-  ARRAY_INIT(parse_out.errors, parse_out.errors_n);
 
   int err = parse_program(&parse_out);
   if (err)
   {
-    printf("Error %s\n", parse_out.errors[0].error_msg);
+    printf("error\n");
+    //printf("Error %s\n", parse_out.errors[0].error_msg);
   }
 
   //print_tree(&parse_out.ast_root, &print_sol_node);
@@ -1062,9 +1076,6 @@ sol_verify(const char *file_path)
   /* Validate the file. */
   struct ValidationState validation_out = {};
   validation_out.input = &parse_out;
-  ARRAY_INIT(validation_out.formulas, validation_out.formulas_n);
-  ARRAY_INIT(validation_out.axioms, validation_out.axioms_n);
-  ARRAY_INIT(validation_out.theorems, validation_out.theorems_n);
 
   validate_program(&validation_out);
 

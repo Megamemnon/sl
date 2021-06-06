@@ -2,6 +2,7 @@
 #define LEX_H
 
 #include <stdlib.h>
+#include "common.h"
 
 enum TokenType
 {
@@ -27,8 +28,7 @@ struct Token
 
 struct LexResult
 {
-  struct Token *tokens;
-  size_t tokens_n;
+  Array tokens;
 };
 
 void

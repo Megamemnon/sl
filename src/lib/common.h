@@ -14,41 +14,69 @@ do { \
 while(0)
 
 /* Array helpers */
-#define ARRAY_INIT(array, array_len) \
+#include <stdlib.h>
+
+struct DynamicArray
+{
+  void *data;
+
+  size_t element_size;
+  size_t length;
+  size_t reserved;
+};
+
+typedef struct DynamicArray Array;
+
+#define ARRAY_INIT(array, type) \
 do { \
-  array = malloc(sizeof(*array)); \
-  array_len = 0; \
+  array.data = malloc(sizeof(type)); \
+  array.element_size = sizeof(type); \
+  array.length = 0; \
+  array.reserved = 1; \
 } \
 while(0)
 
-#define ARRAY_INIT_WITH_SIZE(array, array_len, size) \
+#define ARRAY_INIT_WITH_RESERVED(array, type, to_reserve) \
 do { \
-  array = malloc(sizeof(*array) * size); \
-  array_len = size; \
+  array.data = malloc(sizeof(type) * to_reserve); \
+  array.element_size = sizeof(type); \
+  array.length = 0; \
+  array.reserved = to_reserve; \
 } \
 while(0)
 
-#define ARRAY_APPEND(item, array, array_len) \
+#define ARRAY_LENGTH(array) array.length
+
+#define ARRAY_GET(array, type, index) &(((type *)array.data)[index])
+
+#define ARRAY_APPEND(array, type, item) \
 do { \
-  array_len += 1; \
-  array = realloc(array, sizeof(*array) * array_len); \
-  array[array_len - 1] = item; \
+  if (array.reserved < array.length + 1) \
+  { \
+    array.reserved = array.reserved * 2; \
+    array.data = realloc(array.data, array.element_size * array.reserved); \
+  } \
+  ((type *)array.data)[array.length] = item; \
+  array.length += 1; \
 } \
 while(0)
 
-#define ARRAY_FREE(array, array_len) \
+#define ARRAY_FREE(array) \
 do { \
-  free(array); \
-  array = NULL; \
-  array_len = 0; \
+  free(array.data); \
+  array.element_size = 0; \
+  array.length = 0; \
+  array.reserved = 0; \
 } \
 while(0)
 
-#define ARRAY_COPY(dst_array, dst_len, src_array, src_len) \
+#define ARRAY_COPY(dst, src) \
 do { \
-  dst_len = src_len; \
-  dst_array = malloc(sizeof(*dst_array) * dst_len); \
-  memcpy(dst_array, src_array, sizeof(*dst_array) * dst_len); \
+  dst.length = src.length; \
+  dst.element_size = src.element_size; \
+  dst.reserved = src.reserved; \
+  dst.data = malloc(src.element_size * src.reserved); \
+  memcpy(dst.data, src.data, src.element_size * src.length); \
 } \
 while(0)
 

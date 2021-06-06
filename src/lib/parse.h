@@ -2,6 +2,7 @@
 #define PARSE_H
 
 #include "lex.h"
+#include "common.h"
 #include <stdlib.h>
 
 /* Generally parsers need to be written per language, so these are just
@@ -16,14 +17,16 @@ typedef void (* copy_node_callback_t)(struct ASTNode *, const struct ASTNode *);
 struct ASTNode
 {
   struct ASTNode *parent;
-  struct ASTNode *children;
-  size_t children_n;
+  Array children;
 
   void *data;
 
   free_node_callback_t free_callback;
   copy_node_callback_t copy_callback;
 };
+
+void
+init_tree(struct ASTNode *root);
 
 void
 free_tree(struct ASTNode *root);
@@ -58,9 +61,6 @@ struct ParserState
 
   struct ASTNode ast_root;
   struct ASTNode *ast_current;
-
-  struct ParserError *errors;
-  size_t errors_n;
 };
 
 struct Token *
