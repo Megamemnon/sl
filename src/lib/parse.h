@@ -73,6 +73,9 @@ void
 ascend(struct ParserState *state);
 
 int
+advance(struct ParserState *state);
+
+int
 consume_keyword(struct ParserState *state, const char *keyword);
 
 int

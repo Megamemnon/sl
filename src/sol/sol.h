@@ -21,14 +21,19 @@ enum SolASTNodeType
   NodeTypeInfer,
   NodeTypeStep,
 
-  NodeTypeIdentifierPath,
-  NodeTypeIdentifierPathSegment,
   NodeTypeJudgementExpression,
+  NodeTypeInferenceExpression,
   NodeTypeExpression,
+  NodeTypeExpressionConstant,
+  NodeTypeExpressionVariable,
+
   NodeTypeSubstitutionMap,
   NodeTypeSubstitution,
+  NodeTypeIdentifierPath,
+  NodeTypeIdentifierPathSegment,
   NodeTypeParameterList,
-  NodeTypeParameter
+  NodeTypeParameter,
+  NodeTypeArgumentList
 };
 
 /* Parser Methods */
@@ -82,10 +87,16 @@ int
 parse_step(struct ParserState *state);
 
 int
-parse_identifier_path(struct ParserState *state);
+parse_judgement_expression(struct ParserState *state);
 
 int
-parse_judgement_expression(struct ParserState *state);
+parse_inference_expression(struct ParserState *state);
+
+int
+parse_expression(struct ParserState *state);
+
+int
+parse_expression_variable(struct ParserState *state);
 
 int
 parse_substitution_map(struct ParserState *state);
@@ -94,85 +105,111 @@ int
 parse_substitution(struct ParserState *state);
 
 int
+parse_identifier_path(struct ParserState *state);
+
+int
 parse_parameter_list(struct ParserState *state);
 
 int
-parse_parameter(struct ParserState *state);
+parse_argument_list(struct ParserState *state);
 
 void
 print_sol_node(char *buf, size_t len, const struct ASTNode *node);
 
 /* Validation Methods */
 
-enum ParameterType
+struct ObjectNameSegment
 {
-  ParameterTypeFormula = 0,
-  ParameterTypeVar
+  char *name;
+};
+
+struct ObjectName
+{
+  Array segments;
+};
+
+struct Substitution
+{
+  char *dst;
+  char *src;
+};
+
+struct Symbol
+{
+  char *value;
+  int is_variable;
+  Array substitutions;
+};
+
+struct Expression
+{
+  Array symbols;
+};
+
+struct Judgement
+{
+  struct ObjectName name;
+  size_t parameters_n;
 };
 
 struct Parameter
 {
   char *name;
-  enum ParameterType type;
 };
 
-struct Formula
-{
-  char *global_name;
-
-  Array parameters;
-
-  struct ASTNode *expression; /* NULL if the formula is atomic. */
-};
-
-struct Hypothesis
-{
-  char *name;
-  struct ASTNode *expression;
-};
-
-struct Axiom
-{
-  char *global_name;
-
-  Array parameters;
-  Array hypotheses;
-
-  struct ASTNode *infer;
-};
-
+/* No need to distinguish axioms and theorems after theorems are verified. */
 struct Theorem
 {
-  char *global_name;
+  struct ObjectName name;
 
   Array parameters;
-  Array hypotheses;
-
-  struct ASTNode *infer;
+  Array assumptions;
+  struct Judgement infer;
 };
 
 struct ValidationState
 {
   const struct ParserState *input;
-
-  Array formulas;
-  Array axioms;
+  struct ObjectName current_scope;
+  Array judgements;
   Array theorems;
 };
 
-void
-traverse_tree_for_formulas(const struct ASTNode *node, void *userdata);
+int
+names_equal(const struct ObjectName *a, const struct ObjectName *b);
 
 int
-validate_expression(const struct ValidationState *state,
-  const struct ASTNode *expression,
-  const struct Parameter *parameters, size_t parameters_n);
+name_used(struct ValidationState *state,
+  const struct ObjectName *name);
 
-void
-traverse_tree_for_axioms(const struct ASTNode *node, void *userdata);
+char *
+name_to_string(const struct ObjectName *name);
 
-void
-traverse_tree_for_theorems(const struct ASTNode *node, void *userdata);
+int
+validate_import(struct ValidationState *state,
+  const struct ASTNode *import);
+
+int
+validate_judgement(struct ValidationState *state,
+  const struct ASTNode *judgement);
+
+int
+validate_assume(struct ValidationState *state,
+  const struct ASTNode *assume,
+  const struct Theorem *env);
+
+int
+validate_infer(struct ValidationState *state,
+  const struct ASTNode *infer,
+  const struct Theorem *env);
+
+int
+validate_axiom(struct ValidationState *state,
+  const struct ASTNode *axiom);
+
+int
+validate_namespace(struct ValidationState *state,
+  const struct ASTNode *namespace);
 
 int
 validate_program(struct ValidationState *state);

@@ -47,7 +47,7 @@ while(0)
 
 #define ARRAY_LENGTH(array) array.length
 
-#define ARRAY_GET(array, type, index) &(((type *)array.data)[index])
+#define ARRAY_GET(array, type, index) (&(((type *)array.data)[index]))
 
 #define ARRAY_APPEND(array, type, item) \
 do { \
@@ -58,6 +58,12 @@ do { \
   } \
   ((type *)array.data)[array.length] = item; \
   array.length += 1; \
+} \
+while(0)
+
+#define ARRAY_POP(array) \
+do { \
+  array.length -= 1; \
 } \
 while(0)
 

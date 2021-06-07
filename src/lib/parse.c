@@ -124,6 +124,13 @@ ascend(struct ParserState *state)
   state->ast_current = state->ast_current->parent;
 }
 
+int
+advance(struct ParserState *state)
+{
+  ++state->token_index;
+  return 0;
+}
+
 /* If the current token is the keyword, "consume" it and advance the parser. */
 int
 consume_keyword(struct ParserState *state, const char *keyword)

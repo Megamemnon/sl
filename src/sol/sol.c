@@ -25,7 +25,8 @@ const char *sol_symbols[] = {
   "(", ")",
   "[", "]",
   "{", "}",
-  ".", ",", ";", ":",
+  ".", ",", ";",
+  "\\", "$", "=",
   "/*", "*/",
   "//",
   NULL
@@ -380,7 +381,7 @@ parse_assume(struct ParserState *state)
   /* There should be an expression for a judgement. */
   add_child_and_descend(state);
   init_sol_node(state->ast_current);
-  int err = parse_expression(state);
+  int err = parse_judgement_expression(state);
   ascend(state);
   PROPAGATE_ERROR(err);
 
@@ -401,7 +402,7 @@ parse_infer(struct ParserState *state)
   /* After the keyword, there should be a judgement expression. */
   add_child_and_descend(state);
   init_sol_node(state->ast_current);
-  int err = parse_expression(state);
+  int err = parse_judgement_expression(state);
   PROPAGATE_ERROR(err);
   ascend(state);
 
@@ -417,19 +418,12 @@ parse_infer(struct ParserState *state)
 int
 parse_step(struct ParserState *state)
 {
-  const char *step_name;
-  if (!consume_identifier(state, &step_name))
-  {
-    add_error(state, "No step name provided.");
-    return 1;
-  }
   get_sol_node_data(state->ast_current)->type = NodeTypeStep;
-  get_sol_node_data(state->ast_current)->name = strdup(step_name);
 
-  /* After the name, there should be an expression giving the inferrence. */
+  /* After the name, there should be an expression giving the inference. */
   add_child_and_descend(state);
   init_sol_node(state->ast_current);
-  int err = parse_expression(state);
+  int err = parse_inference_expression(state);
   ascend(state);
   PROPAGATE_ERROR(err);
 
@@ -438,44 +432,6 @@ parse_step(struct ParserState *state)
   {
     add_error(state, "Expected ';' after proof step.");
     return 1;
-  }
-
-  return 0;
-}
-
-int
-parse_identifier_path(struct ParserState *state)
-{
-  /* We should always start with an identifier, and then alternate between dots
-     and identifiers. */
-  get_sol_node_data(state->ast_current)->type = NodeTypeIdentifierPath;
-  const char *seg;
-  if (!consume_identifier(state, &seg))
-  {
-    add_error(state, "An identifier path needs at least one segment.");
-    return 1;
-  }
-
-  /* TODO: should this be its own function? */
-  add_child_and_descend(state);
-  init_sol_node(state->ast_current);
-  get_sol_node_data(state->ast_current)->type = NodeTypeIdentifierPathSegment;
-  get_sol_node_data(state->ast_current)->name = strdup(seg);
-  ascend(state);
-
-  while (consume_symbol(state, "."))
-  {
-    if (!consume_identifier(state, &seg))
-    {
-      add_error(state,
-        "All segments in an identifier path must be identifiers");
-      return 1;
-    }
-    add_child_and_descend(state);
-    init_sol_node(state->ast_current);
-    get_sol_node_data(state->ast_current)->type = NodeTypeIdentifierPathSegment;
-    get_sol_node_data(state->ast_current)->name = strdup(seg);
-    ascend(state);
   }
 
   return 0;
@@ -501,26 +457,42 @@ parse_judgement_expression(struct ParserState *state)
     return 1;
   }
 
-  /* Next, loop through arguments. */
-  int first_arg = 1;
-  while (!consume_symbol(state, ")"))
+  /* Next, parse arguments. */
+  add_child_and_descend(state);
+  init_sol_node(state->ast_current);
+  int err = parse_argument_list(state);
+  ascend(state);
+  PROPAGATE_ERROR(err);
+
+  return 0;
+}
+
+int
+parse_inference_expression(struct ParserState *state)
+{
+  /* First, consume the name of the root-level term. */
+  const char *inference_name;
+  if (!consume_identifier(state, &inference_name))
   {
-    /* Subsequent arguments have commas. */
-    if (!first_arg && !consume_symbol(state, ","))
-    {
-      add_error(state, "Arguments must be comma-separated.");
-      return 1;
-    }
-
-    add_child_and_descend(state);
-    init_sol_node(state->ast_current);
-    int err = parse_expression(state);
-    ascend(state);
-    PROPAGATE_ERROR(err);
-
-    if (first_arg)
-      first_arg = 0;
+    add_error(state, "No inference provided in expression.");
+    return 1;
   }
+  get_sol_node_data(state->ast_current)->type = NodeTypeInferenceExpression;
+  get_sol_node_data(state->ast_current)->name = strdup(inference_name);
+
+  /* Expect an opening '(' for the argument list. */
+  if (!consume_symbol(state, "("))
+  {
+    add_error(state, "No argument list provided in expression.");
+    return 1;
+  }
+
+  /* Next, parse arguments. */
+  add_child_and_descend(state);
+  init_sol_node(state->ast_current);
+  int err = parse_argument_list(state);
+  ascend(state);
+  PROPAGATE_ERROR(err);
 
   return 0;
 }
@@ -528,42 +500,63 @@ parse_judgement_expression(struct ParserState *state)
 int
 parse_expression(struct ParserState *state)
 {
-  /* First, consume the name of the root-level term. */
-  const char *identifier_name;
-  if (!consume_identifier(state, &identifier_name))
+  /* Expect a backslash to start the expression. */
+  if (!consume_symbol(state, "\\"))
   {
-    add_error(state, "No identifier provided in expression.");
+    add_error(state, "Expressions must start with '\\'.");
     return 1;
   }
   get_sol_node_data(state->ast_current)->type = NodeTypeExpression;
-  get_sol_node_data(state->ast_current)->name = strdup(identifier_name);
 
-  /* Expect an opening '(' for the argument list, otherwise we have
-     a variable. */
-  if (!consume_symbol(state, "("))
+  /* Loop through the expression until we find a terminating backslash. */
+  while (!consume_symbol(state, "\\"))
   {
-    return 0;
+    /* If there is a '$' symbol, parse the variable expression. */
+    if (consume_symbol(state, "$"))
+    {
+      add_child_and_descend(state);
+      init_sol_node(state->ast_current);
+      int err = parse_expression_variable(state);
+      ascend(state);
+      PROPAGATE_ERROR(err);
+    }
+    else
+    {
+      /* Otherwise, just add the symbol as a "constant". */
+      add_child_and_descend(state);
+      init_sol_node(state->ast_current);
+      get_sol_node_data(state->ast_current)->type = NodeTypeExpressionConstant;
+      get_sol_node_data(state->ast_current)->name =
+        strdup(get_current_token(state)->value);
+      ascend(state);
+      advance(state);
+    }
   }
 
-  /* Next, loop through arguments. */
-  int first_arg = 1;
-  while (!consume_symbol(state, ")"))
-  {
-    /* Subsequent arguments have commas. */
-    if (!first_arg && !consume_symbol(state, ","))
-    {
-      add_error(state, "Arguments must be comma-separated.");
-      return 1;
-    }
+  return 0;
+}
 
+int
+parse_expression_variable(struct ParserState *state)
+{
+  /* First, expect an identifier for the name of the variable. */
+  const char *variable_name;
+  if (!consume_identifier(state, &variable_name))
+  {
+    add_error(state, "Variable name expected.");
+    return 1;
+  }
+  get_sol_node_data(state->ast_current)->type = NodeTypeExpressionVariable;
+  get_sol_node_data(state->ast_current)->name = strdup(variable_name);
+
+  /* There might be a substitution map. */
+  if (consume_symbol(state, "["))
+  {
     add_child_and_descend(state);
     init_sol_node(state->ast_current);
-    int err = parse_expression(state);
+    int err = parse_substitution_map(state);
     ascend(state);
     PROPAGATE_ERROR(err);
-
-    if (first_arg)
-      first_arg = 0;
   }
 
   return 0;
@@ -630,6 +623,44 @@ parse_substitution(struct ParserState *state)
 }
 
 int
+parse_identifier_path(struct ParserState *state)
+{
+  /* We should always start with an identifier, and then alternate between dots
+     and identifiers. */
+  get_sol_node_data(state->ast_current)->type = NodeTypeIdentifierPath;
+  const char *seg;
+  if (!consume_identifier(state, &seg))
+  {
+    add_error(state, "An identifier path needs at least one segment.");
+    return 1;
+  }
+
+  /* TODO: should this be its own function? */
+  add_child_and_descend(state);
+  init_sol_node(state->ast_current);
+  get_sol_node_data(state->ast_current)->type = NodeTypeIdentifierPathSegment;
+  get_sol_node_data(state->ast_current)->name = strdup(seg);
+  ascend(state);
+
+  while (consume_symbol(state, "."))
+  {
+    if (!consume_identifier(state, &seg))
+    {
+      add_error(state,
+        "All segments in an identifier path must be identifiers");
+      return 1;
+    }
+    add_child_and_descend(state);
+    init_sol_node(state->ast_current);
+    get_sol_node_data(state->ast_current)->type = NodeTypeIdentifierPathSegment;
+    get_sol_node_data(state->ast_current)->name = strdup(seg);
+    ascend(state);
+  }
+
+  return 0;
+}
+
+int
 parse_parameter_list(struct ParserState *state)
 {
   get_sol_node_data(state->ast_current)->type = NodeTypeParameterList;
@@ -647,9 +678,16 @@ parse_parameter_list(struct ParserState *state)
 
     add_child_and_descend(state);
     init_sol_node(state->ast_current);
-    int err = parse_parameter(state);
+    get_sol_node_data(state->ast_current)->type = NodeTypeParameter;
+    /* Parameters always have the form `[PARAM_NAME]`. */
+    const char *parameter_name;
+    if (!consume_identifier(state, &parameter_name))
+    {
+      add_error(state, "No parameter name provided.");
+      return 1;
+    }
+    get_sol_node_data(state->ast_current)->name = strdup(parameter_name);
     ascend(state);
-    PROPAGATE_ERROR(err);
 
     if (first_param)
       first_param = 0;
@@ -660,19 +698,32 @@ parse_parameter_list(struct ParserState *state)
 }
 
 int
-parse_parameter(struct ParserState *state)
+parse_argument_list(struct ParserState *state)
 {
-  get_sol_node_data(state->ast_current)->type = NodeTypeParameter;
+  get_sol_node_data(state->ast_current)->type = NodeTypeArgumentList;
 
-  /* Parameters always have the form `[PARAM_NAME]`. */
-  const char *parameter_name;
-  if (!consume_identifier(state, &parameter_name))
+  /* Iterate through the list until we get a closing ')' */
+  int first_arg = 1;
+  while (!consume_symbol(state, ")"))
   {
-    add_error(state, "No parameter name provided.");
-    return 1;
-  }
-  get_sol_node_data(state->ast_current)->name = strdup(parameter_name);
+    /* Subsequent parameters have commas. */
+    if (!first_arg && !consume_symbol(state, ","))
+    {
+      add_error(state, "Arguments must be comma-separated.");
+      return 1;
+    }
 
+    add_child_and_descend(state);
+    init_sol_node(state->ast_current);
+    int err = parse_expression(state);
+    ascend(state);
+    PROPAGATE_ERROR(err);
+
+    if (first_arg)
+      first_arg = 0;
+  }
+
+  /* Next, check for a definition. */
   return 0;
 }
 
@@ -710,14 +761,20 @@ print_sol_node(char *buf, size_t len, const struct ASTNode *node)
     case NodeTypeStep:
       snprintf(buf, len, "Step");
       break;
-    case NodeTypeIdentifierPath:
-      snprintf(buf, len, "Path");
+    case NodeTypeJudgementExpression:
+      snprintf(buf, len, "Judgement Expression<Name: \"%s\">", name);
       break;
-    case NodeTypeIdentifierPathSegment:
-      snprintf(buf, len, "Path Segment<Identifier: \"%s\">", name);
+    case NodeTypeInferenceExpression:
+      snprintf(buf, len, "Inference Expression<Name: \"%s\">", name);
       break;
     case NodeTypeExpression:
-      snprintf(buf, len, "Expression<Name: \"%s\">", name);
+      snprintf(buf, len, "Expression");
+      break;
+    case NodeTypeExpressionConstant:
+      snprintf(buf, len, "Constant<Name: \"%s\">", name);
+      break;
+    case NodeTypeExpressionVariable:
+      snprintf(buf, len, "Variable<Name: \"%s\">", name);
       break;
     case NodeTypeSubstitutionMap:
       snprintf(buf, len, "Substitution Map");
@@ -725,11 +782,20 @@ print_sol_node(char *buf, size_t len, const struct ASTNode *node)
     case NodeTypeSubstitution:
       snprintf(buf, len, "Substitution<Destination=\"%s\">", name);
       break;
+    case NodeTypeIdentifierPath:
+      snprintf(buf, len, "Path");
+      break;
+    case NodeTypeIdentifierPathSegment:
+      snprintf(buf, len, "Path Segment<Identifier: \"%s\">", name);
+      break;
     case NodeTypeParameterList:
       snprintf(buf, len, "Parameter List");
       break;
     case NodeTypeParameter:
       snprintf(buf, len, "Parameter<Name: \"%s\">", name);
+      break;
+    case NodeTypeArgumentList:
+      snprintf(buf, len, "Argument List");
       break;
     default:
       snprintf(buf, len, "Unknown");
@@ -737,224 +803,297 @@ print_sol_node(char *buf, size_t len, const struct ASTNode *node)
   }
 }
 
-#if 0
-void
-traverse_tree_for_formulas(const struct ASTNode *node, void *userdata)
+int
+names_equal(const struct ObjectName *a, const struct ObjectName *b)
 {
-  struct ValidationState *state = (struct ValidationState *)userdata;
-  const struct SolASTNodeData *data = get_sol_node_data_c(node);
-  if (data->type == NodeTypeFormula)
+  if (ARRAY_LENGTH(a->segments) != ARRAY_LENGTH(b->segments))
+    return 0;
+  for (size_t i = 0; i < ARRAY_LENGTH(a->segments); ++i)
   {
-    struct Formula formula = {};
-
-    formula.global_name = strdup(data->name);
-
-    /* First, find the relevant children. */
-    const struct ASTNode *params = NULL;
-    const struct ASTNode *expression = NULL;
-
-    for (size_t i = 0; i < ARRAY_LENGTH(node->children); ++i)
-    {
-      const struct ASTNode *child =
-        ARRAY_GET(node->children, struct ASTNode, i);
-      const struct SolASTNodeData *child_data =
-        get_sol_node_data_c(child);
-
-      if (child_data->type == NodeTypeParameterList)
-        params = child;
-      if (child_data->type == NodeTypeFormulaExpression)
-        expression = child;
-    }
-
-    /* TODO: check to make sure these nodes exist! (These checks should have
-       been made during parsing, but should still be made in the case that
-       we are provided with an AST constructed differently). */
-    /* Enumerate all the parameters. */
-    for (size_t i = 0; i < ARRAY_LENGTH(params->children); ++i)
-    {
-      const struct ASTNode *child =
-        ARRAY_GET(params->children, struct ASTNode, i);
-      struct Parameter param = {};
-      param.name = strdup(get_sol_node_data_c(child)->name);
-      const char *type = get_sol_node_data_c(child)->data_type;
-      if (strcmp(type, "Formula") == 0)
-      {
-        param.type = ParameterTypeFormula;
-      }
-      else if (strcmp(type, "Var") == 0)
-      {
-        param.type = ParameterTypeVar;
-      }
-      else
-      {
-        /* TODO: error, unknown type. */
-      }
-      ARRAY_APPEND(formula.parameters, struct Parameter, param);
-    }
-
-    /* Copy over the expression, if the formula is not atomic. */
-    if (expression != NULL)
-    {
-      struct ASTNode *expression_copy = malloc(sizeof(struct ASTNode));
-      memset(expression_copy, 0, sizeof(struct ASTNode));
-      copy_tree(expression_copy, expression);
-      formula.expression = expression_copy;
-
-      /* Finally, validate the formula before adding it. */
-      if (validate_expression(state, formula.expression,
-          formula.parameters.data, ARRAY_LENGTH(formula.parameters)))
-      {
-        /* TODO: Error, invalid formula. */
-        printf("stummy hurt\n");
-      }
-    }
-
-    ARRAY_APPEND(state->formulas, struct Formula, formula);
+    if (strcmp(ARRAY_GET(a->segments, struct ObjectNameSegment, i)->name,
+        ARRAY_GET(b->segments, struct ObjectNameSegment, i)->name) != 0)
+      return 0;
   }
+  return 1;
 }
 
 int
-validate_expression(const struct ValidationState *state,
-  const struct ASTNode *expression,
-  const struct Parameter *parameters, size_t parameters_n)
+name_used(struct ValidationState *state,
+  const struct ObjectName *name)
 {
-  const char *formula_name = get_sol_node_data_c(expression)->name;
-  /* The argument may be referencing a parameter, so in this case, defer
-     validation of this part until substitution. */
-  for (size_t i = 0; i < parameters_n; ++i)
+  /* Loop through the existing objects and compare names. */
+  for (size_t i = 0; i < ARRAY_LENGTH(state->judgements); ++i)
   {
-    if (strcmp(parameters[i].name, formula_name) == 0)
-      return 0;
+    if (names_equal(name,
+        &(ARRAY_GET(state->judgements, struct Judgement, i)->name)))
+      return 1;
+  }
+  for (size_t i = 0; i < ARRAY_LENGTH(state->theorems); ++i)
+  {
+    if (names_equal(name,
+        &(ARRAY_GET(state->theorems, struct Theorem, i)->name)))
+      return 1;
+  }
+  return 0;
+}
+
+char *
+name_to_string(const struct ObjectName *name)
+{
+  size_t total_length = 0;
+  for (size_t i = 0; i < ARRAY_LENGTH(name->segments); ++i)
+  {
+    const struct ObjectNameSegment *segment =
+      ARRAY_GET(name->segments, struct ObjectNameSegment, i);
+    total_length += strlen(segment->name);
   }
 
-  const struct Formula *formula = NULL;
-  /* Locate the formula being referenced. */
-  for (size_t i = 0; i < ARRAY_LENGTH(state->formulas); ++i)
+  /* Add in room for the delimiting dots. */
+  total_length += ARRAY_LENGTH(name->segments) - 1;
+
+  char *buf = malloc(sizeof(char) * (total_length + 1));
+
+  char *current = buf;
+  int first_segment = 1;
+  for (size_t i = 0; i < ARRAY_LENGTH(name->segments); ++i)
   {
-    const struct Formula *f =
-      ARRAY_GET(state->formulas, struct Formula, i);
-    if (strcmp(f->global_name, formula_name) == 0)
-      formula = f;
+    if (!first_segment)
+    {
+      /* Add the preceding dot. */
+      *current = '.';
+      ++current;
+    }
+
+    const struct ObjectNameSegment *segment =
+      ARRAY_GET(name->segments, struct ObjectNameSegment, i);
+    strncpy(current, segment->name, strlen(segment->name));
+    current += strlen(segment->name);
+
+    if (first_segment)
+      first_segment = 0;
   }
 
-  if (formula == NULL)
+  buf[total_length] = '\0';
+
+  return buf;
+}
+
+int
+validate_judgement(struct ValidationState *state,
+  const struct ASTNode *judgement)
+{
+  const struct SolASTNodeData *data = get_sol_node_data_c(judgement);
+
+  /* Check that the name is okay. */
+  struct Judgement judgement_obj = {};
+  ARRAY_INIT(judgement_obj.name.segments, struct ObjectNameSegment);
+
+  struct ObjectNameSegment segment;
+
+  for (size_t i = 0; i < ARRAY_LENGTH(state->current_scope.segments); ++i)
   {
-    /* TODO: Error, formula referenced does not exist. */
+    segment.name = strdup(ARRAY_GET(state->current_scope.segments,
+      struct ObjectNameSegment, i)->name);
+    ARRAY_APPEND(judgement_obj.name.segments,
+      struct ObjectNameSegment, segment);
+  }
+
+  segment.name = strdup(data->name);
+  ARRAY_APPEND(judgement_obj.name.segments, struct ObjectNameSegment, segment);
+
+  if (name_used(state, &judgement_obj.name))
+  {
+    /* TODO: error. */
     return 1;
   }
 
-  /* Now that we have located the formula, loop through the arguments provided
-     and recursively verify them. */
-  Array args_provided;
-  ARRAY_INIT(args_provided, struct ASTNode);
-  for (size_t i = 0; i < ARRAY_LENGTH(expression->children); ++i)
+  /* Find the list of parameters. */
+  const struct ASTNode *parameter_list =
+    ARRAY_GET(judgement->children, struct ASTNode, 0);
+  const struct SolASTNodeData *parameter_list_data =
+    get_sol_node_data_c(parameter_list);
+  if (parameter_list_data->type != NodeTypeParameterList)
   {
-    const struct ASTNode *child =
-      ARRAY_GET(expression->children, struct ASTNode, i);
-    if (get_sol_node_data_c(child)->type
-        == NodeTypeFormulaExpression)
-      ARRAY_APPEND(args_provided, struct ASTNode, *child);
-  }
-
-  /* Do we have the correct number of arguments? */
-  if (ARRAY_LENGTH(args_provided) != ARRAY_LENGTH(formula->parameters))
-  {
-    /* TODO: Error, incorrect number of arguments. */
+    /* TODO: error. */
     return 1;
   }
 
-  int err;
-  for (size_t i = 0; i < ARRAY_LENGTH(args_provided); ++i)
-  {
-    /* TODO: Do the types agree? */
-    struct ASTNode *argument =
-      ARRAY_GET(args_provided, struct ASTNode, i);
-    err = validate_expression(state, argument, parameters,
-      parameters_n);
-    PROPAGATE_ERROR(err);
-  }
+  judgement_obj.parameters_n = ARRAY_LENGTH(parameter_list->children);
 
-  ARRAY_FREE(args_provided);
+  ARRAY_APPEND(state->judgements, struct Judgement, judgement_obj);
 
   return 0;
 }
 
-void
-traverse_tree_for_axioms(const struct ASTNode *node, void *userdata)
+int
+validate_assume(struct ValidationState *state,
+  const struct ASTNode *assume,
+  const struct Theorem *env)
 {
-  struct ValidationState *state = (struct ValidationState *)userdata;
-  const struct SolASTNodeData *data = get_sol_node_data_c(node);
-  if (data->type == NodeTypeAxiom)
+  const struct SolASTNodeData *data = get_sol_node_data_c(assume);
+
+  /* This should have a single child that is a judgement expression. */
+  const struct ASTNode *judgement_expression =
+    ARRAY_GET(assume->children, struct ASTNode, 0);
+  const struct SolASTNodeData *judgement_expression_data =
+    get_sol_node_data_c(judgement_expression);
+  if (judgement_expression_data->type != NodeTypeJudgementExpression)
   {
-#if 0
-    struct Axiom axiom = {};
-    ARRAY_INIT(axiom.parameters, axiom.parameters_n);
-    ARRAY_INIT(axiom.hypotheses, axiom.hypotheses_n);
-
-    /* First, find the relevant children. */
-    const struct ASTNode *params = NULL;
-    const struct ASTNode *expression = NULL;
-
-    for (size_t i = 0; i < node->children_n; ++i)
-    {
-      const struct SolASTNodeData *child_data =
-        get_sol_node_data_c(&node->children[i]);
-
-      if (child_data->type == NodeTypeParameterList)
-        params = &node->children[i];
-      if (child_data->type == NodeTypeFormulaExpression)
-        expression = &node->children[i];
-    }
-
-    /* TODO: check to make sure these exist! (These checks should have
-       been made during parsing, but should still be made in the case that
-       we are provided with an AST constructed differently). */
-    /* Enumerate all the parameters. */
-    for (size_t i = 0; i < params->children_n; ++i)
-    {
-      struct Parameter param = {};
-      param.name = strdup(get_sol_node_data_c(&params->children[i])->name);
-      const char *type = get_sol_node_data_c(&params->children[i])->data_type;
-      if (strcmp(type, "Formula") == 0)
-      {
-        param.type = ParameterTypeFormula;
-      }
-      else if (strcmp(type, "Var") == 0)
-      {
-        param.type = ParameterTypeVar;
-      }
-      else
-      {
-        /* TODO: error, unknown type. */
-      }
-      ARRAY_APPEND(param, formula.parameters, formula.parameters_n);
-    }
-
-    /* Copy over the expression, if the formula is not atomic. */
-    if (expression != NULL)
-    {
-      struct ASTNode *expression_copy = malloc(sizeof(struct ASTNode));
-      memset(expression_copy, 0, sizeof(struct ASTNode));
-      copy_tree(expression_copy, expression);
-      formula.expression = expression_copy;
-    }
-
-    ARRAY_APPEND(axiom, state->axioms, state->axioms_n);
-#endif
+    /* TODO: error. */
+    return 1;
   }
+
+  /* Lookup the judgement expression. */
+
+  return 0;
 }
 
-void
-traverse_tree_for_theorems(const struct ASTNode *node, void *userdata)
+int
+validate_infer(struct ValidationState *state,
+  const struct ASTNode *infer,
+  const struct Theorem *env)
 {
-  struct ValidationState *state = (struct ValidationState *)userdata;
-  const struct SolASTNodeData *data = get_sol_node_data_c(node);
-  if (data->type == NodeTypeTheorem)
-  {
-    struct Theorem theorem = {};
+  return 0;
+}
 
-    ARRAY_APPEND(state->theorems, struct Theorem, theorem);
+int
+validate_axiom(struct ValidationState *state,
+  const struct ASTNode *axiom)
+{
+  const struct SolASTNodeData *data = get_sol_node_data_c(axiom);
+
+  /* Check that the name is okay. */
+  struct Theorem axiom_obj = {};
+  ARRAY_INIT(axiom_obj.name.segments, struct ObjectNameSegment);
+
+  struct ObjectNameSegment segment;
+
+  for (size_t i = 0; i < ARRAY_LENGTH(state->current_scope.segments); ++i)
+  {
+    segment.name = strdup(ARRAY_GET(state->current_scope.segments,
+      struct ObjectNameSegment, i)->name);
+    ARRAY_APPEND(axiom_obj.name.segments,
+      struct ObjectNameSegment, segment);
   }
+
+  segment.name = strdup(data->name);
+  ARRAY_APPEND(axiom_obj.name.segments, struct ObjectNameSegment, segment);
+
+  if (name_used(state, &axiom_obj.name))
+  {
+    /* TODO: error. */
+    return 1;
+  }
+
+  /* Next, enumerate the parameters. */
+  ARRAY_INIT(axiom_obj.parameters, struct Parameter);
+  const struct ASTNode *parameter_list =
+    ARRAY_GET(axiom->children, struct ASTNode, 0);
+  const struct SolASTNodeData *parameter_list_data =
+    get_sol_node_data_c(parameter_list);
+  if (parameter_list_data->type != NodeTypeParameterList)
+  {
+    /* TODO: error. */
+    return 1;
+  }
+
+  for (size_t i = 0; i < ARRAY_LENGTH(parameter_list->children); ++i)
+  {
+    const struct ASTNode *parameter =
+      ARRAY_GET(parameter_list->children, struct ASTNode, i);
+    const struct SolASTNodeData *parameter_data =
+      get_sol_node_data_c(parameter);
+    if (parameter_data->type != NodeTypeParameter)
+    {
+      /* TODO: error. */
+      return 1;
+    }
+    struct Parameter parameter_obj;
+    parameter_obj.name = strdup(parameter_data->name);
+    ARRAY_APPEND(axiom_obj.parameters, struct Parameter,
+      parameter_obj);
+  }
+
+  /* Next, go through assumptions and inferences. */
+  int err = 0;
+  for (size_t i = 0; i < ARRAY_LENGTH(axiom->children); ++i)
+  {
+    const struct ASTNode *child =
+      ARRAY_GET(axiom->children, struct ASTNode, i);
+    const struct SolASTNodeData *child_data = get_sol_node_data_c(child);
+    switch (child_data->type)
+    {
+      case NodeTypeAssume:
+        err = validate_assume(state, child, &axiom_obj);
+        PROPAGATE_ERROR(err);
+        break;
+      case NodeTypeInfer:
+        err = validate_infer(state, child, &axiom_obj);
+        PROPAGATE_ERROR(err);
+        break;
+      default:
+        break;
+    }
+  }
+
+  ARRAY_APPEND(state->theorems, struct Theorem, axiom_obj);
+
+  return 0;
+}
+
+int
+validate_namespace(struct ValidationState *state,
+  const struct ASTNode *namespace)
+{
+  int err = 0;
+
+  const struct SolASTNodeData *data = get_sol_node_data_c(namespace);
+
+  struct ObjectNameSegment segment = {};
+  if (data->name != NULL)
+  {
+    segment.name = strdup(data->name);
+    ARRAY_APPEND(state->current_scope.segments, struct ObjectNameSegment,
+      segment);
+  }
+
+  /* Loop through the children of the namespace, validating each object. */
+  for (size_t i = 0; i < ARRAY_LENGTH(namespace->children); ++i)
+  {
+    const struct ASTNode *child =
+      ARRAY_GET(namespace->children, struct ASTNode, i);
+    const struct SolASTNodeData *child_data = get_sol_node_data_c(child);
+    switch (child_data->type)
+    {
+      case NodeTypeNamespace:
+        err = validate_namespace(state, child);
+        PROPAGATE_ERROR(err);
+        break;
+      case NodeTypeImport:
+        break;
+      case NodeTypeJudgement:
+        err = validate_judgement(state, child);
+        PROPAGATE_ERROR(err);
+        break;
+      case NodeTypeAxiom:
+        err = validate_axiom(state, child);
+        PROPAGATE_ERROR(err);
+        break;
+      case NodeTypeTheorem:
+        break;
+      default:
+        return 1;
+        break;
+    }
+  }
+
+  if (data->name != NULL)
+  {
+    free(segment.name);
+    ARRAY_POP(state->current_scope.segments);
+  }
+
+  return 0;
 }
 
 int
@@ -965,17 +1104,41 @@ validate_program(struct ValidationState *state)
      valid, compound formulas are valid if they are syntactically valid,
      then axioms are valid if they consist of well-formed formulas,
      and theorems are valid if they have a valid proof from the axioms). */
-  ARRAY_INIT(state->formulas, struct Formula);
-  ARRAY_INIT(state->axioms, struct Axiom);
+  ARRAY_INIT(state->judgements, struct Judgement);
   ARRAY_INIT(state->theorems, struct Theorem);
 
-  traverse_tree(&state->input->ast_root, &traverse_tree_for_formulas, state);
-  traverse_tree(&state->input->ast_root, &traverse_tree_for_axioms, state);
-  traverse_tree(&state->input->ast_root, &traverse_tree_for_theorems, state);
+  ARRAY_INIT(state->current_scope.segments, struct ObjectNameSegment);
 
-  return 0;
+  int err = validate_namespace(state, &state->input->ast_root);
+
+  /* TODO: remove temporary debug prints. */
+  printf("Judgements:\n");
+  for (size_t i = 0; i < ARRAY_LENGTH(state->judgements); ++i)
+  {
+    const struct Judgement *judgement =
+      ARRAY_GET(state->judgements, struct Judgement, i);
+    char *name = name_to_string(&judgement->name);
+    printf("Judgement<Name: \"%s\", %zu Parameters>\n", name,
+      judgement->parameters_n);
+    free(name);
+  }
+
+  printf("Theorems:\n");
+  for (size_t i = 0; i < ARRAY_LENGTH(state->theorems); ++i)
+  {
+    const struct Theorem *theorem =
+      ARRAY_GET(state->theorems, struct Theorem, i);
+    char *name = name_to_string(&theorem->name);
+    printf("Theorem<Name: \"%s\">\n", name);
+    free(name);
+  }
+
+  ARRAY_FREE(state->judgements);
+  ARRAY_FREE(state->theorems);
+  ARRAY_FREE(state->current_scope.segments);
+
+  return err;
 }
-#endif
 
 int
 sol_verify(const char *file_path)
@@ -1005,17 +1168,17 @@ sol_verify(const char *file_path)
     //printf("Error %s\n", parse_out.errors[0].error_msg);
   }
 
-  print_tree(&parse_out.ast_root, &print_sol_node);
+  //print_tree(&parse_out.ast_root, &print_sol_node);
 
   /* Free the token list. */
   free_lex_result(&lex_out);
   PROPAGATE_ERROR(err);
 
   /* Validate the file. */
-  //struct ValidationState validation_out = {};
-  //validation_out.input = &parse_out;
+  struct ValidationState validation_out = {};
+  validation_out.input = &parse_out;
 
-  //validate_program(&validation_out);
+  err = validate_program(&validation_out);
 
   /* Free the AST. */
   free_tree(&parse_out.ast_root);

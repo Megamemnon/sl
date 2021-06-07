@@ -182,7 +182,7 @@ pred
     assume is_variable(\$x\);
     assume is_atomic_formula(\$phi\);
 
-    assume @subexpression(\$x\, \$phi\);
+    assume subexpression(\$x\, \$phi\);
 
     infer free_in(\$x\, \$phi\);
   }
@@ -224,71 +224,71 @@ pred
   axiom
   bound_implication_2(x, phi, psi)
   {
-    assume is_variable(x);
-    assume is_formula(phi);
-    assume is_formula(psi);
+    assume is_variable(\$x\);
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
 
-    assume bound_in(x, psi);
+    assume bound_in(\$x\, \$psi\);
 
-    infer bound_in(x, (phi implies psi));
+    infer bound_in(\$x\, \($phi implies $psi)\);
   }
 
   axiom
   free_implication_1(x, phi, psi)
   {
-    assume is_variable(x);
-    assume is_formula(phi);
-    assume is_formula(psi);
+    assume is_variable(\$x\);
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
 
-    assume free_in(x, phi);
+    assume free_in(\$x\, \$phi\);
 
-    infer free_in(x, (phi implies psi));
+    infer free_in(\$x\, \($phi implies $psi)\);
   }
 
   axiom
   free_implication_2(x, phi, psi)
   {
-    assume is_variable(x);
-    assume is_formula(phi);
-    assume is_formula(psi);
+    assume is_variable(\$x\);
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
 
-    assume free_in(x, psi);
+    assume free_in(\$x\, \$psi\);
 
-    infer free_in(x, (phi implies psi));
+    infer free_in(\$x\, \($phi implies $psi)\);
   }
 
   axiom
   free_universal(x, y, phi)
   {
-    assume is_variable(x);
-    assume is_variable(y);
-    assume is_formula(phi);
+    assume is_variable(\$x\);
+    assume is_variable(\$y\);
+    assume is_formula(\$phi\);
 
-    assume free_in(x, phi);
-    assume distinct(x, y);
+    assume free_in(\$x\, \$phi\);
+    assume distinct(\$x\, \$y\);
 
-    infer free_in(x, any y phi);
+    infer free_in(\$x\, \any $y $phi\);
   }
 
   axiom
   bound_universal_1(x, phi)
   {
-    assume is_variable(x);
-    assume is_formula(phi);
+    assume is_variable(\$x\);
+    assume is_formula(\$phi\);
 
-    infer bound_in(x, any x phi);
+    infer bound_in(\$x\, \any $x $phi\);
   }
 
   axiom
   bound_universal_2(x, y, phi)
   {
-    assume is_variable(x);
-    assume is_variable(y);
-    assume is_formula(phi);
+    assume is_variable(\$x\);
+    assume is_variable(\$y\);
+    assume is_formula(\$phi\);
 
-    assume bound_in(x, phi);
+    assume bound_in(\$x\, \$phi\);
 
-    infer bound_in(x, any y phi);
+    infer bound_in(\$x\, \any $y $phi\);
   }
 
 /*
@@ -302,63 +302,63 @@ pred
   axiom
   instantiation(x, t, phi)
   {
-    assume is_variable(x);
-    assume is_term(t);
-    assume is_formula(phi);
+    assume is_variable(\$x\);
+    assume is_term(\$t\);
+    assume is_formula(\$phi\);
 
-    assume free_in(t, phi);
+    assume free_in(\$t\, \$phi\);
 
-    infer has_proof( (any x phi) implies phi[x=t]) );
+    infer has_proof(\(any $x $phi implies $phi[x=\$t\])\);
   }
 
   axiom
   quantified_implication(x, phi, psi)
   {
-    assume is_variable(x);
-    assume is_formula(phi);
-    assume is_formula(psi);
+    assume is_variable(\$x\);
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
 
-    infer has_proof( (any x (phi implies psi)) implies (any x phi
-      implies any x psi)) );
+    infer has_proof(\(any $x ($phi implies $psi)) implies (any $x $phi
+      implies any $x $psi))\);
   }
 
   axiom
-  generalization(x: Var, phi: Formula)
+  generalization(x, phi)
   {
-    assume is_variable(x);
-    assume is_formula(phi);
+    assume is_variable(\$x\);
+    assume is_formula(\$phi\);
 
-    assume bound_in(x, phi);
+    assume bound_in(\$x\, \$phi\);
 
-    infer has_proof( (phi implies any x phi) );
+    infer has_proof(\($phi implies any $x $phi)\);
   }
 
   axiom
   equality(x, y)
   {
-    assume is_term(x);
-    assume is_term(y);
+    assume is_term(\$x\);
+    assume is_term(\$y\);
 
-    infer is_formula( x = y );
+    infer is_formula(\$x = $y\);
   }
 
   axiom
   equality_reflexive(x)
   {
-    assume is_variable(x);
+    assume is_variable(\$x\);
 
-    infer has_proof( x = x );
+    infer has_proof(\$x = $x\);
   }
 
   axiom
   equality_substitution(x, y, z, phi)
   {
-    assume is_term(x);
-    assume is_term(y);
-    assume is_variable(z);
-    assume is_formula(phi);
+    assume is_term(\$x\);
+    assume is_term(\$y\);
+    assume is_variable(\$z\);
+    assume is_formula(\$phi\);
 
-    infer has_proof( (x = y implies (phi[z=x] implies phi[z=y])) );
+    infer has_proof(\($x = $y implies ($phi[z=\$x\] implies $phi[z=\$y\]))\);
   }
 }
 
@@ -375,10 +375,10 @@ zfc
   axiom
   membership(x, y)
   {
-    assume is_term(x);
-    assume is_term(y);
+    assume is_term(\$x\);
+    assume is_term(\$y\);
 
-    infer is_formula(x in y);
+    infer is_formula(\$x in $y\);
   }
 
 /*
