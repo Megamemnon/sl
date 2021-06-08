@@ -914,176 +914,344 @@ name_to_string(const struct ObjectName *name)
   return buf;
 }
 
-#if 0
-int
-validate_judgement(struct ValidationState *state,
-  const struct ASTNode *judgement)
+struct Expression *
+validate_expression(struct ValidationState *state,
+  const struct ASTNode *ast_expression,
+  const struct SolObject *env)
 {
-  const struct SolASTNodeData *data = get_sol_node_data_c(judgement);
+  struct Expression *expr = malloc(sizeof(struct Expression));
+  ARRAY_INIT(expr->symbols, struct ExpressionSymbol);
 
-  /* Check that the name is okay. */
-  struct Judgement judgement_obj = {};
-  ARRAY_INIT(judgement_obj.name.segments, struct ObjectNameSegment);
-
-  struct ObjectNameSegment segment;
-
-  for (size_t i = 0; i < ARRAY_LENGTH(state->current_scope.segments); ++i)
+  /* Loop through the children in the AST. */
+  for (size_t i = 0; i < ARRAY_LENGTH(ast_expression->children); ++i)
   {
-    segment.name = strdup(ARRAY_GET(state->current_scope.segments,
-      struct ObjectNameSegment, i)->name);
-    ARRAY_APPEND(judgement_obj.name.segments,
-      struct ObjectNameSegment, segment);
+    const struct ASTNode *child = ARRAY_GET(ast_expression->children,
+      struct ASTNode, i);
+    const struct SolASTNodeData *child_data = get_sol_node_data_c(child);
+    if (child_data->type == NodeTypeExpressionConstant)
+    {
+      struct ExpressionSymbol sym;
+      sym.value = strdup(child_data->name);
+      sym.is_variable = FALSE;
+      ARRAY_APPEND(expr->symbols, struct ExpressionSymbol, sym);
+    }
+    else if (child_data->type == NodeTypeExpressionVariable)
+    {
+      /* The variable must be a parameter of the environment. */
+      int var_index = -1;
+      for (size_t j = 0; j < ARRAY_LENGTH(env->parameters); ++j)
+      {
+        const struct Parameter *param =
+          ARRAY_GET(env->parameters, struct Parameter, j);
+        if (strcmp(child_data->name, param->name) == 0)
+        {
+          var_index = j;
+          break;
+        }
+      }
+
+      if (var_index == -1)
+      {
+        /* TODO: error, free. */
+        return NULL;
+      }
+
+      struct ExpressionSymbol sym;
+      sym.value = strdup(child_data->name);
+      sym.is_variable = TRUE;
+      ARRAY_INIT(sym.substitutions, struct Substitution);
+
+      /* Finally, iterate through the substitutions (if they exist). */
+      if (ARRAY_LENGTH(child->children) > 0)
+      {
+        const struct ASTNode *sub_map = ARRAY_GET(child->children,
+          struct ASTNode, 0);
+        const struct SolASTNodeData *sub_map_data =
+          get_sol_node_data_c(sub_map);
+        if (sub_map_data->type != NodeTypeSubstitutionMap)
+        {
+          /* TODO: error, cleanup. */
+          return NULL;
+        }
+
+        for (size_t j = 0; j < ARRAY_LENGTH(sub_map->children); ++j)
+        {
+          struct Substitution substitution;
+
+          const struct ASTNode *sub = ARRAY_GET(sub_map->children,
+            struct ASTNode, j);
+          const struct SolASTNodeData *sub_data = get_sol_node_data_c(sub);
+          if (sub_map_data->type != NodeTypeSubstitution)
+          {
+            /* TODO: error, cleanup. */
+            return NULL;
+          }
+
+          const struct ASTNode *dst = ARRAY_GET(sub->children, struct ASTNode,
+            0);
+          const struct SolASTNodeData *dst_data = get_sol_node_data_c(dst);
+          substitution.dst = strdup(dst_data->name);
+
+          const struct ASTNode *src_expr = ARRAY_GET(sub->children,
+            struct ASTNode, 1);
+          substitution.src = validate_expression(state, src_expr, env);
+          if (substitution.src == NULL)
+          {
+            /* TODO: cleanup. */
+            return NULL;
+          }
+
+          ARRAY_APPEND(sym.substitutions, struct Substitution, substitution);
+        }
+      }
+
+      ARRAY_APPEND(expr->symbols, struct ExpressionSymbol, sym);
+    }
+    else
+    {
+      /* TODO: Error, and free. */
+      return NULL;
+    }
   }
 
-  segment.name = strdup(data->name);
-  ARRAY_APPEND(judgement_obj.name.segments, struct ObjectNameSegment, segment);
-
-  if (name_used(state, &judgement_obj.name))
-  {
-    /* TODO: error. */
-    return 1;
-  }
-
-  /* Find the list of parameters. */
-  const struct ASTNode *parameter_list =
-    ARRAY_GET(judgement->children, struct ASTNode, 0);
-  const struct SolASTNodeData *parameter_list_data =
-    get_sol_node_data_c(parameter_list);
-  if (parameter_list_data->type != NodeTypeParameterList)
-  {
-    /* TODO: error. */
-    return 1;
-  }
-
-  judgement_obj.parameters_n = ARRAY_LENGTH(parameter_list->children);
-
-  ARRAY_APPEND(state->judgements, struct Judgement, judgement_obj);
-
-  return 0;
+  return expr;
 }
 
 int
 validate_assume(struct ValidationState *state,
-  const struct ASTNode *assume,
-  const struct Theorem *env)
+  const struct ASTNode *ast_assume,
+  struct SolObject *env)
 {
-  const struct SolASTNodeData *data = get_sol_node_data_c(assume);
+  struct JudgementInstance assume;
 
-  /* This should have a single child that is a judgement expression. */
-  const struct ASTNode *judgement_expression =
-    ARRAY_GET(assume->children, struct ASTNode, 0);
-  const struct SolASTNodeData *judgement_expression_data =
-    get_sol_node_data_c(judgement_expression);
-  if (judgement_expression_data->type != NodeTypeJudgementExpression)
+  /* TODO: Lookup the relevant judgement. */
+
+  /* Find the child that contains the arguments, and then validate each
+     expression that is passed as an argument. */
+  const struct ASTNode *ast_je = ARRAY_GET(ast_assume->children,
+    struct ASTNode, 0);
+  const struct SolASTNodeData *je_data =
+    get_sol_node_data_c(ast_je);
+  if (je_data->type != NodeTypeJudgementExpression)
   {
     /* TODO: error. */
     return 1;
   }
 
-  /* Lookup the judgement expression. */
+  const struct ASTNode *ast_args = ARRAY_GET(ast_je->children,
+    struct ASTNode, 0);
+  const struct SolASTNodeData *args_data =
+    get_sol_node_data_c(ast_args);
+  if (args_data->type != NodeTypeArgumentList)
+  {
+    /* TODO: error. */
+    return 1;
+  }
+
+  /* TODO: Verify that the correct number of arguments are supplied. */
+  ARRAY_INIT(assume.expression_args, struct Expression);
+  for (size_t i = 0; i < ARRAY_LENGTH(ast_args->children); ++i)
+  {
+    const struct ASTNode *ast_arg = ARRAY_GET(ast_args->children,
+      struct ASTNode, i);
+    const struct SolASTNodeData *arg_data =
+      get_sol_node_data_c(ast_arg);
+    struct Expression *expr = validate_expression(state, ast_arg,
+      env);
+    if (expr == NULL)
+    {
+      /* TODO: error. */
+      return 1;
+    }
+    ARRAY_APPEND(assume.expression_args, struct Expression,
+      *expr);
+  }
+
+  ARRAY_APPEND(env->assumptions, struct JudgementInstance, assume);
 
   return 0;
 }
 
 int
 validate_infer(struct ValidationState *state,
-  const struct ASTNode *infer,
-  const struct Theorem *env)
+  const struct ASTNode *ast_infer,
+  struct SolObject *env)
 {
+  return 0;
+}
+
+int
+validate_import(struct ValidationState *state,
+  const struct ASTNode *ast_import)
+{
+  /* Add the import path to the list of search paths. */
+  struct ASTNode *scope_node = state->scope_current;
+  struct SolScopeNodeData *scope_data = get_scope_node_data(scope_node);
+
+  /* The first child should be an NodeTypeIdentifierPath. Assemble
+     the path from its children. */
+  const struct ASTNode *ast_path = ARRAY_GET(ast_import->children,
+    struct ASTNode, 0);
+  const struct SolASTNodeData *path_data = get_sol_node_data_c(ast_path);
+  if (path_data->type != NodeTypeIdentifierPath)
+  {
+    /* TODO: error. */
+    return 1;
+  }
+
+  struct ObjectName path;
+  ARRAY_INIT(path.segments, struct ObjectNameSegment);
+
+  for (size_t i = 0; i < ARRAY_LENGTH(ast_path->children); ++i)
+  {
+    const struct ASTNode *child = ARRAY_GET(ast_path->children,
+      struct ASTNode, 0);
+    const struct SolASTNodeData *child_data = get_sol_node_data_c(child);
+
+    if (child_data->type != NodeTypeIdentifierPathSegment)
+    {
+      /* TODO: error. */
+      return 1;
+    }
+
+    struct ObjectNameSegment segment;
+    segment.name = strdup(child_data->name);
+
+    ARRAY_APPEND(path.segments, struct ObjectNameSegment, segment);
+  }
+
+  /* TODO: verify that the path points to a namespace and that importing it
+     does not introduce collisions. */
+
+  ARRAY_APPEND(scope_data->symbol_search_paths, struct ObjectName, path);
+
+  return 0;
+}
+
+int
+validate_judgement(struct ValidationState *state,
+  const struct ASTNode *ast_judgement)
+{
+  struct SolObject *judgement = malloc(sizeof(struct SolObject));
+  memset(judgement, 0, sizeof(struct SolObject));
+  judgement->type = SolObjectTypeJudgement;
+
+  struct ASTNode *scope_node = state->scope_current;
+  struct SolScopeNodeData *scope_data = get_scope_node_data(scope_node);
+
+  /* The first child should be an NodeTypeParameterList. */
+  const struct ASTNode *ast_plist = ARRAY_GET(ast_judgement->children,
+    struct ASTNode, 0);
+  const struct SolASTNodeData *plist_data = get_sol_node_data_c(ast_plist);
+  if (plist_data->type != NodeTypeParameterList)
+  {
+    /* TODO: error. */
+    return 1;
+  }
+
+  ARRAY_INIT(judgement->parameters, struct Parameter);
+
+  for (size_t i = 0; i < ARRAY_LENGTH(ast_plist->children); ++i)
+  {
+    const struct ASTNode *child = ARRAY_GET(ast_plist->children,
+      struct ASTNode, i);
+    const struct SolASTNodeData *child_data = get_sol_node_data_c(child);
+
+    if (child_data->type != NodeTypeParameter)
+    {
+      /* TODO: error. */
+      return 1;
+    }
+
+    struct Parameter param;
+    param.name = strdup(child_data->name);
+
+    ARRAY_APPEND(judgement->parameters, struct Parameter, param);
+  }
+
+  /* TODO: verify that adding this will not introduce any collisions. */
+  struct Symbol symbol = {
+    .name = strdup(get_sol_node_data_c(ast_judgement)->name),
+    .object = judgement
+  };
+  ARRAY_APPEND(scope_data->symbol_table, struct Symbol, symbol);
+
   return 0;
 }
 
 int
 validate_axiom(struct ValidationState *state,
-  const struct ASTNode *axiom)
+  const struct ASTNode *ast_axiom)
 {
-  const struct SolASTNodeData *data = get_sol_node_data_c(axiom);
+  struct SolObject *axiom = malloc(sizeof(struct SolObject));
+  memset(axiom, 0, sizeof(struct SolObject));
+  axiom->type = SolObjectTypeTheorem;
 
-  /* Check that the name is okay. */
-  struct Theorem axiom_obj = {};
-  ARRAY_INIT(axiom_obj.name.segments, struct ObjectNameSegment);
+  struct ASTNode *scope_node = state->scope_current;
+  struct SolScopeNodeData *scope_data = get_scope_node_data(scope_node);
 
-  struct ObjectNameSegment segment;
-
-  for (size_t i = 0; i < ARRAY_LENGTH(state->current_scope.segments); ++i)
-  {
-    segment.name = strdup(ARRAY_GET(state->current_scope.segments,
-      struct ObjectNameSegment, i)->name);
-    ARRAY_APPEND(axiom_obj.name.segments,
-      struct ObjectNameSegment, segment);
-  }
-
-  segment.name = strdup(data->name);
-  ARRAY_APPEND(axiom_obj.name.segments, struct ObjectNameSegment, segment);
-
-  if (name_used(state, &axiom_obj.name))
+  /* The first child should be a NodeTypeParameterList. */
+  const struct ASTNode *ast_plist = ARRAY_GET(ast_axiom->children,
+    struct ASTNode, 0);
+  const struct SolASTNodeData *plist_data = get_sol_node_data_c(ast_plist);
+  if (plist_data->type != NodeTypeParameterList)
   {
     /* TODO: error. */
     return 1;
   }
 
-  /* Next, enumerate the parameters. */
-  ARRAY_INIT(axiom_obj.parameters, struct Parameter);
-  const struct ASTNode *parameter_list =
-    ARRAY_GET(axiom->children, struct ASTNode, 0);
-  const struct SolASTNodeData *parameter_list_data =
-    get_sol_node_data_c(parameter_list);
-  if (parameter_list_data->type != NodeTypeParameterList)
-  {
-    /* TODO: error. */
-    return 1;
-  }
+  ARRAY_INIT(axiom->parameters, struct Parameter);
 
-  for (size_t i = 0; i < ARRAY_LENGTH(parameter_list->children); ++i)
+  for (size_t i = 0; i < ARRAY_LENGTH(ast_plist->children); ++i)
   {
-    const struct ASTNode *parameter =
-      ARRAY_GET(parameter_list->children, struct ASTNode, i);
-    const struct SolASTNodeData *parameter_data =
-      get_sol_node_data_c(parameter);
-    if (parameter_data->type != NodeTypeParameter)
+    const struct ASTNode *child = ARRAY_GET(ast_plist->children,
+      struct ASTNode, i);
+    const struct SolASTNodeData *child_data = get_sol_node_data_c(child);
+
+    if (child_data->type != NodeTypeParameter)
     {
       /* TODO: error. */
       return 1;
     }
-    struct Parameter parameter_obj;
-    parameter_obj.name = strdup(parameter_data->name);
-    ARRAY_APPEND(axiom_obj.parameters, struct Parameter,
-      parameter_obj);
+
+    struct Parameter param;
+    param.name = strdup(child_data->name);
+
+    ARRAY_APPEND(axiom->parameters, struct Parameter, param);
   }
 
-  /* Next, go through assumptions and inferences. */
-  int err = 0;
-  for (size_t i = 0; i < ARRAY_LENGTH(axiom->children); ++i)
+  /* Next, scan for assumptions and inferences. */
+  ARRAY_INIT(axiom->assumptions, struct JudgementInstance);
+  ARRAY_INIT(axiom->inferences, struct JudgementInstance);
+  for (size_t i = 0; i < ARRAY_LENGTH(ast_axiom->children); ++i)
   {
-    const struct ASTNode *child =
-      ARRAY_GET(axiom->children, struct ASTNode, i);
+    const struct ASTNode *child = ARRAY_GET(ast_axiom->children,
+      struct ASTNode, i);
     const struct SolASTNodeData *child_data = get_sol_node_data_c(child);
-    switch (child_data->type)
+    if (child_data->type == NodeTypeAssume)
     {
-      case NodeTypeAssume:
-        err = validate_assume(state, child, &axiom_obj);
-        PROPAGATE_ERROR(err);
-        break;
-      case NodeTypeInfer:
-        err = validate_infer(state, child, &axiom_obj);
-        PROPAGATE_ERROR(err);
-        break;
-      default:
-        break;
+      int err = validate_assume(state, child, axiom);
+      PROPAGATE_ERROR(err);
+    }
+    else if (child_data->type == NodeTypeInfer)
+    {
+      int err = validate_infer(state, child, axiom);
+      PROPAGATE_ERROR(err);
+    }
+    else if (child_data->type != NodeTypeParameterList)
+    {
+      /* TODO: error. */
+      return 1;
     }
   }
 
-  ARRAY_APPEND(state->theorems, struct Theorem, axiom_obj);
-
+  /* TODO: verify that adding this will not introduce any collisions. */
+  struct Symbol symbol = {
+    .name = strdup(get_sol_node_data_c(ast_axiom)->name),
+    .object = axiom
+  };
+  ARRAY_APPEND(scope_data->symbol_table, struct Symbol, symbol);
   return 0;
-}
-#endif
-
-int
-validate_import(struct ValidationState *state,
-  const struct ASTNode *import)
-{
-  /* Add the import path to the list of search paths. */
 }
 
 int
@@ -1139,14 +1307,16 @@ validate_namespace(struct ValidationState *state,
         PROPAGATE_ERROR(err);
         break;
       case NodeTypeImport:
+        err = validate_import(state, ast_child);
+        PROPAGATE_ERROR(err);
         break;
       case NodeTypeJudgement:
-        //err = validate_judgement(state, child);
-        //PROPAGATE_ERROR(err);
+        err = validate_judgement(state, ast_child);
+        PROPAGATE_ERROR(err);
         break;
       case NodeTypeAxiom:
-        //err = validate_axiom(state, child);
-        //PROPAGATE_ERROR(err);
+        err = validate_axiom(state, ast_child);
+        PROPAGATE_ERROR(err);
         break;
       case NodeTypeTheorem:
         break;
@@ -1162,44 +1332,11 @@ validate_namespace(struct ValidationState *state,
 int
 validate_program(struct ValidationState *state)
 {
-  /* Traverse the tree in three steps: formulas, axioms, and theorems. Each step
-     is validated based on the previous steps (atomic formulas are always
-     valid, compound formulas are valid if they are syntactically valid,
-     then axioms are valid if they consist of well-formed formulas,
-     and theorems are valid if they have a valid proof from the axioms). */
   init_tree(&state->scope_tree_root);
   state->scope_current = &state->scope_tree_root;
   init_scope_node(state->scope_current);
 
   int err = validate_namespace(state, &state->input->ast_root);
-#if 0
-  /* TODO: remove temporary debug prints. */
-  printf("Judgements:\n");
-  for (size_t i = 0; i < ARRAY_LENGTH(state->judgements); ++i)
-  {
-    const struct Judgement *judgement =
-      ARRAY_GET(state->judgements, struct Judgement, i);
-    char *name = name_to_string(&judgement->name);
-    printf("Judgement<Name: \"%s\", %zu Parameters>\n", name,
-      judgement->parameters_n);
-    free(name);
-  }
-
-  printf("Theorems:\n");
-  for (size_t i = 0; i < ARRAY_LENGTH(state->theorems); ++i)
-  {
-    const struct Theorem *theorem =
-      ARRAY_GET(state->theorems, struct Theorem, i);
-    char *name = name_to_string(&theorem->name);
-    printf("Theorem<Name: \"%s\">\n", name);
-    free(name);
-  }
-#endif
-
-  //ARRAY_FREE(state->judgements);
-  //ARRAY_FREE(state->theorems);
-  //ARRAY_FREE(state->current_scope.segments);
-
   return err;
 }
 

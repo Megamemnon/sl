@@ -2,6 +2,7 @@
 #define LEX_H
 
 #include <stdlib.h>
+#include <stdio.h>
 #include "common.h"
 
 enum TokenType
@@ -26,11 +27,24 @@ struct Token
   unsigned int char_offset;
 };
 
+struct CompilationError
+{
+  const struct Token *location;
+  char *msg;
+};
+
+struct CompilationUnit
+{
+  FILE *source;
+  Array errors;
+};
+
 struct LexResult
 {
   Array tokens;
 };
 
+/* General Utilities. */
 void
 snprint_token(char *s, size_t n, const struct Token *tok);
 
@@ -43,6 +57,20 @@ copy_lex_result(struct LexResult *dst, const struct LexResult *src);
 void
 free_lex_result(struct LexResult *result);
 
+void
+add_error(struct CompilationUnit *unit, const struct Token *location,
+  const char *msg);
+
+void
+print_errors(struct CompilationUnit *unit);
+
+int
+open_compilation_unit(struct CompilationUnit *unit, const char *file_path);
+
+void
+close_compilation_unit(struct CompilationUnit *unit);
+
+/* Tokenization. */
 void
 file_to_lines(struct LexResult *dst, const char *file_path);
 

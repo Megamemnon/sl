@@ -1,6 +1,5 @@
 #include "lex.h"
 
-#include <stdio.h>
 #include <string.h>
 #include <ctype.h>
 
@@ -67,6 +66,37 @@ free_lex_result(struct LexResult *result)
 }
 
 void
+add_error(struct CompilationUnit *unit, const struct Token *location,
+  const char *msg)
+{
+
+}
+
+void
+print_errors(struct CompilationUnit *unit)
+{
+
+}
+
+int
+open_compilation_unit(struct CompilationUnit *unit, const char *file_path)
+{
+  unit->source = fopen(file_path, "r");
+  /* TODO: check that this isn't NULL. */
+
+  ARRAY_INIT(unit->errors, struct CompilationError);
+
+  return 0;
+}
+
+void
+close_compilation_unit(struct CompilationUnit *unit)
+{
+  fclose(unit->source);
+  ARRAY_FREE(unit->errors);
+}
+
+void
 file_to_lines(struct LexResult *dst, const char *file_path)
 {
   free_lex_result(dst);
@@ -115,6 +145,7 @@ remove_whitespace(struct LexResult *dst, const struct LexResult *src)
     if (src_tok->type == TokenTypeIntermediate)
     {
       const char *token_start = NULL;
+      tok.line = src_tok->line;
       for (const char *c = src_tok->value; ; ++c)
       {
         if (token_start == NULL && !isspace(*c))
@@ -128,6 +159,7 @@ remove_whitespace(struct LexResult *dst, const struct LexResult *src)
           tok.value = malloc(sizeof(char) * (length + 1));
           strncpy(tok.value, token_start, length);
           tok.value[length] = '\0';
+          tok.char_offset = token_start - src_tok->value;
           ARRAY_APPEND(result.tokens, struct Token, tok);
 
           token_start = NULL;
@@ -168,6 +200,7 @@ separate_symbols(struct LexResult *dst, const struct LexResult *src)
   for (size_t i = 0; i < ARRAY_LENGTH(src->tokens); ++i)
   {
     const struct Token *src_tok = ARRAY_GET(src->tokens, struct Token, i);
+    tok.line = src_tok->line;
     if (src_tok->type == TokenTypeIntermediate)
     {
       const char *token_start = src_tok->value;
@@ -224,6 +257,7 @@ identify_symbol(struct LexResult *dst, const struct LexResult *src,
   for (size_t i = 0; i < ARRAY_LENGTH(src->tokens); ++i)
   {
     const struct Token *src_tok = ARRAY_GET(src->tokens, struct Token, i);
+    tok.line = src_tok->line;
     if (src_tok->type == TokenTypeSymbol &&
         !src_tok->identified)
     {
@@ -309,6 +343,7 @@ separate_identifiers(struct LexResult *dst, const struct LexResult *src)
   for (size_t i = 0; i < ARRAY_LENGTH(src->tokens); ++i)
   {
     const struct Token *src_tok = ARRAY_GET(src->tokens, struct Token, i);
+    tok.line = src_tok->line;
     if (src_tok->type == TokenTypeIntermediate)
     {
       /* TODO: Don't be dumb here. */
@@ -339,6 +374,7 @@ identify_keyword(struct LexResult *dst, struct LexResult *src,
   for (size_t i = 0; i < ARRAY_LENGTH(src->tokens); ++i)
   {
     const struct Token *src_tok = ARRAY_GET(src->tokens, struct Token, i);
+    tok.line = src_tok->line;
     if (src_tok->type == TokenTypeIdentifier)
     {
       if (strcmp(src_tok->value, keyword) == 0)

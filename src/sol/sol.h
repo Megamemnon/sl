@@ -125,13 +125,13 @@ struct Expression
 struct Substitution
 {
   char *dst;
-  struct Expression src;
+  struct Expression *src;
 };
 
 struct ExpressionSymbol
 {
   char *value;
-  int is_variable;
+  bool is_variable;
   Array substitutions;
 };
 
@@ -145,6 +145,13 @@ enum SolObjectType
   SolObjectTypeNone = 0,
   SolObjectTypeJudgement,
   SolObjectTypeTheorem
+};
+
+struct JudgementInstance
+{
+  struct Judgement *judgement;
+
+  Array expression_args;
 };
 
 struct SolObject
@@ -180,8 +187,8 @@ name_to_string(const struct ObjectName *name);
 
 struct Symbol
 {
-  struct ObjectName path;
-  struct Object *object;
+  char *name;
+  struct SolObject *object;
 };
 
 struct SolScopeNodeData
@@ -214,29 +221,32 @@ struct ValidationState
   struct ASTNode *scope_current;
 };
 
-int
-validate_import(struct ValidationState *state,
-  const struct ASTNode *import);
-
-/*
-int
-validate_judgement(struct ValidationState *state,
-  const struct ASTNode *judgement);
+struct Expression *
+validate_expression(struct ValidationState *state,
+  const struct ASTNode *ast_expression,
+  const struct SolObject *env);
 
 int
 validate_assume(struct ValidationState *state,
-  const struct ASTNode *assume,
-  const struct Theorem *env);
+  const struct ASTNode *ast_assume,
+  struct SolObject *env);
 
 int
 validate_infer(struct ValidationState *state,
-  const struct ASTNode *infer,
-  const struct Theorem *env);
+  const struct ASTNode *ast_infer,
+  struct SolObject *env);
+
+int
+validate_import(struct ValidationState *state,
+  const struct ASTNode *ast_import);
+
+int
+validate_judgement(struct ValidationState *state,
+  const struct ASTNode *ast_judgement);
 
 int
 validate_axiom(struct ValidationState *state,
-  const struct ASTNode *axiom);
-*/
+  const struct ASTNode *ast_axiom);
 
 int
 validate_namespace(struct ValidationState *state,
