@@ -803,6 +803,40 @@ print_sol_node(char *buf, size_t len, const struct ASTNode *node)
   }
 }
 
+void
+free_scope_node(struct ASTNode *node)
+{
+
+}
+
+void
+copy_scope_node(struct ASTNode *dst, const struct ASTNode *src)
+{
+
+}
+
+void
+init_scope_node(struct ASTNode *node)
+{
+  struct SolScopeNodeData *data = malloc(sizeof(struct SolScopeNodeData));
+  memset(data, 0, sizeof(struct SolScopeNodeData));
+  node->data = data;
+  node->free_callback = &free_scope_node;
+  node->copy_callback = &copy_scope_node;
+}
+
+struct SolScopeNodeData *
+get_scope_node_data(struct ASTNode *node)
+{
+  return (struct SolScopeNodeData *)node->data;
+}
+
+const struct SolScopeNodeData *
+get_scope_node_data_c(const struct ASTNode *node)
+{
+  return (struct SolScopeNodeData *)node->data;
+}
+
 int
 names_equal(const struct ObjectName *a, const struct ObjectName *b)
 {
@@ -817,6 +851,7 @@ names_equal(const struct ObjectName *a, const struct ObjectName *b)
   return 1;
 }
 
+#if 0
 int
 name_used(struct ValidationState *state,
   const struct ObjectName *name)
@@ -836,6 +871,7 @@ name_used(struct ValidationState *state,
   }
   return 0;
 }
+#endif
 
 char *
 name_to_string(const struct ObjectName *name)
@@ -878,6 +914,7 @@ name_to_string(const struct ObjectName *name)
   return buf;
 }
 
+#if 0
 int
 validate_judgement(struct ValidationState *state,
   const struct ASTNode *judgement)
@@ -1040,44 +1077,76 @@ validate_axiom(struct ValidationState *state,
 
   return 0;
 }
+#endif
+
+int
+validate_import(struct ValidationState *state,
+  const struct ASTNode *import)
+{
+  /* Add the import path to the list of search paths. */
+}
 
 int
 validate_namespace(struct ValidationState *state,
-  const struct ASTNode *namespace)
+  const struct ASTNode *ast_namespace)
 {
   int err = 0;
 
-  const struct SolASTNodeData *data = get_sol_node_data_c(namespace);
+  struct ASTNode *scope_node = state->scope_current;
+  struct SolScopeNodeData *scope_data = get_scope_node_data(scope_node);
 
-  struct ObjectNameSegment segment = {};
-  if (data->name != NULL)
+  const struct SolASTNodeData *ast_data = get_sol_node_data_c(ast_namespace);
+
+  /* Make sure this scope has a unique name. */
+  if (scope_node->parent != NULL)
   {
-    segment.name = strdup(data->name);
-    ARRAY_APPEND(state->current_scope.segments, struct ObjectNameSegment,
-      segment);
+    struct ASTNode *parent = scope_node->parent;
+    for (size_t i = 0; i < ARRAY_LENGTH(parent->children); ++i)
+    {
+      const struct ASTNode *sibling = ARRAY_GET(parent->children,
+        struct ASTNode, i);
+      const struct SolScopeNodeData *sibling_data =
+        get_scope_node_data_c(sibling);
+      if (sibling_data == scope_data)
+        continue;
+      if (strcmp(ast_data->name, sibling_data->name) == 0)
+      {
+        /* TODO: Error, names must be unique. */
+        return 1;
+      }
+    }
+    scope_data->name = strdup(ast_data->name);
   }
 
-  /* Loop through the children of the namespace, validating each object. */
-  for (size_t i = 0; i < ARRAY_LENGTH(namespace->children); ++i)
+  /* Next, initialize the symbol table and search path list. */
+  ARRAY_INIT(scope_data->symbol_table, struct Symbol);
+  ARRAY_INIT(scope_data->symbol_search_paths, struct ObjectName);
+
+  /* Finally, loop through the children in the syntax tree and validate them. */
+  for (size_t i = 0; i < ARRAY_LENGTH(ast_namespace->children); ++i)
   {
-    const struct ASTNode *child =
-      ARRAY_GET(namespace->children, struct ASTNode, i);
-    const struct SolASTNodeData *child_data = get_sol_node_data_c(child);
-    switch (child_data->type)
+    const struct ASTNode *ast_child =
+      ARRAY_GET(ast_namespace->children, struct ASTNode, i);
+    const struct SolASTNodeData *ast_child_data =
+      get_sol_node_data_c(ast_child);
+    switch (ast_child_data->type)
     {
       case NodeTypeNamespace:
-        err = validate_namespace(state, child);
+        state->scope_current = new_child(scope_node);
+        init_scope_node(state->scope_current);
+        err = validate_namespace(state, ast_child);
+        state->scope_current = scope_node;
         PROPAGATE_ERROR(err);
         break;
       case NodeTypeImport:
         break;
       case NodeTypeJudgement:
-        err = validate_judgement(state, child);
-        PROPAGATE_ERROR(err);
+        //err = validate_judgement(state, child);
+        //PROPAGATE_ERROR(err);
         break;
       case NodeTypeAxiom:
-        err = validate_axiom(state, child);
-        PROPAGATE_ERROR(err);
+        //err = validate_axiom(state, child);
+        //PROPAGATE_ERROR(err);
         break;
       case NodeTypeTheorem:
         break;
@@ -1085,12 +1154,6 @@ validate_namespace(struct ValidationState *state,
         return 1;
         break;
     }
-  }
-
-  if (data->name != NULL)
-  {
-    free(segment.name);
-    ARRAY_POP(state->current_scope.segments);
   }
 
   return 0;
@@ -1104,13 +1167,12 @@ validate_program(struct ValidationState *state)
      valid, compound formulas are valid if they are syntactically valid,
      then axioms are valid if they consist of well-formed formulas,
      and theorems are valid if they have a valid proof from the axioms). */
-  ARRAY_INIT(state->judgements, struct Judgement);
-  ARRAY_INIT(state->theorems, struct Theorem);
-
-  ARRAY_INIT(state->current_scope.segments, struct ObjectNameSegment);
+  init_tree(&state->scope_tree_root);
+  state->scope_current = &state->scope_tree_root;
+  init_scope_node(state->scope_current);
 
   int err = validate_namespace(state, &state->input->ast_root);
-
+#if 0
   /* TODO: remove temporary debug prints. */
   printf("Judgements:\n");
   for (size_t i = 0; i < ARRAY_LENGTH(state->judgements); ++i)
@@ -1132,10 +1194,11 @@ validate_program(struct ValidationState *state)
     printf("Theorem<Name: \"%s\">\n", name);
     free(name);
   }
+#endif
 
-  ARRAY_FREE(state->judgements);
-  ARRAY_FREE(state->theorems);
-  ARRAY_FREE(state->current_scope.segments);
+  //ARRAY_FREE(state->judgements);
+  //ARRAY_FREE(state->theorems);
+  //ARRAY_FREE(state->current_scope.segments);
 
   return err;
 }

@@ -5,6 +5,11 @@
 
 extern int verbose;
 
+/* Booleans */
+typedef int bool;
+#define TRUE 1
+#define FALSE 0
+
 /* Misc helpers */
 #define PROPAGATE_ERROR(err) \
 do { \

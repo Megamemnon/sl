@@ -117,6 +117,44 @@ void
 print_sol_node(char *buf, size_t len, const struct ASTNode *node);
 
 /* Validation Methods */
+struct Expression
+{
+  Array symbols;
+};
+
+struct Substitution
+{
+  char *dst;
+  struct Expression src;
+};
+
+struct ExpressionSymbol
+{
+  char *value;
+  int is_variable;
+  Array substitutions;
+};
+
+struct Parameter
+{
+  char *name;
+};
+
+enum SolObjectType
+{
+  SolObjectTypeNone = 0,
+  SolObjectTypeJudgement,
+  SolObjectTypeTheorem
+};
+
+struct SolObject
+{
+  enum SolObjectType type;
+
+  Array parameters;
+  Array assumptions;
+  Array inferences;
+};
 
 struct ObjectNameSegment
 {
@@ -128,67 +166,59 @@ struct ObjectName
   Array segments;
 };
 
-struct Substitution
-{
-  char *dst;
-  char *src;
-};
+int
+names_equal(const struct ObjectName *a, const struct ObjectName *b);
+
+/*
+int
+name_used(struct ValidationState *state,
+  const struct ObjectName *name);
+*/
+
+char *
+name_to_string(const struct ObjectName *name);
 
 struct Symbol
 {
-  char *value;
-  int is_variable;
-  Array substitutions;
+  struct ObjectName path;
+  struct Object *object;
 };
 
-struct Expression
-{
-  Array symbols;
-};
-
-struct Judgement
-{
-  struct ObjectName name;
-  size_t parameters_n;
-};
-
-struct Parameter
+struct SolScopeNodeData
 {
   char *name;
+  Array symbol_table;
+  Array symbol_search_paths;
 };
 
-/* No need to distinguish axioms and theorems after theorems are verified. */
-struct Theorem
-{
-  struct ObjectName name;
+void
+free_scope_node(struct ASTNode *node);
 
-  Array parameters;
-  Array assumptions;
-  struct Judgement infer;
-};
+void
+copy_scope_node(struct ASTNode *dst, const struct ASTNode *src);
+
+void
+init_scope_node(struct ASTNode *node);
+
+struct SolScopeNodeData *
+get_scope_node_data(struct ASTNode *node);
+
+const struct SolScopeNodeData *
+get_scope_node_data_c(const struct ASTNode *node);
 
 struct ValidationState
 {
   const struct ParserState *input;
-  struct ObjectName current_scope;
-  Array judgements;
-  Array theorems;
+
+  struct ASTNode scope_tree_root;
+  struct ASTNode *scope_current;
 };
-
-int
-names_equal(const struct ObjectName *a, const struct ObjectName *b);
-
-int
-name_used(struct ValidationState *state,
-  const struct ObjectName *name);
-
-char *
-name_to_string(const struct ObjectName *name);
 
 int
 validate_import(struct ValidationState *state,
   const struct ASTNode *import);
 
+/*
 int
 validate_judgement(struct ValidationState *state,
   const struct ASTNode *judgement);
@@ -206,10 +236,11 @@ validate_infer(struct ValidationState *state,
 int
 validate_axiom(struct ValidationState *state,
   const struct ASTNode *axiom);
+*/
 
 int
 validate_namespace(struct ValidationState *state,
-  const struct ASTNode *namespace);
+  const struct ASTNode *ast_namespace);
 
 int
 validate_program(struct ValidationState *state);
