@@ -41,6 +41,7 @@ struct SolASTNodeData
 {
   enum SolASTNodeType type;
 
+  const struct Token *location;
   char *name;
 };
 
@@ -176,14 +177,14 @@ struct ObjectName
 int
 names_equal(const struct ObjectName *a, const struct ObjectName *b);
 
-/*
-int
-name_used(struct ValidationState *state,
-  const struct ObjectName *name);
-*/
-
 char *
 name_to_string(const struct ObjectName *name);
+
+struct ProofEnv
+{
+  Array parameters;
+  Array proven;
+};
 
 struct Symbol
 {
@@ -195,7 +196,7 @@ struct SolScopeNodeData
 {
   char *name;
   Array symbol_table;
-  Array symbol_search_paths;
+  Array symbol_search_locations;
 };
 
 void
@@ -207,6 +208,9 @@ copy_scope_node(struct ASTNode *dst, const struct ASTNode *src);
 void
 init_scope_node(struct ASTNode *node);
 
+struct SolObject *
+lookup_symbol(struct ASTNode *scope, char *symbol_name);
+
 struct SolScopeNodeData *
 get_scope_node_data(struct ASTNode *node);
 
@@ -215,6 +219,8 @@ get_scope_node_data_c(const struct ASTNode *node);
 
 struct ValidationState
 {
+  struct CompilationUnit *unit;
+
   const struct ParserState *input;
 
   struct ASTNode scope_tree_root;
@@ -247,6 +253,10 @@ validate_judgement(struct ValidationState *state,
 int
 validate_axiom(struct ValidationState *state,
   const struct ASTNode *ast_axiom);
+
+int
+validate_theorem(struct ValidationState *state,
+  const struct ASTNode *ast_theorem);
 
 int
 validate_namespace(struct ValidationState *state,

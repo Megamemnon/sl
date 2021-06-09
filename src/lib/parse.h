@@ -56,6 +56,7 @@ struct ParserError
 
 struct ParserState
 {
+  struct CompilationUnit *unit;
   struct LexResult *input;
   size_t token_index;
 
@@ -83,8 +84,5 @@ consume_symbol(struct ParserState *state, const char *symbol);
 
 int
 consume_identifier(struct ParserState *state, const char **identifier);
-
-void
-add_error(struct ParserState *state, const char *msg);
 
 #endif

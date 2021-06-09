@@ -69,13 +69,28 @@ void
 add_error(struct CompilationUnit *unit, const struct Token *location,
   const char *msg)
 {
-
+  struct CompilationError err = {
+    .location = location,
+    .msg = strdup(msg)
+  };
+  ARRAY_APPEND(unit->errors, struct CompilationError, err);
 }
 
 void
 print_errors(struct CompilationUnit *unit)
 {
-
+  for (size_t i = 0; i < ARRAY_LENGTH(unit->errors); ++i)
+  {
+    struct CompilationError *err = ARRAY_GET(unit->errors,
+      struct CompilationError, i);
+    char line_buf[4096];
+    size_t line_start = *ARRAY_GET(unit->line_map, size_t, err->location->line);
+    fseek(unit->source, line_start, SEEK_SET);
+    fgets(line_buf, 4096, unit->source);
+    printf("Error '%s' at line '%zu' of file '%s':\n", err->msg,
+      err->location->line + 1, unit->source_file);
+    printf("%zu  |  %s", err->location->line + 1, line_buf);
+  }
 }
 
 int
@@ -84,7 +99,19 @@ open_compilation_unit(struct CompilationUnit *unit, const char *file_path)
   unit->source = fopen(file_path, "r");
   /* TODO: check that this isn't NULL. */
 
+  unit->source_file = strdup(file_path);
+
+  ARRAY_INIT(unit->line_map, size_t);
   ARRAY_INIT(unit->errors, struct CompilationError);
+
+  /* Make a list of the position at which each line starts. */
+  char line_buf[4096];
+  do
+  {
+    size_t offset = ftell(unit->source);
+    ARRAY_APPEND(unit->line_map, size_t, offset);
+  }
+  while (fgets(line_buf, 4096, unit->source) != NULL);
 
   return 0;
 }
@@ -93,42 +120,33 @@ void
 close_compilation_unit(struct CompilationUnit *unit)
 {
   fclose(unit->source);
+  free(unit->source_file);
+  ARRAY_FREE(unit->line_map);
+  for (size_t i = 0; i < ARRAY_LENGTH(unit->errors); ++i)
+    free(ARRAY_GET(unit->errors, struct CompilationError, i)->msg);
   ARRAY_FREE(unit->errors);
 }
 
 void
-file_to_lines(struct LexResult *dst, const char *file_path)
+file_to_lines(struct LexResult *dst, const struct CompilationUnit *unit)
 {
   free_lex_result(dst);
   ARRAY_INIT(dst->tokens, struct Token);
 
-  if (verbose >= 1)
-    printf("Parsing file '%s'\n", file_path);
-
-  FILE *file = fopen(file_path, "r");
-
-  if (file == NULL)
-  {
-    printf("Could not open file '%s'\n", file_path);
-    return;
-  }
-
+  char line_buf[4096];
   struct Token tok = {};
   tok.id = 0;
   tok.type = TokenTypeIntermediate;
-
-  char line_buf[4096];
-  size_t line = 0;
-  while (fgets(line_buf, 4096, file) != NULL)
+  for (size_t i = 0; i < ARRAY_LENGTH(unit->line_map); ++i)
   {
+    size_t line_start = *ARRAY_GET(unit->line_map, size_t, i);
+    fseek(unit->source, line_start, SEEK_SET);
+    fgets(line_buf, 4096, unit->source);
     tok.value = strdup(line_buf);
-    tok.line = line;
+    tok.line = i;
     tok.char_offset = 0;
     ARRAY_APPEND(dst->tokens, struct Token, tok);
-    ++line;
   }
-
-  fclose(file);
 }
 
 void

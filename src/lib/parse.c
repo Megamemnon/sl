@@ -168,13 +168,3 @@ consume_identifier(struct ParserState *state, const char **identifier)
   }
   return 0;
 }
-
-void
-add_error(struct ParserState *state, const char *msg)
-{
-  /*struct ParserError error = {};
-  error.error_msg = strdup(msg);
-  error.error_location = get_current_token(state);
-
-  ARRAY_APPEND(error, state->errors, state->errors_n);*/
-}

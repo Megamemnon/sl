@@ -36,6 +36,9 @@ struct CompilationError
 struct CompilationUnit
 {
   FILE *source;
+  char *source_file;
+
+  Array line_map;
   Array errors;
 };
 
@@ -72,7 +75,7 @@ close_compilation_unit(struct CompilationUnit *unit);
 
 /* Tokenization. */
 void
-file_to_lines(struct LexResult *dst, const char *file_path);
+file_to_lines(struct LexResult *dst, const struct CompilationUnit *unit);
 
 void
 tokenize_strings(struct LexResult *dst, const struct LexResult *src,
