@@ -136,6 +136,13 @@ struct ExpressionSymbol
   Array substitutions;
 };
 
+int
+copy_expression_symbol(struct ExpressionSymbol *dst,
+  const struct ExpressionSymbol *src);
+
+int
+copy_expression(struct Expression *dst, const struct Expression *src);
+
 struct Parameter
 {
   char *name;
@@ -150,8 +157,7 @@ enum SolObjectType
 
 struct JudgementInstance
 {
-  struct Judgement *judgement;
-
+  char *judgement;
   Array expression_args;
 };
 
@@ -182,8 +188,19 @@ name_to_string(const struct ObjectName *name);
 
 struct ProofEnv
 {
-  Array parameters;
+  //Array parameters;
   Array proven;
+};
+
+struct Argument
+{
+  char *name;
+  struct Expression *value;
+};
+
+struct ArgumentList
+{
+  Array arguments; // Expressions
 };
 
 struct Symbol
@@ -227,6 +244,7 @@ struct ValidationState
   struct ASTNode *scope_current;
 };
 
+/* TODO: only allow one level of nesting. */
 struct Expression *
 validate_expression(struct ValidationState *state,
   const struct ASTNode *ast_expression,
@@ -253,6 +271,25 @@ validate_judgement(struct ValidationState *state,
 int
 validate_axiom(struct ValidationState *state,
   const struct ASTNode *ast_axiom);
+
+struct Expression *
+substitute_into_expression(struct ValidationState *state,
+  const struct Expression *expr, const struct ArgumentList *args);
+
+bool
+symbols_equal(const struct ExpressionSymbol *a,
+  const struct ExpressionSymbol *b);
+
+bool
+expressions_equal(const struct Expression *a, const struct Expression *b);
+
+int
+instantiate_object(struct ValidationState *state, const struct SolObject *obj,
+  const struct ArgumentList *args, struct ProofEnv *env);
+
+bool
+judgement_proved(struct ValidationState *state, const struct ProofEnv *env,
+  const struct JudgementInstance *judgement);
 
 int
 validate_theorem(struct ValidationState *state,

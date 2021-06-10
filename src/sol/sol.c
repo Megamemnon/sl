@@ -855,6 +855,43 @@ print_sol_node(char *buf, size_t len, const struct ASTNode *node)
   }
 }
 
+int
+copy_expression_symbol(struct ExpressionSymbol *dst,
+  const struct ExpressionSymbol *src)
+{
+  dst->value = strdup(src->value);
+  dst->is_variable = src->is_variable;
+  if (!src->is_variable)
+    return 0;
+  for (size_t i = 0; i < ARRAY_LENGTH(src->substitutions); ++i)
+  {
+    const struct Substitution *src_sub = ARRAY_GET(src->substitutions,
+      struct Substitution, i);
+    struct Substitution dst_sub = {};
+    dst_sub.dst = strdup(src_sub->dst);
+    dst_sub.src = malloc(sizeof(struct Expression));
+    int err = copy_expression(dst_sub.src, src_sub->src);
+    PROPAGATE_ERROR(err);
+  }
+  return 0;
+}
+
+int
+copy_expression(struct Expression *dst, const struct Expression *src)
+{
+  ARRAY_INIT(dst->symbols, struct ExpressionSymbol);
+  for (size_t i = 0; i < ARRAY_LENGTH(src->symbols); ++i)
+  {
+    const struct ExpressionSymbol *src_symbol = ARRAY_GET(src->symbols,
+      struct ExpressionSymbol, i);
+    struct ExpressionSymbol dst_symbol = {};
+    int err = copy_expression_symbol(&dst_symbol, src_symbol);
+    PROPAGATE_ERROR(err);
+    ARRAY_APPEND(dst->symbols, struct ExpressionSymbol, dst_symbol);
+  }
+  return 0;
+}
+
 void
 free_scope_node(struct ASTNode *node)
 {
@@ -1106,6 +1143,7 @@ validate_assume(struct ValidationState *state,
     struct ASTNode, 0);
   const struct SolASTNodeData *je_data =
     get_sol_node_data_c(ast_je);
+  assume.judgement = strdup(je_data->name);
   if (je_data->type != NodeTypeJudgementExpression)
   {
     /* TODO: error detail. */
@@ -1166,6 +1204,7 @@ validate_infer(struct ValidationState *state,
     struct ASTNode, 0);
   const struct SolASTNodeData *je_data =
     get_sol_node_data_c(ast_je);
+  infer.judgement = strdup(je_data->name);
   if (je_data->type != NodeTypeJudgementExpression)
   {
     /* TODO: error detail. */
@@ -1413,6 +1452,211 @@ validate_axiom(struct ValidationState *state,
   return 0;
 }
 
+struct Expression *
+substitute_into_expression(struct ValidationState *state,
+  const struct Expression *expr, const struct ArgumentList *args)
+{
+  struct Expression *new_expr = malloc(sizeof(struct Expression));
+  ARRAY_INIT(new_expr->symbols, struct ExpressionSymbol);
+
+  Array component_expressions;
+  ARRAY_INIT(component_expressions, struct Expression);
+  /* Loop through the symbols in `expr`. Create a new expression corresponding
+     to each symbol. */
+  for (size_t i = 0; i < ARRAY_LENGTH(expr->symbols); ++i)
+  {
+    const struct ExpressionSymbol *s = ARRAY_GET(expr->symbols,
+      struct ExpressionSymbol, i);
+
+    struct Expression component = {};
+    ARRAY_INIT(component.symbols, struct ExpressionSymbol);
+    if (s->is_variable)
+    {
+      /* Create a copy of the corresponding expression provided in the args. */
+      const struct Expression *arg = NULL;
+      for (size_t j = 0; j < ARRAY_LENGTH(args->arguments); ++j)
+      {
+        const struct Argument *argument = ARRAY_GET(args->arguments,
+          struct Argument, j);
+        if (strcmp(s->value, argument->name) == 0)
+        {
+          arg = argument->value;
+          break;
+        }
+      }
+
+      if (arg == NULL)
+      {
+        /* TODO: error. */
+        return NULL;
+      }
+
+      int err = copy_expression(&component, arg);
+      if (err)
+        return NULL;
+      /* TODO: Perform any replacements that are needed. */
+    }
+    else
+    {
+      /* Just copy the constant into its own expression. */
+      struct ExpressionSymbol symbol = {};
+      int err = copy_expression_symbol(&symbol, s);
+      if (err)
+        return NULL;
+      ARRAY_APPEND(component.symbols, struct ExpressionSymbol, symbol);
+    }
+    ARRAY_APPEND(component_expressions, struct Expression, component);
+  }
+
+  /* Join all the expressions together. */
+  for (size_t i = 0; i < ARRAY_LENGTH(component_expressions); ++i)
+  {
+    struct Expression *component = ARRAY_GET(component_expressions,
+      struct Expression, i);
+    for (size_t j = 0; j < ARRAY_LENGTH(component->symbols); ++j)
+    {
+      const struct ExpressionSymbol *src_symbol = ARRAY_GET(component->symbols,
+        struct ExpressionSymbol, j);
+      struct ExpressionSymbol symbol = {};
+      int err = copy_expression_symbol(&symbol, src_symbol);
+      if (err)
+        return NULL;
+      ARRAY_APPEND(new_expr->symbols, struct ExpressionSymbol, symbol);
+    }
+    /* TODO: free `component`. */
+  }
+
+  return new_expr;
+}
+
+bool
+symbols_equal(const struct ExpressionSymbol *a,
+  const struct ExpressionSymbol *b)
+{
+  if (strcmp(a->value, b->value) != 0)
+    return FALSE;
+  if (a->is_variable != b->is_variable)
+    return FALSE;
+  if (a->is_variable)
+  {
+    /* TODO: check that the substitutions are the same. */
+  }
+  return TRUE;
+}
+
+bool
+expressions_equal(const struct Expression *a, const struct Expression *b)
+{
+  if (ARRAY_LENGTH(a->symbols) != ARRAY_LENGTH(b->symbols))
+    return FALSE;
+  for (size_t i = 0; i < ARRAY_LENGTH(a->symbols); ++i)
+  {
+    const struct ExpressionSymbol *sym_a = ARRAY_GET(a->symbols,
+      struct ExpressionSymbol, i);
+    const struct ExpressionSymbol *sym_b = ARRAY_GET(b->symbols,
+      struct ExpressionSymbol, i);
+    if (!symbols_equal(sym_a, sym_b))
+      return FALSE;
+  }
+  return TRUE;
+}
+
+int
+instantiate_object(struct ValidationState *state, const struct SolObject *obj,
+  const struct ArgumentList *args, struct ProofEnv *env)
+{
+  /* First, perform substitutions to obtain the instantiated form of all the
+     assumptions and inferences. */
+  Array assumptions;
+  ARRAY_INIT(assumptions, struct JudgementInstance);
+  for (size_t i = 0; i < ARRAY_LENGTH(obj->assumptions); ++i)
+  {
+    const struct JudgementInstance *assume_pre = ARRAY_GET(obj->assumptions,
+      struct JudgementInstance, i);
+    struct JudgementInstance assume = {};
+    assume.judgement = strdup(assume_pre->judgement);
+    ARRAY_INIT(assume.expression_args, struct Expression);
+    for (size_t j = 0; j < ARRAY_LENGTH(assume_pre->expression_args); ++j)
+    {
+      const struct Expression *expr_pre = ARRAY_GET(assume_pre->expression_args,
+        struct Expression, j);
+      struct Expression expr = *substitute_into_expression(state,
+        expr_pre, args);
+      ARRAY_APPEND(assume.expression_args, struct Expression, expr);
+    }
+    ARRAY_APPEND(assumptions, struct JudgementInstance, assume);
+  }
+
+  /* Check that each instantiated assumption is in the environment. */
+  for (size_t i = 0; i < ARRAY_LENGTH(assumptions); ++i)
+  {
+    const struct JudgementInstance *assume = ARRAY_GET(assumptions,
+      struct JudgementInstance, i);
+    if (!judgement_proved(state, env, assume))
+    {
+      /* TODO: error. */
+      return 1;
+    }
+  }
+
+  /* The assumptions hold, so we are free to add the instantiated inferences to
+     our proof environment. */
+  for (size_t i = 0; i < ARRAY_LENGTH(obj->inferences); ++i)
+  {
+    const struct JudgementInstance *infer_pre = ARRAY_GET(obj->inferences,
+      struct JudgementInstance, i);
+    struct JudgementInstance infer = {};
+    infer.judgement = strdup(infer_pre->judgement);
+    ARRAY_INIT(infer.expression_args, struct Expression);
+    for (size_t j = 0; j < ARRAY_LENGTH(infer_pre->expression_args); ++j)
+    {
+      const struct Expression *expr_pre = ARRAY_GET(infer_pre->expression_args,
+        struct Expression, j);
+      struct Expression expr = *substitute_into_expression(state,
+        expr_pre, args);
+      ARRAY_APPEND(infer.expression_args, struct Expression, expr);
+    }
+    ARRAY_APPEND(env->proven, struct JudgementInstance, infer);
+  }
+
+  return 0;
+}
+
+bool
+judgement_proved(struct ValidationState *state, const struct ProofEnv *env,
+  const struct JudgementInstance *judgement)
+{
+  /* Loop through the judgements that we have proven, and check for equality
+     by comparing names and the arguments passed. */
+  for (size_t i = 0; i < ARRAY_LENGTH(env->proven); ++i)
+  {
+    const struct JudgementInstance *proven = ARRAY_GET(env->proven,
+      struct JudgementInstance, i);
+
+    if (strcmp(proven->judgement, judgement->judgement) != 0)
+      continue;
+    if (ARRAY_LENGTH(proven->expression_args)
+        != ARRAY_LENGTH(judgement->expression_args))
+      continue;
+    bool args_equal = TRUE;
+    for (size_t j = 0; j < ARRAY_LENGTH(proven->expression_args); ++j)
+    {
+      const struct Expression *proven_arg = ARRAY_GET(proven->expression_args,
+        struct Expression, j);
+      const struct Expression *checking_arg =
+        ARRAY_GET(judgement->expression_args, struct Expression, j);
+      if (!expressions_equal(proven_arg, checking_arg))
+      {
+        args_equal = FALSE;
+        break;
+      }
+    }
+    if (args_equal)
+      return TRUE;
+  }
+  return FALSE;
+}
+
 int
 validate_theorem(struct ValidationState *state,
   const struct ASTNode *ast_theorem)
@@ -1486,8 +1730,33 @@ validate_theorem(struct ValidationState *state,
     }
   }
 
-  /* Verify the validity of each proof step by substituting the parameters into
-     the referenced theorem-expression. */
+  /* Set up the proof environment and add in the assumptions
+     we started with. */
+  struct ProofEnv env = {};
+  //ARRAY_INIT(env.parameters, struct Parameter);
+  ARRAY_INIT(env.proven, struct JudgementInstance);
+
+  for (size_t i = 0; i < ARRAY_LENGTH(theorem->assumptions); ++i)
+  {
+    const struct JudgementInstance *assume = ARRAY_GET(theorem->assumptions,
+      struct JudgementInstance, i);
+
+    struct JudgementInstance proven = {};
+    proven.judgement = strdup(assume->judgement);
+    ARRAY_INIT(proven.expression_args, struct Expression);
+    for (size_t j = 0; j < ARRAY_LENGTH(assume->expression_args); ++j)
+    {
+      const struct Expression *arg = ARRAY_GET(assume->expression_args,
+        struct Expression, j);
+      struct Expression copied_arg;
+      copy_expression(&copied_arg, arg);
+      ARRAY_APPEND(proven.expression_args, struct Expression,
+        copied_arg);
+    }
+    ARRAY_APPEND(env.proven, struct JudgementInstance, proven);
+  }
+
+  /* Verify the validity of each proof step. */
   Array new_judgements;
   ARRAY_INIT(new_judgements, struct JudgementInstance);
   for (size_t i = 0; i < ARRAY_LENGTH(ast_theorem->children); ++i)
@@ -1520,49 +1789,66 @@ validate_theorem(struct ValidationState *state,
         return 1;
       }
 
-      /* Expand arguments. */
-      const struct ASTNode *arg_list = ARRAY_GET(infer->children,
+      /* Make a list of arguments. */
+      struct ArgumentList args = {};
+      const struct ASTNode *args_node = ARRAY_GET(infer->children,
         struct ASTNode, 0);
-      const struct SolASTNodeData *arg_list_data =
-        get_sol_node_data_c(arg_list);
-      if (arg_list_data->type != NodeTypeArgumentList)
+      const struct SolASTNodeData *args_data =
+        get_sol_node_data_c(args_node);
+
+      /* Do we have the same number of arguments as there are parameters? */
+      if (ARRAY_LENGTH(args_node->children) != ARRAY_LENGTH(thm->parameters))
       {
-        add_error(state->unit, arg_list_data->location,
-          "incorrect node type.");
+        /* TODO: error. */
+        add_error(state->unit, args_data->location,
+          "incorrect number of arguments supplied.");
         return 1;
       }
 
-      Array arguments;
-      ARRAY_INIT(arguments, struct Expression);
-      for (size_t j = 0; j < ARRAY_LENGTH(arg_list->children); ++j)
+      /* Construct the arguments. */
+      ARRAY_INIT(args.arguments, struct Argument);
+      for (size_t j = 0; j < ARRAY_LENGTH(args_node->children); ++j)
       {
-        const struct ASTNode *arg = ARRAY_GET(arg_list->children,
-          struct ASTNode, j);
-        const struct SolASTNodeData *arg_data = get_sol_node_data_c(arg);
+        struct Argument arg = {};
+        const struct Parameter *param = ARRAY_GET(thm->parameters,
+          struct Parameter, j);
+        arg.name = strdup(param->name);
 
-        if (arg_data->type != NodeTypeExpression)
+        const struct ASTNode *expr_node = ARRAY_GET(args_node->children,
+          struct ASTNode, j);
+        const struct SolASTNodeData *expr_data =
+          get_sol_node_data_c(expr_node);
+        arg.value = validate_expression(state, expr_node, theorem);
+        if (arg.value == NULL)
         {
-          /* TODO: error. */
-          add_error(state->unit, arg_data->location,
-            "incorrect node type.");
+          add_error(state->unit, expr_data->location,
+            "bad expression passed as an argument.");
           return 1;
         }
-
-        struct Expression *expr = validate_expression(state, arg, theorem);
-        if (expr == NULL)
-          return 1;
-
-        ARRAY_APPEND(arguments, struct Expression *, expr);
+        ARRAY_APPEND(args.arguments, struct Argument, arg);
       }
 
-      /* Check that all the assumptions of `thm` are met. */
-
-      /* Add the inferences of `thm`. */
+      /* Try to add it to the proof environment (check that the assumptions
+         are met and then add its inferences). */
+      int err = instantiate_object(state, thm, &args, &env);
+      PROPAGATE_ERROR(err);
     }
   }
 
   /* Make sure that each inference has been deduced in the process
      of the proof. */
+  for (size_t i = 0; i < ARRAY_LENGTH(theorem->inferences); ++i)
+  {
+    const struct JudgementInstance *infer = ARRAY_GET(theorem->inferences,
+      struct JudgementInstance, i);
+    if (!judgement_proved(state, &env, infer))
+    {
+      /* TODO: error. */
+      add_error(state->unit, plist_data->location,
+        "inference not proven.");
+      return 1;
+    }
+  }
 
   /* TODO: verify that adding this will not introduce any collisions. */
   struct Symbol symbol = {
@@ -1697,7 +1983,7 @@ sol_verify(const char *file_path)
     print_errors(&unit);
     return 1;
   }
-  print_tree(&parse_out.ast_root, &print_sol_node);
+  //print_tree(&parse_out.ast_root, &print_sol_node);
 
   /* Free the token list. */
   free_lex_result(&lex_out);
