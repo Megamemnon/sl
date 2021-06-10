@@ -202,8 +202,7 @@ remove_whitespace(struct LexResult *dst, const struct LexResult *src)
   }
 
   free_lex_result(dst);
-
-  ARRAY_COPY(dst->tokens, result.tokens);
+  dst->tokens = result.tokens;
 }
 
 void
@@ -259,7 +258,7 @@ separate_symbols(struct LexResult *dst, const struct LexResult *src)
   }
 
   free_lex_result(dst);
-  ARRAY_COPY(dst->tokens, result.tokens);
+  dst->tokens = result.tokens;
 }
 
 void
@@ -329,7 +328,7 @@ identify_symbol(struct LexResult *dst, const struct LexResult *src,
   }
 
   free_lex_result(dst);
-  ARRAY_COPY(dst->tokens, result.tokens);
+  dst->tokens = result.tokens;
 }
 
 void
@@ -345,7 +344,7 @@ identify_symbols(struct LexResult *dst, const struct LexResult *src,
   }
 
   free_lex_result(dst);
-  ARRAY_COPY(dst->tokens, result.tokens);
+  dst->tokens = result.tokens;
 }
 
 void
@@ -375,7 +374,7 @@ separate_identifiers(struct LexResult *dst, const struct LexResult *src)
   }
 
   free_lex_result(dst);
-  ARRAY_COPY(dst->tokens, result.tokens);
+  dst->tokens = result.tokens;
 }
 
 void
@@ -412,7 +411,7 @@ identify_keyword(struct LexResult *dst, struct LexResult *src,
   }
 
   free_lex_result(dst);
-  ARRAY_COPY(dst->tokens, result.tokens);
+  dst->tokens = result.tokens;
 }
 
 void
@@ -428,7 +427,7 @@ identify_keywords(struct LexResult *dst, struct LexResult *src,
   }
 
   free_lex_result(dst);
-  ARRAY_COPY(dst->tokens, result.tokens);
+  dst->tokens = result.tokens;
 }
 
 void
@@ -455,7 +454,7 @@ remove_line_comments(struct LexResult *dst, const struct LexResult *src,
   }
 
   free_lex_result(dst);
-  ARRAY_COPY(dst->tokens, result.tokens);
+  dst->tokens = result.tokens;
 }
 
 void
@@ -484,7 +483,7 @@ remove_block_comments(struct LexResult *dst, const struct LexResult *src,
   }
 
   free_lex_result(dst);
-  ARRAY_COPY(dst->tokens, result.tokens);
+  dst->tokens = result.tokens;
 }
 
 void
@@ -504,5 +503,5 @@ remove_line_ends(struct LexResult *dst, const struct LexResult *src)
   }
 
   free_lex_result(dst);
-  ARRAY_COPY(dst->tokens, result.tokens);
+  dst->tokens = result.tokens;
 }

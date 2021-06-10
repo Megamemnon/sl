@@ -136,6 +136,12 @@ struct ExpressionSymbol
   Array substitutions;
 };
 
+void
+free_expression_symbol(struct ExpressionSymbol *symbol);
+
+void
+free_expression(struct Expression *expression);
+
 int
 copy_expression_symbol(struct ExpressionSymbol *dst,
   const struct ExpressionSymbol *src);
@@ -225,6 +231,7 @@ copy_scope_node(struct ASTNode *dst, const struct ASTNode *src);
 void
 init_scope_node(struct ASTNode *node);
 
+/* TODO: Lookup by path, not just a string. */
 struct SolObject *
 lookup_symbol(struct ASTNode *scope, char *symbol_name);
 
@@ -244,11 +251,11 @@ struct ValidationState
   struct ASTNode *scope_current;
 };
 
-/* TODO: only allow one level of nesting. */
 struct Expression *
 validate_expression(struct ValidationState *state,
   const struct ASTNode *ast_expression,
-  const struct SolObject *env);
+  const struct SolObject *env,
+  int depth);
 
 int
 validate_assume(struct ValidationState *state,
@@ -282,6 +289,10 @@ symbols_equal(const struct ExpressionSymbol *a,
 
 bool
 expressions_equal(const struct Expression *a, const struct Expression *b);
+
+int
+perform_replacement(struct ValidationState *state, struct Expression *dst,
+  const struct ExpressionSymbol *symbol, const struct ArgumentList *args);
 
 int
 instantiate_object(struct ValidationState *state, const struct SolObject *obj,

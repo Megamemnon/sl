@@ -893,9 +893,90 @@ copy_expression(struct Expression *dst, const struct Expression *src)
 }
 
 void
+free_expression_symbol(struct ExpressionSymbol *symbol)
+{
+  //free(symbol->value);
+  //for (size_t i = 0; i < ARRAY_LENGTH(symbol->substitutions); ++i)
+  //{
+  //  struct Substitution *sub = ARRAY_GET(symbol->substitutions,
+  //    struct Substitution, i);
+    //free(sub->dst);
+    //free_expression(sub->src);
+    //free(sub->src);
+  //}
+  //if (symbol->substitutions.data != NULL)
+  //  ARRAY_FREE(symbol->substitutions);
+}
+
+void
+free_expression(struct Expression *expression)
+{
+  for (size_t i = 0; i < ARRAY_LENGTH(expression->symbols); ++i)
+  {
+    struct ExpressionSymbol *sym = ARRAY_GET(expression->symbols,
+      struct ExpressionSymbol, i);
+    free_expression_symbol(sym);
+  }
+  ARRAY_FREE(expression->symbols);
+}
+
+void
 free_scope_node(struct ASTNode *node)
 {
+  struct SolScopeNodeData *data = (struct SolScopeNodeData *)node->data;
 
+  if (data->name != NULL)
+    free(data->name);
+
+  for (size_t i = 0; i < ARRAY_LENGTH(data->symbol_table); ++i)
+  {
+    struct Symbol *sym = ARRAY_GET(data->symbol_table, struct Symbol, i);
+    free(sym->name);
+
+    struct SolObject *obj = sym->object;
+
+    for (size_t j = 0; j < ARRAY_LENGTH(obj->parameters); ++j)
+    {
+      char **param = ARRAY_GET(obj->parameters, char *, j);
+      free(*param);
+    }
+    ARRAY_FREE(obj->parameters);
+
+    for (size_t j = 0; j < ARRAY_LENGTH(obj->assumptions); ++j)
+    {
+      struct JudgementInstance *assume = ARRAY_GET(obj->assumptions,
+        struct JudgementInstance, j);
+      for (size_t k = 0; k < ARRAY_LENGTH(assume->expression_args); ++k)
+      {
+        struct Expression *expr = ARRAY_GET(assume->expression_args,
+          struct Expression, k);
+        free_expression(expr);
+      }
+      ARRAY_FREE(assume->expression_args);
+      free(assume->judgement);
+    }
+    ARRAY_FREE(obj->assumptions);
+
+    for (size_t j = 0; j < ARRAY_LENGTH(obj->inferences); ++j)
+    {
+      struct JudgementInstance *infer = ARRAY_GET(obj->inferences,
+        struct JudgementInstance, j);
+      for (size_t k = 0; k < ARRAY_LENGTH(infer->expression_args); ++k)
+      {
+        struct Expression *expr = ARRAY_GET(infer->expression_args,
+          struct Expression, k);
+        free_expression(expr);
+      }
+      ARRAY_FREE(infer->expression_args);
+      free(infer->judgement);
+    }
+    ARRAY_FREE(obj->inferences);
+  }
+
+  ARRAY_FREE(data->symbol_table);
+  ARRAY_FREE(data->symbol_search_locations);
+
+  free(data);
 }
 
 void
@@ -1024,7 +1105,8 @@ name_to_string(const struct ObjectName *name)
 struct Expression *
 validate_expression(struct ValidationState *state,
   const struct ASTNode *ast_expression,
-  const struct SolObject *env)
+  const struct SolObject *env,
+  int depth)
 {
   struct Expression *expr = malloc(sizeof(struct Expression));
   ARRAY_INIT(expr->symbols, struct ExpressionSymbol);
@@ -1077,6 +1159,13 @@ validate_expression(struct ValidationState *state,
           struct ASTNode, 0);
         const struct SolASTNodeData *sub_map_data =
           get_sol_node_data_c(sub_map);
+        /* Substitutions cannot be nested! */
+        if (depth > 0)
+        {
+          add_error(state->unit, sub_map_data->location,
+            "substitutions cannot be nested.");
+          return NULL;
+        }
         if (sub_map_data->type != NodeTypeSubstitutionMap)
         {
           add_error(state->unit, sub_map_data->location,
@@ -1103,7 +1192,8 @@ validate_expression(struct ValidationState *state,
 
           const struct ASTNode *src_expr = ARRAY_GET(sub->children,
             struct ASTNode, 0);
-          substitution.src = validate_expression(state, src_expr, env);
+          substitution.src = validate_expression(state, src_expr,
+            env, depth + 1);
           if (substitution.src == NULL)
           {
             /* TODO: cleanup. */
@@ -1172,8 +1262,7 @@ validate_assume(struct ValidationState *state,
       struct ASTNode, i);
     const struct SolASTNodeData *arg_data =
       get_sol_node_data_c(ast_arg);
-    struct Expression *expr = validate_expression(state, ast_arg,
-      env);
+    struct Expression *expr = validate_expression(state, ast_arg, env, 0);
     if (expr == NULL)
     {
       add_error(state->unit, arg_data->location,
@@ -1233,8 +1322,7 @@ validate_infer(struct ValidationState *state,
       struct ASTNode, i);
     const struct SolASTNodeData *arg_data =
       get_sol_node_data_c(ast_arg);
-    struct Expression *expr = validate_expression(state, ast_arg,
-      env);
+    struct Expression *expr = validate_expression(state, ast_arg, env, 0);
     if (expr == NULL)
     {
       add_error(state->unit, arg_data->location,
@@ -1452,6 +1540,85 @@ validate_axiom(struct ValidationState *state,
   return 0;
 }
 
+int
+perform_replacement(struct ValidationState *state, struct Expression *dst,
+  const struct ExpressionSymbol *symbol, const struct ArgumentList *args)
+{
+  Array component_expressions;
+  ARRAY_INIT(component_expressions, struct Expression);
+
+  const struct Expression *src = NULL;
+  for (size_t j = 0; j < ARRAY_LENGTH(args->arguments); ++j)
+  {
+    const struct Argument *argument = ARRAY_GET(args->arguments,
+      struct Argument, j);
+    if (strcmp(symbol->value, argument->name) == 0)
+    {
+      src = argument->value;
+      break;
+    }
+  }
+
+  if (src == NULL)
+  {
+    /* TODO: error. */
+    return 1;
+  }
+
+  for (size_t i = 0; i < ARRAY_LENGTH(src->symbols); ++i)
+  {
+    const struct ExpressionSymbol *s = ARRAY_GET(src->symbols,
+      struct ExpressionSymbol, i);
+
+    struct Expression component = {};
+    ARRAY_INIT(component.symbols, struct ExpressionSymbol);
+
+    /* If the name of the symbol matches, perform replacement. */
+    bool did_replace = FALSE;
+    for (size_t j = 0; j < ARRAY_LENGTH(symbol->substitutions); ++j)
+    {
+      const struct Substitution *sub = ARRAY_GET(symbol->substitutions,
+        struct Substitution, j);
+      if (strcmp(s->value, sub->dst) == 0)
+      {
+        copy_expression(&component, sub->src);
+        did_replace = TRUE;
+        break;
+      }
+    }
+
+    if (!did_replace)
+    {
+      /* Just copy the constant into its own expression. */
+      struct ExpressionSymbol symbol = {};
+      int err = copy_expression_symbol(&symbol, s);
+      if (err)
+        return 1;
+      ARRAY_APPEND(component.symbols, struct ExpressionSymbol, symbol);
+    }
+    ARRAY_APPEND(component_expressions, struct Expression, component);
+  }
+
+  /* Join all the expressions together. */
+  for (size_t i = 0; i < ARRAY_LENGTH(component_expressions); ++i)
+  {
+    struct Expression *component = ARRAY_GET(component_expressions,
+      struct Expression, i);
+    for (size_t j = 0; j < ARRAY_LENGTH(component->symbols); ++j)
+    {
+      const struct ExpressionSymbol *src_symbol = ARRAY_GET(component->symbols,
+        struct ExpressionSymbol, j);
+      struct ExpressionSymbol symbol = {};
+      int err = copy_expression_symbol(&symbol, src_symbol);
+      if (err)
+        return 1;
+      ARRAY_APPEND(dst->symbols, struct ExpressionSymbol, symbol);
+    }
+    /* TODO: free `component`. */
+  }
+  return 0;
+}
+
 struct Expression *
 substitute_into_expression(struct ValidationState *state,
   const struct Expression *expr, const struct ArgumentList *args)
@@ -1472,29 +1639,7 @@ substitute_into_expression(struct ValidationState *state,
     ARRAY_INIT(component.symbols, struct ExpressionSymbol);
     if (s->is_variable)
     {
-      /* Create a copy of the corresponding expression provided in the args. */
-      const struct Expression *arg = NULL;
-      for (size_t j = 0; j < ARRAY_LENGTH(args->arguments); ++j)
-      {
-        const struct Argument *argument = ARRAY_GET(args->arguments,
-          struct Argument, j);
-        if (strcmp(s->value, argument->name) == 0)
-        {
-          arg = argument->value;
-          break;
-        }
-      }
-
-      if (arg == NULL)
-      {
-        /* TODO: error. */
-        return NULL;
-      }
-
-      int err = copy_expression(&component, arg);
-      if (err)
-        return NULL;
-      /* TODO: Perform any replacements that are needed. */
+      perform_replacement(state, &component, s, args);
     }
     else
     {
@@ -1626,6 +1771,31 @@ bool
 judgement_proved(struct ValidationState *state, const struct ProofEnv *env,
   const struct JudgementInstance *judgement)
 {
+  /* First, check for builtins, which should be treated as special cases. */
+  if (strcmp(judgement->judgement, "distinct") == 0)
+  {
+    /* In this case, we should have two arguments. Check for equality
+       of expressions. */
+    if (ARRAY_LENGTH(judgement->expression_args) != 2)
+    {
+      /* TODO: error. */
+      return 1;
+    }
+    const struct Expression *a = ARRAY_GET(judgement->expression_args,
+      struct Expression, 0);
+    const struct Expression *b = ARRAY_GET(judgement->expression_args,
+      struct Expression, 1);
+    if (expressions_equal(a, b))
+    {
+      /* TODO: error. */
+      return 1;
+    }
+    else
+    {
+      return 0;
+    }
+  }
+
   /* Loop through the judgements that we have proven, and check for equality
      by comparing names and the arguments passed. */
   for (size_t i = 0; i < ARRAY_LENGTH(env->proven); ++i)
@@ -1818,7 +1988,7 @@ validate_theorem(struct ValidationState *state,
           struct ASTNode, j);
         const struct SolASTNodeData *expr_data =
           get_sol_node_data_c(expr_node);
-        arg.value = validate_expression(state, expr_node, theorem);
+        arg.value = validate_expression(state, expr_node, theorem, 0);
         if (arg.value == NULL)
         {
           add_error(state->unit, expr_data->location,
@@ -1948,6 +2118,10 @@ validate_program(struct ValidationState *state)
   init_scope_node(state->scope_current);
 
   int err = validate_namespace(state, &state->input->ast_root);
+
+  /* Free everything. */
+  free_tree(&state->scope_tree_root);
+
   return err;
 }
 
