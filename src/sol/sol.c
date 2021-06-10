@@ -2145,6 +2145,20 @@ sol_verify(const char *file_path)
   identify_keywords(&lex_out, &lex_out, sol_keywords);
   remove_line_ends(&lex_out, &lex_out);
 
+  FILE *debug_out = fopen("debug.txt", "w");
+
+  char buf[4096];
+  for (size_t i = 0; i < ARRAY_LENGTH(lex_out.tokens); ++i)
+  {
+    const struct Token *tok = ARRAY_GET(lex_out.tokens, struct Token, i);
+    snprint_token(buf, 4096, tok);
+    fputs(buf, debug_out);
+    fputs("\n", debug_out);
+    //printf("%s\n", buf);
+  }
+
+  fclose(debug_out);
+
   /* Parse the file */
   struct ParserState parse_out = {};
   parse_out.unit = &unit;

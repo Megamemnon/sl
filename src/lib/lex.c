@@ -23,9 +23,11 @@ void
 snprint_token(char *s, size_t n, const struct Token *tok)
 {
   if (tok->value != NULL)
-    snprintf(s, n, "Token<%s : \"%s\">", token_type_names[tok->type], tok->value);
+    snprintf(s, n, "Token<%s : \"%s\", Line: %zu, Char: %zu>",
+      token_type_names[tok->type], tok->value, tok->line, tok->char_offset);
   else
-    snprintf(s, n, "Token<%s>", token_type_names[tok->type]);
+    snprintf(s, n, "Token<%s, Line: %zu, Char: %zu>",
+      token_type_names[tok->type], tok->line, tok->char_offset);
 }
 
 struct Token
