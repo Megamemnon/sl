@@ -165,6 +165,8 @@ struct JudgementInstance
 {
   char *judgement;
   Array expression_args;
+
+  const struct Token *location;
 };
 
 struct SolObject

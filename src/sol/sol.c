@@ -1226,6 +1226,10 @@ validate_assume(struct ValidationState *state,
   struct JudgementInstance assume;
 
   /* TODO: Lookup the relevant judgement. */
+  {
+    const struct SolASTNodeData *assume_data = get_sol_node_data_c(ast_assume);
+    assume.location = assume_data->location;
+  }
 
   /* Find the child that contains the arguments, and then validate each
      expression that is passed as an argument. */
@@ -1284,6 +1288,11 @@ validate_infer(struct ValidationState *state,
   struct SolObject *env)
 {
   struct JudgementInstance infer;
+
+  {
+    const struct SolASTNodeData *infer_data = get_sol_node_data_c(ast_infer);
+    infer.location = infer_data->location;
+  }
 
   /* TODO: Lookup the relevant judgement. */
 
@@ -2014,8 +2023,8 @@ validate_theorem(struct ValidationState *state,
     if (!judgement_proved(state, &env, infer))
     {
       /* TODO: error. */
-      add_error(state->unit, plist_data->location,
-        "inference not proven.");
+      add_error(state->unit, infer->location,
+        "inference not proven");
       return 1;
     }
   }
@@ -2174,7 +2183,6 @@ sol_verify(const char *file_path)
   //print_tree(&parse_out.ast_root, &print_sol_node);
 
   /* Free the token list. */
-  free_lex_result(&lex_out);
   PROPAGATE_ERROR(err);
 
   /* Validate the file. */
@@ -2188,6 +2196,7 @@ sol_verify(const char *file_path)
 
   /* Free the AST. */
   free_tree(&parse_out.ast_root);
+  free_lex_result(&lex_out);
   PROPAGATE_ERROR(err);
 
   close_compilation_unit(&unit);
