@@ -31,6 +31,7 @@ struct CompilationError
 {
   const struct Token *location;
   char *msg;
+  bool is_note;
 };
 
 struct CompilationUnit
@@ -62,6 +63,10 @@ free_lex_result(struct LexResult *result);
 
 void
 add_error(struct CompilationUnit *unit, const struct Token *location,
+  const char *msg);
+
+void
+add_note(struct CompilationUnit *unit, const struct Token *location,
   const char *msg);
 
 void

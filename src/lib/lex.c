@@ -73,7 +73,20 @@ add_error(struct CompilationUnit *unit, const struct Token *location,
 {
   struct CompilationError err = {
     .location = location,
-    .msg = strdup(msg)
+    .msg = strdup(msg),
+    .is_note = FALSE
+  };
+  ARRAY_APPEND(unit->errors, struct CompilationError, err);
+}
+
+void
+add_note(struct CompilationUnit *unit, const struct Token *location,
+  const char *msg)
+{
+  struct CompilationError err = {
+    .location = location,
+    .msg = strdup(msg),
+    .is_note = TRUE
   };
   ARRAY_APPEND(unit->errors, struct CompilationError, err);
 }
@@ -85,13 +98,31 @@ print_errors(struct CompilationUnit *unit)
   {
     struct CompilationError *err = ARRAY_GET(unit->errors,
       struct CompilationError, i);
-    char line_buf[4096];
-    size_t line_start = *ARRAY_GET(unit->line_map, size_t, err->location->line);
-    fseek(unit->source, line_start, SEEK_SET);
-    fgets(line_buf, 4096, unit->source);
-    printf("Error '%s' at line '%zu' of file '%s':\n", err->msg,
-      err->location->line + 1, unit->source_file);
-    printf("%zu  |  %s", err->location->line + 1, line_buf);
+    if (err->location == NULL)
+    {
+      if (!err->is_note)
+        printf("Error: %s\n", err->msg);
+      else
+        printf("Note: %s\n", err->msg);
+    }
+    else
+    {
+      size_t line_start = *ARRAY_GET(unit->line_map, size_t, err->location->line);
+      char line_buf[4096];
+      fseek(unit->source, line_start, SEEK_SET);
+      fgets(line_buf, 4096, unit->source);
+      if (!err->is_note)
+      {
+        printf("Error at line '%zu' of file '%s': %s\n",
+          err->location->line + 1, unit->source_file,  err->msg);
+      }
+      else
+      {
+        printf("Note at line '%zu' of file '%s': %s\n",
+          err->location->line + 1, unit->source_file,  err->msg);
+      }
+      printf("%zu  |  %s", err->location->line + 1, line_buf);
+    }
   }
 }
 

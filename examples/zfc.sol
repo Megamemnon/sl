@@ -143,29 +143,18 @@ prop
     step WF_implication(\(not $psi implies not $phi)\, \($phi implies $psi)\);
   }
 
-  theorem
-  double_modus_ponens(phi, psi, chi)
-  {
-    assume is_formula(\$phi\);
-    assume is_formula(\$psi\);
-    assume is_formula(\$chi\);
+  /*
 
-    assume has_proof(\$phi\);
-    assume has_proof(\$psi\);
-    assume has_proof(\($phi implies ($psi implies $chi))\);
+  Common theorems of propositional calculus, based on the list given in
+  https://en.wikipedia.org/wiki/Hilbert_system
 
-    infer has_proof(\$chi\);
-
-    step WF_implication(\$psi\, \$chi\);
-    step modus_ponens(\$phi\, \($psi implies $chi)\);
-    step modus_ponens(\$psi\, \$chi\);
-  }
-
+  */
   theorem
   identity(phi)
   {
     assume is_formula(\$phi\);
 
+    infer is_formula(\($phi implies $phi)\);
     infer has_proof(\($phi implies $phi)\);
 
     step WF_implication(\$phi\, \$phi\);
@@ -178,6 +167,339 @@ prop
       \($phi implies $phi)\);
   }
 
+  theorem
+  hypothetical_syllogism(phi, psi, chi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+    assume is_formula(\$chi\);
+
+    infer has_proof(\(($psi implies $chi) implies
+      (($phi implies $psi) implies ($phi implies $chi)))\);
+    infer is_formula(\($psi implies $chi)\);
+    infer is_formula(\($phi implies $psi)\);
+    infer is_formula(\($phi implies $chi)\);
+    infer is_formula(\(($phi implies $psi) implies ($phi implies $chi))\);
+    infer is_formula(\(($psi implies $chi) implies
+      (($phi implies $psi) implies ($phi implies $chi)))\);
+
+    step WF_implication(\$psi\, \$chi\);
+    step WF_implication(\$phi\, \$psi\);
+    step WF_implication(\$phi\, \$chi\);
+    step WF_implication(\($phi implies $psi)\, \($phi implies $chi)\);
+    step WF_implication(\($psi implies $chi)\,
+      \(($phi implies $psi) implies ($phi implies $chi))\);
+
+    step distributive(\$phi\, \$psi\, \$chi\);
+    step simplification(\(($phi implies ($psi implies $chi)) implies
+      (($phi implies $psi) implies ($phi implies $chi)))\,
+      \($psi implies $chi)\);
+    step modus_ponens(\(($phi implies ($psi implies $chi)) implies
+      (($phi implies $psi) implies ($phi implies $chi)))\,
+      \(($psi implies $chi) implies (($phi implies ($psi implies $chi)) implies
+      (($phi implies $psi) implies ($phi implies $chi))))\);
+    step distributive(\($psi implies $chi)\,
+      \($phi implies ($psi implies $chi))\,
+      \(($phi implies $psi) implies ($phi implies $chi))\);
+    step modus_ponens(\(($psi implies $chi) implies
+      (($phi implies ($psi implies $chi)) implies
+      (($phi implies $psi) implies ($phi implies $chi))))\,
+      \((($psi implies $chi) implies ($phi implies ($psi implies $chi))) implies
+      (($psi implies $chi) implies
+      (($phi implies $psi) implies ($phi implies $chi))))\);
+    step simplification(\($psi implies $chi)\, \$phi\);
+    step modus_ponens(\(($psi implies $chi)
+      implies ($phi implies ($psi implies $chi)))\,
+      \(($psi implies $chi) implies
+      (($phi implies $psi) implies ($phi implies $chi)))\);
+  }
+
+  theorem
+  hypothetical_syllogism_meta(phi, psi, chi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+    assume is_formula(\$chi\);
+    assume has_proof(\($psi implies $chi)\);
+    assume has_proof(\($phi implies $psi)\);
+
+    infer has_proof(\($phi implies $chi)\);
+    infer is_formula(\($phi implies $chi)\);
+
+    step WF_implication(\$phi\, \$chi\);
+
+    step hypothetical_syllogism(\$phi\, \$psi\, \$chi\);
+    step modus_ponens(\($psi implies $chi)\,
+      \(($phi implies $psi) implies ($phi implies $chi))\);
+    step modus_ponens(\($phi implies $psi)\, \($phi implies $chi)\);
+  }
+
+  theorem
+  double_simplification(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+
+    infer has_proof(\($phi implies (($phi implies $psi) implies $psi))\);
+    infer is_formula(\($phi implies $psi)\);
+    infer is_formula(\(($phi implies $psi) implies $psi)\);
+    infer is_formula(\($phi implies (($phi implies $psi) implies $psi))\);
+
+    step WF_implication(\$phi\, \$psi\);
+    step WF_implication(\($phi implies $psi)\, \$psi\);
+    step WF_implication(\$phi\, \(($phi implies $psi) implies $psi)\);
+
+    step distributive(\($phi implies $psi)\, \$phi\, \$psi\);
+    step identity(\($phi implies $psi)\);
+    step modus_ponens(\(($phi implies $psi) implies ($phi implies $psi))\,
+      \((($phi implies $psi) implies $phi)
+      implies (($phi implies $psi) implies $psi))\);
+    step hypothetical_syllogism(\$phi\, \(($phi implies $psi) implies $phi)\,
+      \(($phi implies $psi) implies $psi)\);
+    step modus_ponens(\((($phi implies $psi) implies $phi)
+      implies (($phi implies $psi) implies $psi))\,
+      \(($phi implies (($phi implies $psi) implies $phi)) implies
+      ($phi implies (($phi implies $psi) implies $psi)))\);
+    step simplification(\$phi\, \($phi implies $psi)\);
+    step modus_ponens(\($phi implies (($phi implies $psi) implies $phi))\,
+      \($phi implies (($phi implies $psi) implies $psi))\);
+  }
+
+  theorem
+  double_negation_left(phi)
+  {
+    assume is_formula(\$phi\);
+
+    infer has_proof(\(not not $phi implies $phi)\);
+    infer is_formula(\not $phi\);
+    infer is_formula(\not not $phi\);
+    infer is_formula(\(not not $phi implies $phi)\);
+
+    step WF_negation(\$phi\);
+    step WF_negation(\not $phi\);
+    step WF_implication(\not not $phi\, \$phi\);
+
+    step simplification(\$phi\, \$phi\); /* This can be any formula that is axiomatically true */
+    step WF_negation(\($phi implies ($phi implies $phi))\);
+    step transposition(\not $phi\, \not ($phi implies ($phi implies $phi))\);
+    step transposition(\($phi implies ($phi implies $phi))\, \$phi\);
+    step hypothetical_syllogism_meta(\(not not ($phi implies
+      ($phi implies $phi)) implies not not $phi)\,
+      \(not $phi implies not ($phi implies ($phi implies $phi)))\,
+      \(($phi implies ($phi implies $phi)) implies $phi)\);
+    step simplification(\not not $phi\,
+      \not not ($phi implies ($phi implies $phi))\);
+    step hypothetical_syllogism_meta(\not not $phi\,
+      \(not not ($phi implies ($phi implies $phi)) implies not not $phi)\,
+      \(($phi implies ($phi implies $phi)) implies $phi)\);
+    step double_simplification(\($phi implies ($phi implies $phi))\, \$phi\);
+    step modus_ponens(\($phi implies ($phi implies $phi))\,
+      \((($phi implies ($phi implies $phi)) implies $phi) implies $phi)\);
+    step hypothetical_syllogism_meta(\not not $phi\,
+      \(($phi implies ($phi implies $phi)) implies $phi)\,
+      \$phi\);
+  }
+
+  theorem
+  double_negation_right(phi)
+  {
+    assume is_formula(\$phi\);
+
+    infer has_proof(\($phi implies not not $phi)\);
+    infer is_formula(\not $phi\);
+    infer is_formula(\not not $phi\);
+    infer is_formula(\($phi implies not not $phi)\);
+
+    step WF_negation(\$phi\);
+    step WF_negation(\not $phi\);
+    step WF_implication(\$phi\, \not not $phi\);
+
+    step double_negation_left(\not $phi\);
+    step transposition(\$phi\, \not not $phi\);
+    step modus_ponens(\(not not not $phi implies not $phi)\,
+      \($phi implies not not $phi)\);
+  }
+
+  theorem
+  implication_commutation(phi, psi, chi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+    assume is_formula(\$chi\);
+
+    infer has_proof(\(($phi implies ($psi implies $chi)) implies
+      ($psi implies ($phi implies $chi)))\);
+    infer is_formula(\($phi implies $chi)\);
+    infer is_formula(\($psi implies $chi)\);
+    infer is_formula(\($phi implies ($psi implies $chi))\);
+    infer is_formula(\($psi implies ($phi implies $chi))\);
+    infer is_formula(\(($phi implies ($psi implies $chi)) implies
+      ($psi implies ($phi implies $chi)))\);
+
+    step WF_implication(\$phi\, \$chi\);
+    step WF_implication(\$psi\, \$chi\);
+    step WF_implication(\$phi\, \($psi implies $chi)\);
+    step WF_implication(\$psi\, \($phi implies $chi)\);
+    step WF_implication(\($phi implies ($psi implies $chi))\,
+      \($psi implies ($phi implies $chi))\);
+
+    step distributive(\$phi\, \$psi\, \$chi\);
+    step hypothetical_syllogism(\$psi\, \($phi implies $psi)\,
+      \($phi implies $chi)\);
+    step hypothetical_syllogism_meta(\($phi implies ($psi implies $chi))\,
+      \(($phi implies $psi) implies ($phi implies $chi))\,
+      \(($psi implies ($phi implies $psi)) implies
+      ($psi implies ($phi implies $chi)))\);
+    step distributive(\($phi implies ($psi implies $chi))\,
+      \($psi implies ($phi implies $psi))\,
+      \($psi implies ($phi implies $chi))\);
+    step modus_ponens(\(($phi implies ($psi implies $chi)) implies
+      (($psi implies ($phi implies $psi))
+      implies ($psi implies ($phi implies $chi))))\,
+      \((($phi implies ($psi implies $chi)) implies ($psi implies
+      ($phi implies $psi))) implies (($phi implies ($psi implies $chi)) implies
+      ($psi implies ($phi implies $chi))))\);
+    step simplification(\$psi\, \$phi\);
+    step simplification(\($psi implies ($phi implies $psi))\,
+      \($phi implies ($psi implies $chi))\);
+    step modus_ponens(\($psi implies ($phi implies $psi))\,
+      \(($phi implies ($psi implies $chi)) implies
+      ($psi implies ($phi implies $psi)))\);
+    step modus_ponens(\(($phi implies ($psi implies $chi)) implies
+      ($psi implies ($phi implies $psi)))\,
+      \(($phi implies ($psi implies $chi)) implies
+      ($psi implies ($phi implies $chi)))\);
+  }
+
+  theorem
+  hypothetical_syllogism_2(phi, psi, chi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+    assume is_formula(\$chi\);
+
+    infer has_proof(\(($phi implies $psi) implies
+      (($psi implies $chi) implies ($phi implies $chi)))\);
+    infer is_formula(\($phi implies $psi)\);
+    infer is_formula(\($psi implies $chi)\);
+    infer is_formula(\($phi implies $chi)\);
+    infer is_formula(\(($psi implies $chi) implies ($phi implies $chi))\);
+    infer is_formula(\(($phi implies $psi) implies
+      (($psi implies $chi) implies ($phi implies $chi)))\);
+
+    step hypothetical_syllogism(\$phi\, \$psi\, \$chi\);
+    step implication_commutation(\($psi implies $chi)\, \($phi implies $psi)\,
+      \($phi implies $chi)\);
+    step modus_ponens(\(($psi implies $chi) implies
+      (($phi implies $psi) implies ($phi implies $chi)))\,
+      \(($phi implies $psi) implies
+      (($psi implies $chi) implies ($phi implies $chi)))\);
+  }
+
+  theorem
+  transposition_2(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+
+    infer has_proof(\(($phi implies $psi) implies
+      (not $psi implies not $phi))\);
+    infer is_formula(\($phi implies $psi)\);
+    infer is_formula(\not $phi\);
+    infer is_formula(\not $psi\);
+    infer is_formula(\(not $psi implies not $phi)\);
+    infer is_formula(\(($phi implies $psi) implies
+      (not $psi implies not $phi))\);
+
+    step double_negation_right(\$psi\);
+    step hypothetical_syllogism(\$phi\, \$psi\, \not not $psi\);
+    step modus_ponens(\($psi implies not not $psi)\,
+      \(($phi implies $psi) implies ($phi implies not not $psi))\);
+    step double_negation_left(\$phi\);
+    step hypothetical_syllogism_2(\not not $phi\, \$phi\, \not not $psi\);
+    step modus_ponens(\(not not $phi implies $phi)\,
+      \(($phi implies not not $psi) implies
+      (not not $phi implies not not $psi))\);
+    step hypothetical_syllogism_meta(\($phi implies $psi)\,
+      \($phi implies not not $psi)\,
+      \(not not $phi implies not not $psi)\);
+    step transposition(\not $psi\, \not $phi\);
+    step hypothetical_syllogism_meta(\($phi implies $psi)\,
+      \(not not $phi implies not not $psi)\,
+      \(not $psi implies not $phi)\);
+  }
+
+  theorem
+  modus_tollens(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+    assume has_proof(\($phi implies $psi)\);
+    assume has_proof(\not $psi\);
+
+    infer has_proof(\not $phi\);
+
+    step transposition_2(\$phi\, \$psi\);
+    step modus_ponens(\($phi implies $psi)\, \(not $psi implies not $phi)\);
+    step modus_ponens(\not $psi\, \not $phi\);
+  }
+
+  theorem
+  transposition_3(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+
+    infer has_proof(\((not $phi implies $psi)
+      implies (not $psi implies $phi))\);
+
+    step WF_negation(\$phi\);
+    step transposition_2(\not $phi\, \$psi\);
+    step double_negation_left(\$phi\);
+    step hypothetical_syllogism(\not $psi\, \not not $phi\, \$phi\);
+    step modus_ponens(\(not not $phi implies $phi)\,
+      \((not $psi implies not not $phi) implies (not $psi implies $phi))\);
+    step hypothetical_syllogism_meta(\(not $phi implies $psi)\,
+      \(not $psi implies not not $phi)\,
+      \(not $psi implies $phi)\);
+  }
+
+  theorem
+  contradiction(phi)
+  {
+    assume is_formula(\$phi\);
+
+    infer has_proof(\((not $phi implies $phi) implies $phi)\);
+
+    step WF_negation(\$phi\);
+    step WF_implication(\$phi\, \$phi\);
+    step WF_negation(\($phi implies $phi)\);
+    step WF_negation(\not ($phi implies $phi)\);
+    step simplification(\not $phi\, \not not ($phi implies $phi)\);
+    step transposition(\$phi\, \not ($phi implies $phi)\);
+    step hypothetical_syllogism_meta(\not $phi\,
+      \(not not ($phi implies $phi) implies not $phi)\,
+      \($phi implies not ($phi implies $phi))\);
+    step distributive(\not $phi\, \$phi\, \not ($phi implies $phi)\);
+    step modus_ponens(\(not $phi implies
+      ($phi implies not ($phi implies $phi)))\,
+      \((not $phi implies $phi)
+      implies (not $phi implies not ($phi implies $phi)))\);
+    step transposition(\($phi implies $phi)\, \$phi\);
+    step hypothetical_syllogism_meta(\(not $phi implies $phi)\,
+      \(not $phi implies not ($phi implies $phi))\,
+      \(($phi implies $phi) implies $phi)\);
+    step identity(\$phi\);
+    step double_simplification(\($phi implies $phi)\, \$phi\);
+    step modus_ponens(\($phi implies $phi)\,
+      \((($phi implies $phi) implies $phi) implies $phi)\);
+    step hypothetical_syllogism_meta(\(not $phi implies $phi)\,
+      \(($phi implies $phi) implies $phi)\,
+      \$phi\);
+  }
+
+  /* Extend the system to include the other connectives we use and prove common
+     theorems. */
   axiom
   WF_biconditional(phi, psi)
   {
@@ -213,6 +535,7 @@ prop
     step _D_biconditional(\$phi\, \$psi\);
   }
 
+/*
   theorem
   biconditional_to_implication(phi, psi)
   {
@@ -221,6 +544,7 @@ prop
 
     infer has_proof(\(($phi iff $psi) implies ($phi implies $psi))\);
   }
+*/
 
   axiom
   WF_and(phi, psi)
@@ -305,7 +629,20 @@ First Order Logic (with Equality):
 
 Define terms, variables, and quantification. After developing the rules
 for free and bound variables, add the axioms for first order logic with
-equality. Then prove utility theorems.
+equality. Then prove utility theorems. We use the following definitions
+from Mendelsonfor free, bound, and free for:
+
+An occurrence of a variable x is said to be bound in a wf phi
+if either it is the occurrence of x in a quantifier (any x) in phi or it
+lies within the scope of a quantifier (any x) in phi.
+Otherwise, the occurrence is said to be free in phi.
+
+A variable is said to be free (bound) in a wf phi if it has a free (bound)
+occurrence in phi.
+
+If phi is a wf and t is a term, then t is said to be free for x in phi if
+no free occurrence of x in phi lies within the scope of any quantifier
+(any y), where y is a variable in t.
 
 */
 namespace
@@ -328,7 +665,7 @@ pred
   }
 
   axiom
-  universal_quantification(x, phi)
+  WF_universal(x, phi)
   {
     assume is_variable(\$x\);
     assume is_formula(\$phi\);
@@ -336,166 +673,54 @@ pred
     infer is_formula(\any $x $phi\);
   }
 
-  judgement
-  bound_in(x, phi);
-
-  judgement
-  free_in(x, phi);
-
-  judgement
-  is_atomic_formula(phi);
-
   axiom
-  free_atomic(x, phi)
-  {
-    assume is_variable(\$x\);
-    assume is_atomic_formula(\$phi\);
-
-    assume subexpression(\$x\, \$phi\);
-
-    infer free_in(\$x\, \$phi\);
-  }
-
-  axiom
-  bound_negation(x, phi)
+  _generalization(x, phi)
   {
     assume is_variable(\$x\);
     assume is_formula(\$phi\);
+    assume has_proof(\$phi\);
 
-    assume bound_in(\$x\, \$phi\);
-
-    infer bound_in(\$x\, \not $phi\);
+    infer has_proof(\any $x $phi\);
   }
 
-  axiom
-  free_negation(x, phi)
-  {
-    assume is_variable(\$x\);
-    assume is_formula(\$phi\);
-
-    assume free_in(\$x\, \$phi\);
-
-    infer free_in(\$x\, \not $phi\);
-  }
-
-  axiom
-  bound_implication_1(x, phi, psi)
-  {
-    assume is_variable(\$x\);
-    assume is_formula(\$phi\);
-    assume is_formula(\$psi\);
-
-    assume bound_in(\$x\, \$phi\);
-
-    infer bound_in(\$x\, \($phi implies $psi)\);
-  }
-
-  axiom
-  bound_implication_2(x, phi, psi)
-  {
-    assume is_variable(\$x\);
-    assume is_formula(\$phi\);
-    assume is_formula(\$psi\);
-
-    assume bound_in(\$x\, \$psi\);
-
-    infer bound_in(\$x\, \($phi implies $psi)\);
-  }
-
-  axiom
-  free_implication_1(x, phi, psi)
-  {
-    assume is_variable(\$x\);
-    assume is_formula(\$phi\);
-    assume is_formula(\$psi\);
-
-    assume free_in(\$x\, \$phi\);
-
-    infer free_in(\$x\, \($phi implies $psi)\);
-  }
-
-  axiom
-  free_implication_2(x, phi, psi)
-  {
-    assume is_variable(\$x\);
-    assume is_formula(\$phi\);
-    assume is_formula(\$psi\);
-
-    assume free_in(\$x\, \$psi\);
-
-    infer free_in(\$x\, \($phi implies $psi)\);
-  }
-
-  axiom
-  free_universal(x, y, phi)
-  {
-    assume is_variable(\$x\);
-    assume is_variable(\$y\);
-    assume is_formula(\$phi\);
-
-    assume free_in(\$x\, \$phi\);
-    assume distinct(\$x\, \$y\);
-
-    infer free_in(\$x\, \any $y $phi\);
-  }
-
-  axiom
-  bound_universal_1(x, phi)
-  {
-    assume is_variable(\$x\);
-    assume is_formula(\$phi\);
-
-    infer bound_in(\$x\, \any $x $phi\);
-  }
-
-  axiom
-  bound_universal_2(x, y, phi)
-  {
-    assume is_variable(\$x\);
-    assume is_variable(\$y\);
-    assume is_formula(\$phi\);
-
-    assume bound_in(\$x\, \$phi\);
-
-    infer bound_in(\$x\, \any $y $phi\);
-  }
-
-  axiom
-  instantiation(x, t, phi)
-  {
-    assume is_variable(\$x\);
-    assume is_term(\$t\);
-    assume is_formula(\$phi\);
-
-    assume free_in(\$t\, \$phi\);
-
-    infer has_proof(\(any $x $phi implies $phi[x=\$t\])\);
-  }
-
-  axiom
-  quantified_implication(x, phi, psi)
-  {
-    assume is_variable(\$x\);
-    assume is_formula(\$phi\);
-    assume is_formula(\$psi\);
-
-    infer has_proof(\(any $x ($phi implies $psi)) implies (any $x $phi
-      implies any $x $psi))\);
-  }
-
-  axiom
+  theorem
   generalization(x, phi)
   {
     assume is_variable(\$x\);
     assume is_formula(\$phi\);
+    assume has_proof(\$phi\);
 
-    assume bound_in(\$x\, \$phi\);
+    infer has_proof(\any $x $phi\);
 
-    infer has_proof(\($phi implies any $x $phi)\);
+    step _generalization(\$x\, \$phi\);
+    step WF_universal(\$x\, \$phi\);
   }
 
   axiom
-  equality(x, y)
+  _instantiation(x, t, phi)
+  {
+    assume is_variable(\$x\);
+    assume is_term(\$t\);
+    assume is_formula(\$phi\);
+    assume free_for(\$x\, \$t\, \$phi\);
+
+    infer has_proof(\any $x $phi implies $phi[x=\$t\]\);
+  }
+
+  axiom
+  _quantified_implication(x, phi, psi)
+  {
+    assume is_variable(\$x\);
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+    assume not_free_in(\$x\, \$phi\);
+
+    infer has_proof(\(any $x ($phi implies $psi) implies
+      ($phi implies any $x $psi))\);
+  }
+
+  axiom
+  WF_equality(x, y)
   {
     assume is_term(\$x\);
     assume is_term(\$y\);
@@ -504,61 +729,22 @@ pred
   }
 
   axiom
-  equality_reflexive(x)
+  _eq_reflixive(x)
   {
     assume is_variable(\$x\);
 
-    infer has_proof(\$x = $x\);
+    infer has_proof(\any $x $x = $x\);
   }
 
   axiom
-  equality_substitution(x, y, z, phi)
-  {
-    assume is_term(\$x\);
-    assume is_term(\$y\);
-    assume is_variable(\$z\);
-    assume is_formula(\$phi\);
-
-    infer has_proof(\($x = $y implies ($phi[z=\$x\] implies $phi[z=\$y\]))\);
-  }
-
-  axiom
-  WF_existential(x, phi)
+  _eq_substitution(x, y, phi)
   {
     assume is_variable(\$x\);
+    assume is_variable(\$y\);
     assume is_formula(\$phi\);
+    assume free_for(\$x\, \$y\, \$phi\);
 
-    infer is_formula(\exists $x $phi\);
-  }
-
-  axiom
-  _D_existential(x, phi)
-  {
-    assume is_variable(\$x\);
-    assume is_formula(\$phi\);
-
-    infer has_proof(\(exists $x $phi iff not any $x not $phi)\);
-  }
-
-  theorem
-  D_existential(x, phi)
-  {
-    assume is_variable(\$x\);
-    assume is_formula(\$phi\);
-
-    infer has_proof(\(exists $x $phi iff not any $x not $phi)\);
-    infer is_formula(\not $phi\);
-    infer is_formula(\any $x not $phi\);
-    infer is_formula(\not any $x not $phi\);
-    infer is_formula(\exists $x $phi\);
-    infer is_formula(\(exists $x $phi iff not any $x not $phi)\);
-
-    step _D_existential(\$x\, \$phi\);
-    step WF_negation(\$phi\);
-    step universal_quantification(\$x\, \not $phi\);
-    step WF_negation(\any $x not $phi\);
-    step WF_existential(\$x\, \$phi\);
-    step WF_biconditional(\exists $x $phi\, \not any $x not $phi\);
+    infer has_proof(\($x = $y implies ($phi[x=\$x\] implies $phi[x=\$y\]))\);
   }
 }
 
@@ -608,8 +794,59 @@ zfc
     assume is_variable(\$y\);
     assume is_variable(\$z\);
 
-    infer has_proof(\($x subset $y iff any $z ($z in $x implies $z in $y))\);
+    infer has_proof(\any $x any $y
+      ($x subset $y iff any $z ($z in $x implies $z in $y))\);
   }
+
+  axiom
+  _variables()
+  {
+    infer is_variable(\_x\);
+    infer is_variable(\_y\);
+    infer is_variable(\_z\);
+  }
+
+  axiom
+  TMP_biconditional_implication(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+
+    infer has_proof(\(($phi iff $psi) implies ($phi implies $psi))\);
+  }
+
+/*
+  theorem
+  subset_reflexive(x)
+  {
+    assume is_variable(\$x\);
+
+    infer has_proof(\any $x $x subset $x\);
+
+    step _variables();
+    step variables_are_terms(\_z\);
+    step variables_are_terms(\$x\);
+    step WF_membership(\_z\, \$x\);
+    step identity(\_z in $x\);
+    step WF_implication(\_z in $x\, \_z in $x\);
+    step generalization(\_z\, \(_z in $x implies _z in $x)\);
+    step D_subset(\$x\, \$x\, \_z\);
+    step WF_subset(\$x\, \$x\);
+    step WF_biconditional(\$\, \\);
+    step WF_implication();
+  }
+*/
+
+/*
+  theorem subset_transitive(x, y, z)
+  {
+    assume is_variable(\$x\);
+    assume is_variable(\$y\);
+    assume is_variable(\$z\);
+
+    infer has_proof(\any $x any $y any $z (($x subset $y and $y subset $z) implies $x subset $z)\);
+  }
+*/
 
 /*
   theorem mutual_subsets(x, y)

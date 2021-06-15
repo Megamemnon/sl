@@ -1,3 +1,10 @@
+/*
+
+TODO:
+- Verify that judgements are declared before being used.
+
+*/
+
 #ifndef SOL_H
 #define SOL_H
 
@@ -126,7 +133,7 @@ struct Expression
 struct Substitution
 {
   char *dst;
-  struct Expression *src;
+  struct Expression src;
 };
 
 struct ExpressionSymbol
@@ -196,14 +203,13 @@ name_to_string(const struct ObjectName *name);
 
 struct ProofEnv
 {
-  //Array parameters;
   Array proven;
 };
 
 struct Argument
 {
   char *name;
-  struct Expression *value;
+  struct Expression value;
 };
 
 struct ArgumentList
@@ -253,8 +259,9 @@ struct ValidationState
   struct ASTNode *scope_current;
 };
 
-struct Expression *
+int
 validate_expression(struct ValidationState *state,
+  struct Expression *dst,
   const struct ASTNode *ast_expression,
   const struct SolObject *env,
   int depth);
@@ -281,9 +288,10 @@ int
 validate_axiom(struct ValidationState *state,
   const struct ASTNode *ast_axiom);
 
-struct Expression *
+int
 substitute_into_expression(struct ValidationState *state,
-  const struct Expression *expr, const struct ArgumentList *args);
+  struct Expression *dst, const struct Expression *expr,
+  const struct ArgumentList *args);
 
 bool
 symbols_equal(const struct ExpressionSymbol *a,

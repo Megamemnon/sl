@@ -17,7 +17,7 @@ struct CommandLineOption
 struct CommandLine
 {
   int argc;
-  const char **argv;
+  char * const *argv;
 
   Array options;
   Array arguments;
@@ -25,5 +25,8 @@ struct CommandLine
 
 int
 parse_command_line(struct CommandLine *cl);
+
+void
+free_command_line(struct CommandLine *cl);
 
 #endif
