@@ -500,6 +500,384 @@ prop
 
   /* Extend the system to include the other connectives we use and prove common
      theorems. */
+  /* TODO: Instead of explicitly adding these connectives and their properties
+     as axioms, add them as extension by definition and prove these properties
+     as theorems. */
+  axiom
+  WF_conjunction(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+
+    infer is_formula(\($phi and $psi)\);
+  }
+
+  axiom
+  _conjunction_introduction(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+
+    infer has_proof(\($phi implies ($psi implies ($phi and $psi)))\);
+  }
+
+  theorem
+  conjunction_introduction(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+
+    infer has_proof(\($phi implies ($psi implies ($phi and $psi)))\);
+    infer is_formula(\($phi and $psi)\);
+    infer is_formula(\($psi implies ($phi and $psi))\);
+    infer is_formula(\($phi implies ($psi implies ($phi and $psi)))\);
+
+    step _conjunction_introduction(\$phi\, \$psi\);
+    step WF_conjunction(\$phi\, \$psi\);
+    step WF_implication(\$psi\, \($phi and $psi)\);
+    step WF_implication(\$phi\, \($psi implies ($phi and $psi))\);
+  }
+
+  theorem
+  conjunction_introduction_meta(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+    assume has_proof(\$phi\);
+    assume has_proof(\$psi\);
+
+    infer has_proof(\($phi and $psi)\);
+    infer is_formula(\($phi and $psi)\);
+
+    step conjunction_introduction(\$phi\, \$psi\);
+    step modus_ponens(\$phi\, \($psi implies ($phi and $psi))\);
+    step modus_ponens(\$psi\, \($phi and $psi)\);
+  }
+
+  axiom
+  _conjunction_elimination_left(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+
+    infer has_proof(\(($phi and $psi) implies $phi)\);
+  }
+
+  theorem
+  conjunction_elimination_left(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+
+    infer has_proof(\(($phi and $psi) implies $phi)\);
+    infer is_formula(\($phi and $psi)\);
+    infer is_formula(\(($phi and $psi) implies $phi)\);
+
+    step WF_conjunction(\$phi\, \$psi\);
+    step WF_implication(\($phi and $psi)\, \$phi\);
+    step _conjunction_elimination_left(\$phi\, \$psi\);
+  }
+
+  theorem
+  conjunction_elimination_left_meta(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+    assume has_proof(\($phi and $psi)\);
+
+    infer has_proof(\$phi\);
+
+    step conjunction_elimination_left(\$phi\, \$psi\);
+    step modus_ponens(\($phi and $psi)\, \$phi\);
+  }
+
+  axiom
+  _conjunction_elimination_right(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+
+    infer has_proof(\(($phi and $psi) implies $psi)\);
+  }
+
+  theorem
+  conjunction_elimination_right(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+
+    infer has_proof(\(($phi and $psi) implies $psi)\);
+    infer is_formula(\($phi and $psi)\);
+    infer is_formula(\(($phi and $psi) implies $psi)\);
+
+    step WF_conjunction(\$phi\, \$psi\);
+    step WF_implication(\($phi and $psi)\, \$psi\);
+    step _conjunction_elimination_right(\$phi\, \$psi\);
+  }
+
+  theorem
+  conjunction_elimination_right_meta(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+    assume has_proof(\($phi and $psi)\);
+
+    infer has_proof(\$psi\);
+
+    step conjunction_elimination_right(\$phi\, \$psi\);
+    step modus_ponens(\($phi and $psi)\, \$psi\);
+  }
+
+  theorem
+  conjunction_elimination_meta(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+    assume has_proof(\($phi and $psi)\);
+
+    infer has_proof(\$phi\);
+    infer has_proof(\$psi\);
+
+    step conjunction_elimination_left_meta(\$phi\, \$psi\);
+    step conjunction_elimination_right_meta(\$phi\, \$psi\);
+  }
+
+  axiom
+  WF_disjunction(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+
+    infer is_formula(\($phi or $psi)\);
+  }
+
+  axiom
+  _disjunction_introduction_left(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+
+    infer has_proof(\($phi implies ($phi or $psi))\);
+  }
+
+  theorem
+  disjunction_introduction_left(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+
+    infer has_proof(\($phi implies ($phi or $psi))\);
+    infer is_formula(\($phi or $psi)\);
+    infer is_formula(\($phi implies ($phi or $psi))\);
+
+    step WF_disjunction(\$phi\, \$psi\);
+    step WF_implication(\$phi\, \($phi or $psi)\);
+    step _disjunction_introduction_left(\$phi\, \$psi\);
+  }
+
+  theorem
+  disjunction_introduction_left_meta(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+    assume has_proof(\$phi\);
+
+    infer has_proof(\($phi or $psi)\);
+    infer is_formula(\($phi or $psi)\);
+
+    step disjunction_introduction_left(\$phi\, \$psi\);
+    step modus_ponens(\$phi\, \($phi or $psi)\);
+  }
+
+  axiom
+  _disjunction_introduction_right(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+
+    infer has_proof(\($psi implies ($phi or $psi))\);
+  }
+
+  theorem
+  disjunction_introduction_right(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+
+    infer has_proof(\($psi implies ($phi or $psi))\);
+    infer is_formula(\($phi or $psi)\);
+    infer is_formula(\($psi implies ($phi or $psi))\);
+
+    step WF_disjunction(\$phi\, \$psi\);
+    step WF_implication(\$psi\, \($phi or $psi)\);
+    step _disjunction_introduction_right(\$phi\, \$psi\);
+  }
+
+  theorem
+  disjunction_introduction_right_meta(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+    assume has_proof(\$psi\);
+
+    infer has_proof(\($phi or $psi)\);
+    infer is_formula(\($phi or $psi)\);
+
+    step disjunction_introduction_right(\$phi\, \$psi\);
+    step modus_ponens(\$psi\, \($phi or $psi)\);
+  }
+
+  axiom
+  _disjunction_elimination(phi, psi, chi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+    assume is_formula(\$chi\);
+
+    infer has_proof(\((($phi implies $chi) implies ($psi implies $chi)) implies
+      (($phi or $psi) implies $chi))\);
+  }
+
+  theorem
+  disjunction_elimination(phi, psi, chi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+    assume is_formula(\$chi\);
+
+    infer has_proof(\((($phi implies $chi) implies ($psi implies $chi)) implies
+      (($phi or $psi) implies $chi))\);
+
+    step _disjunction_elimination(\$phi\, \$psi\, \$chi\);
+  }
+
+  theorem
+  disjunction_elimination_meta(phi, psi, chi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+    assume is_formula(\$chi\);
+    assume has_proof(\($phi implies $chi)\);
+    assume has_proof(\($psi implies $chi)\);
+    assume has_proof(\($phi or $psi)\);
+
+    infer has_proof(\$chi\);
+
+    step disjunction_elimination(\$phi\, \$psi\, \$chi\);
+    step WF_implication(\$phi\, \$chi\);
+    step WF_implication(\$psi\, \$chi\);
+    step simplification(\($psi implies $chi)\, \($phi implies $chi)\);
+    step modus_ponens(\($psi implies $chi)\,
+      \(($phi implies $chi) implies ($psi implies $chi))\);
+    step WF_disjunction(\$phi\, \$psi\);
+    step WF_implication(\($phi or $psi)\, \$chi\);
+    step modus_ponens(\(($phi implies $chi) implies ($psi implies $chi))\,
+      \(($phi or $psi) implies $chi)\);
+    step modus_ponens(\($phi or $psi)\, \$chi\);
+  }
+
+  axiom
+  WF_biconditional(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+
+    infer is_formula(\($phi iff $psi)\);
+  }
+
+  axiom
+  biconditional_introduction(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+
+    infer has_proof(\((($phi implies $psi) and ($psi implies $phi)) implies
+      ($phi iff $psi))\);
+  }
+
+  theorem
+  biconditional_introduction_meta(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+    assume has_proof(\($phi implies $psi)\);
+    assume has_proof(\($psi implies $phi)\);
+
+    infer has_proof(\($phi iff $psi)\);
+
+    step biconditional_introduction(\$phi\, \$psi\);
+    step WF_implication(\$phi\, \$psi\);
+    step WF_implication(\$psi\, \$phi\);
+    step conjunction_introduction_meta(\($phi implies $psi)\,
+      \($psi implies $phi)\);
+    step WF_biconditional(\$phi\, \$psi\);
+    step modus_ponens(\(($phi implies $psi) and ($psi implies $phi))\,
+      \($phi iff $psi)\);
+  }
+
+  axiom
+  biconditional_elimination_left(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+
+    infer has_proof(\(($phi iff $psi) implies ($psi implies $phi))\);
+  }
+
+  theorem
+  biconditional_elimination_left_meta(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+    assume has_proof(\($phi iff $psi)\);
+
+    infer has_proof(\($psi implies $phi)\);
+
+    step WF_biconditional(\$phi\, \$psi\);
+    step WF_implication(\$psi\, \$phi\);
+    step biconditional_elimination_left(\$phi\, \$psi\);
+    step modus_ponens(\($phi iff $psi)\, \($psi implies $phi)\);
+  }
+
+  axiom
+  biconditional_elimination_right(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+
+    infer has_proof(\(($phi iff $psi) implies ($phi implies $psi))\);
+  }
+
+  theorem
+  biconditional_elimination_right_meta(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+    assume has_proof(\($phi iff $psi)\);
+
+    infer has_proof(\($phi implies $psi)\);
+
+    step WF_biconditional(\$phi\, \$psi\);
+    step WF_implication(\$phi\, \$psi\);
+    step biconditional_elimination_right(\$phi\, \$psi\);
+    step modus_ponens(\($phi iff $psi)\, \($phi implies $psi)\);
+  }
+
+  theorem
+  biconditional_elimination_meta(phi, psi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+    assume has_proof(\($phi iff $psi)\);
+
+    infer has_proof(\($psi implies $phi)\);
+    infer has_proof(\($phi implies $psi)\);
+
+    step biconditional_elimination_left_meta(\$phi\, \$psi\);
+    step biconditional_elimination_right_meta(\$phi\, \$psi\);
+  }
+
+/*
   axiom
   WF_biconditional(phi, psi)
   {
@@ -535,7 +913,6 @@ prop
     step _D_biconditional(\$phi\, \$psi\);
   }
 
-/*
   theorem
   biconditional_to_implication(phi, psi)
   {
@@ -544,7 +921,6 @@ prop
 
     infer has_proof(\(($phi iff $psi) implies ($phi implies $psi))\);
   }
-*/
 
   axiom
   WF_and(phi, psi)
@@ -621,6 +997,7 @@ prop
     step WF_implication(\not $phi\, \$psi\);
     step WF_biconditional(\($phi or $psi)\, \(not $phi implies $psi)\);
   }
+*/
 }
 
 /*
