@@ -106,10 +106,17 @@ traverse_tree(const struct ASTNode *root,
   node_callback(root, user_data);
 }
 
+Array *
+parser_token_buffer(struct ParserState *state)
+{
+  return lex_state_front_buffer(state->input);
+}
+
 struct Token *
 get_current_token(struct ParserState *state)
 {
-  return ARRAY_GET(state->input->tokens, struct Token, state->token_index);
+  return ARRAY_GET(*lex_state_front_buffer(state->input),
+    struct Token, state->token_index);
 }
 
 void

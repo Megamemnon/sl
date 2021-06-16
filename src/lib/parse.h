@@ -57,12 +57,15 @@ struct ParserError
 struct ParserState
 {
   struct CompilationUnit *unit;
-  struct LexResult *input;
+  struct LexState *input;
   size_t token_index;
 
   struct ASTNode ast_root;
   struct ASTNode *ast_current;
 };
+
+Array *
+parser_token_buffer(struct ParserState *state);
 
 struct Token *
 get_current_token(struct ParserState *state);

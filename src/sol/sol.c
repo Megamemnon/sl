@@ -18,6 +18,7 @@ const char *sol_keywords[] = {
   "assume",
   "infer",
   "step",
+  "def",
   NULL
 };
 
@@ -88,7 +89,7 @@ static int
 parse_namespace_interior(struct ParserState *state)
 {
   int err = 0;
-  while (state->token_index < ARRAY_LENGTH(state->input->tokens)
+  while (state->token_index < ARRAY_LENGTH(*parser_token_buffer(state))
          && !consume_symbol(state, "}"))
   {
     if (consume_keyword(state, "namespace"))
@@ -288,7 +289,7 @@ parse_axiom(struct ParserState *state)
     return 1;
   }
 
-  while (state->token_index < ARRAY_LENGTH(state->input->tokens)
+  while (state->token_index < ARRAY_LENGTH(*parser_token_buffer(state))
          && !consume_symbol(state, "}"))
   {
     if (consume_keyword(state, "assume"))
@@ -353,7 +354,7 @@ parse_theorem(struct ParserState *state)
     return 1;
   }
 
-  while (state->token_index < ARRAY_LENGTH(state->input->tokens)
+  while (state->token_index < ARRAY_LENGTH(*parser_token_buffer(state))
          && !consume_symbol(state, "}"))
   {
     if (consume_keyword(state, "assume"))
@@ -377,6 +378,14 @@ parse_theorem(struct ParserState *state)
       add_child_and_descend(state);
       init_sol_node(state->ast_current);
       err = parse_step(state);
+      ascend(state);
+      PROPAGATE_ERROR(err);
+    }
+    else if (consume_keyword(state, "def"))
+    {
+      add_child_and_descend(state);
+      init_sol_node(state->ast_current);
+      err = parse_def(state);
       ascend(state);
       PROPAGATE_ERROR(err);
     }
@@ -456,6 +465,39 @@ parse_step(struct ParserState *state)
   {
     add_error(state->unit, get_current_token(state),
       "Expected ';' after proof step.");
+    return 1;
+  }
+
+  return 0;
+}
+
+int
+parse_def(struct ParserState *state)
+{
+  get_sol_node_data(state->ast_current)->location = get_current_token(state);
+  get_sol_node_data(state->ast_current)->type = NodeTypeDef;
+
+  const char *def_name;
+  if (!consume_identifier(state, &def_name))
+  {
+    add_error(state->unit, get_current_token(state),
+      "No definition name provided.");
+    return 1;
+  }
+  get_sol_node_data(state->ast_current)->name = strdup(def_name);
+
+  /* After the name, there should be an expression. */
+  add_child_and_descend(state);
+  init_sol_node(state->ast_current);
+  int err = parse_expression(state);
+  ascend(state);
+  PROPAGATE_ERROR(err);
+
+  /* Expect a semicolon. */
+  if (!consume_symbol(state, ";"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "Expected ';' after definition.");
     return 1;
   }
 
@@ -552,6 +594,19 @@ parse_expression(struct ParserState *state)
       int err = parse_expression_variable(state);
       ascend(state);
       PROPAGATE_ERROR(err);
+    }
+    else if (consume_symbol(state, "%"))
+    {
+      /* If there is a '%' symbol, we have a placeholder (NOT a metavariable,
+         just a C preprocessor-like subsitution). */
+      add_child_and_descend(state);
+      init_sol_node(state->ast_current);
+      get_sol_node_data(state->ast_current)->type = NodeTypeExpressionPlaceholder;
+      get_sol_node_data(state->ast_current)->location = get_current_token(state);
+      get_sol_node_data(state->ast_current)->name =
+        strdup(get_current_token(state)->value);
+      ascend(state);
+      advance(state);
     }
     else
     {
@@ -813,6 +868,9 @@ print_sol_node(char *buf, size_t len, const struct ASTNode *node)
     case NodeTypeStep:
       snprintf(buf, len, "Step");
       break;
+    case NodeTypeDef:
+      snprintf(buf, len, "Definition<Name: \"%s\">", name);
+      break;
     case NodeTypeJudgementExpression:
       snprintf(buf, len, "Judgement Expression<Name: \"%s\">", name);
       break;
@@ -916,6 +974,32 @@ free_expression(struct Expression *expression)
     free_expression_symbol(sym);
   }
   ARRAY_FREE(expression->symbols);
+}
+
+char *
+expression_to_string(const struct Expression *expr)
+{
+  size_t string_size = 0;
+  for (size_t i = 0; i < ARRAY_LENGTH(expr->symbols); ++i)
+  {
+    const struct ExpressionSymbol *sym = ARRAY_GET(expr->symbols,
+      struct ExpressionSymbol, i);
+    string_size += strlen(sym->value) + 1;
+  }
+
+  char *str = malloc(string_size);
+  char *c = str;
+  for (size_t i = 0; i < ARRAY_LENGTH(expr->symbols); ++i)
+  {
+    const struct ExpressionSymbol *sym = ARRAY_GET(expr->symbols,
+      struct ExpressionSymbol, i);
+    strcpy(c, sym->value);
+    c[strlen(sym->value)] = ' ';
+    c += strlen(sym->value) + 1;
+  }
+  str[string_size - 1] = '\0';
+
+  return str;
 }
 
 void
@@ -1045,6 +1129,41 @@ const struct SolScopeNodeData *
 get_scope_node_data_c(const struct ASTNode *node)
 {
   return (struct SolScopeNodeData *)node->data;
+}
+
+char *
+judgement_instance_to_string(const struct JudgementInstance *inst)
+{
+  size_t string_size = strlen(inst->judgement) + 2;
+
+  Array expressions;
+  ARRAY_INIT(expressions, char *);
+  for (size_t i = 0; i < ARRAY_LENGTH(inst->expression_args); ++i)
+  {
+    const struct Expression *expr = ARRAY_GET(inst->expression_args,
+      struct Expression, i);
+    char *expr_str = expression_to_string(expr);
+    ARRAY_APPEND(expressions, char *, expr_str);
+    string_size += strlen(expr_str) + 2;
+  }
+
+  char *str = malloc(string_size);
+  char *c = str;
+  strcpy(c, inst->judgement);
+  c[strlen(inst->judgement)] = '(';
+  c += strlen(inst->judgement) + 1;
+  for (size_t i = 0; i < ARRAY_LENGTH(inst->expression_args); ++i)
+  {
+    const struct Expression *expr = ARRAY_GET(inst->expression_args,
+      struct Expression, i);
+    char *expr_str = expression_to_string(expr);
+    strcpy(c, expr_str);
+    c[strlen(expr_str)] = ',';
+    c[strlen(expr_str) + 1] = ' ';
+    c += strlen(expr_str) + 2;
+  }
+  str[string_size - 1] = '\0';
+  return str;
 }
 
 int
@@ -1796,7 +1915,10 @@ instantiate_object(struct ValidationState *state, const struct SolObject *obj,
       substitute_into_expression(state, &expr, expr_pre, args);
       ARRAY_APPEND(infer.expression_args, struct Expression, expr);
     }
-    ARRAY_APPEND(env->proven, struct JudgementInstance, infer);
+    char *str = judgement_instance_to_string(&infer);
+    //printf("%s\n", str);
+    //free(str);
+    //ARRAY_APPEND(env->proven, struct JudgementInstance, infer);
   }
 
   return 0;
@@ -1886,7 +2008,6 @@ validate_theorem(struct ValidationState *state,
   }
 
   ARRAY_INIT(theorem->parameters, struct Parameter);
-
   for (size_t i = 0; i < ARRAY_LENGTH(ast_plist->children); ++i)
   {
     const struct ASTNode *child = ARRAY_GET(ast_plist->children,
@@ -1924,14 +2045,6 @@ validate_theorem(struct ValidationState *state,
     {
       int err = validate_infer(state, child, theorem);
       PROPAGATE_ERROR(err);
-    }
-    else if (child_data->type != NodeTypeParameterList &&
-      child_data->type != NodeTypeStep)
-    {
-      /* TODO: error. */
-      add_error(state->unit, child_data->location,
-        "incorrect node type.");
-      return 1;
     }
   }
 
@@ -2190,17 +2303,18 @@ sol_verify(const char *file_path)
   open_compilation_unit(&unit, file_path);
 
   /* Lex the file */
-  struct LexResult lex_out = {};
+  struct LexState lex_out = {};
 
+  init_lex_state(&lex_out);
   file_to_lines(&lex_out, &unit);
-  remove_whitespace(&lex_out, &lex_out);
-  separate_symbols(&lex_out, &lex_out);
-  identify_symbols(&lex_out, &lex_out, sol_symbols);
-  remove_block_comments(&lex_out, &lex_out, "/*", "*/");
-  remove_line_comments(&lex_out, &lex_out, "//");
-  separate_identifiers(&lex_out, &lex_out);
-  identify_keywords(&lex_out, &lex_out, sol_keywords);
-  remove_line_ends(&lex_out, &lex_out);
+  remove_whitespace(&lex_out);
+  separate_symbols(&lex_out);
+  identify_symbols(&lex_out, sol_symbols);
+  remove_block_comments(&lex_out, "/*", "*/");
+  remove_line_comments(&lex_out, "//");
+  separate_identifiers(&lex_out);
+  identify_keywords(&lex_out, sol_keywords);
+  remove_line_ends(&lex_out);
 
   /* Parse the file */
   struct ParserState parse_out = {};
@@ -2229,7 +2343,7 @@ sol_verify(const char *file_path)
 
   /* Free the AST. */
   free_tree(&parse_out.ast_root);
-  free_lex_result(&lex_out);
+  free_lex_state(&lex_out);
   PROPAGATE_ERROR(err);
 
   close_compilation_unit(&unit);

@@ -4,7 +4,6 @@ TODO:
 - Verify that judgements are declared before being used.
 
 */
-
 #ifndef SOL_H
 #define SOL_H
 
@@ -27,12 +26,14 @@ enum SolASTNodeType
   NodeTypeAssume,
   NodeTypeInfer,
   NodeTypeStep,
+  NodeTypeDef,
 
   NodeTypeJudgementExpression,
   NodeTypeInferenceExpression,
   NodeTypeExpression,
   NodeTypeExpressionConstant,
   NodeTypeExpressionVariable,
+  NodeTypeExpressionPlaceholder,
 
   NodeTypeSubstitutionMap,
   NodeTypeSubstitution,
@@ -93,6 +94,9 @@ parse_infer(struct ParserState *state);
 
 int
 parse_step(struct ParserState *state);
+
+int
+parse_def(struct ParserState *state);
 
 int
 parse_judgement_expression(struct ParserState *state);
@@ -156,6 +160,9 @@ copy_expression_symbol(struct ExpressionSymbol *dst,
 int
 copy_expression(struct Expression *dst, const struct Expression *src);
 
+char *
+expression_to_string(const struct Expression *expr);
+
 struct Parameter
 {
   char *name;
@@ -175,6 +182,9 @@ struct JudgementInstance
 
   const struct Token *location;
 };
+
+char *
+judgement_instance_to_string(const struct JudgementInstance *inst);
 
 struct SolObject
 {

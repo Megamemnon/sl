@@ -279,6 +279,8 @@ prop
     step WF_negation(\not $phi\);
     step WF_implication(\not not $phi\, \$phi\);
 
+    def phi0 \($phi implies ($phi implies $phi))\;
+
     step simplification(\$phi\, \$phi\); /* This can be any formula that is axiomatically true */
     step WF_negation(\($phi implies ($phi implies $phi))\);
     step transposition(\not $phi\, \not ($phi implies ($phi implies $phi))\);
@@ -876,128 +878,6 @@ prop
     step biconditional_elimination_left_meta(\$phi\, \$psi\);
     step biconditional_elimination_right_meta(\$phi\, \$psi\);
   }
-
-/*
-  axiom
-  WF_biconditional(phi, psi)
-  {
-    assume is_formula(\$phi\);
-    assume is_formula(\$psi\);
-
-    infer is_formula(\($phi iff $psi)\);
-  }
-
-  axiom
-  _D_biconditional(phi, psi)
-  {
-    assume is_formula(\$phi\);
-    assume is_formula(\$psi\);
-
-    infer has_proof(\not ((($phi iff $psi) implies not (($phi implies $psi)
-      implies not ($psi implies $phi))) implies not
-      ((not (($phi implies $psi) implies not
-      ($psi implies $phi))) implies ($phi iff $psi)))\);
-  }
-
-  theorem
-  D_biconditional(phi, psi)
-  {
-    assume is_formula(\$phi\);
-    assume is_formula(\$psi\);
-
-    infer has_proof(\not ((($phi iff $psi) implies not (($phi implies $psi)
-      implies not ($psi implies $phi))) implies not
-      ((not (($phi implies $psi) implies not
-      ($psi implies $phi))) implies ($phi iff $psi)))\);
-
-    step _D_biconditional(\$phi\, \$psi\);
-  }
-
-  theorem
-  biconditional_to_implication(phi, psi)
-  {
-    assume is_formula(\$phi\);
-    assume is_formula(\$psi\);
-
-    infer has_proof(\(($phi iff $psi) implies ($phi implies $psi))\);
-  }
-
-  axiom
-  WF_and(phi, psi)
-  {
-    assume is_formula(\$phi\);
-    assume is_formula(\$psi\);
-
-    infer is_formula(\($phi and $psi)\);
-  }
-
-  axiom
-  _D_and(phi, psi)
-  {
-    assume is_formula(\$phi\);
-    assume is_formula(\$psi\);
-
-    infer has_proof(\(($phi and $psi) iff not ($phi implies not $psi))\);
-  }
-
-  theorem
-  D_and(phi, psi)
-  {
-    assume is_formula(\$phi\);
-    assume is_formula(\$psi\);
-
-    infer has_proof(\(($phi and $psi) iff not ($phi implies not $psi))\);
-    infer is_formula(\($phi and $psi)\);
-    infer is_formula(\not $psi\);
-    infer is_formula(\($phi implies not $psi)\);
-    infer is_formula(\not ($phi implies not $psi)\);
-    infer is_formula(\(($phi and $psi) iff not ($phi implies not $psi))\);
-
-    step _D_and(\$phi\, \$psi\);
-    step WF_and(\$phi\, \$psi\);
-    step WF_negation(\$psi\);
-    step WF_implication(\$phi\, \not $psi\);
-    step WF_negation(\($phi implies not $psi)\);
-    step WF_biconditional(\($phi and $psi)\, \not ($phi implies not $psi)\);
-  }
-
-  axiom
-  WF_or(phi, psi)
-  {
-    assume is_formula(\$phi\);
-    assume is_formula(\$psi\);
-
-    infer is_formula(\($phi or $psi)\);
-  }
-
-  axiom
-  _D_or(phi, psi)
-  {
-    assume is_formula(\$phi\);
-    assume is_formula(\$psi\);
-
-    infer has_proof(\(($phi or $psi) iff (not $phi implies $psi))\);
-  }
-
-  theorem
-  D_or(phi, psi)
-  {
-    assume is_formula(\$phi\);
-    assume is_formula(\$psi\);
-
-    infer has_proof(\(($phi or $psi) iff (not $phi implies $psi))\);
-    infer is_formula(\($phi or $psi)\);
-    infer is_formula(\not $phi\);
-    infer is_formula(\(not $phi implies $psi)\);
-    infer is_formula(\(($phi or $psi) iff (not $phi implies $psi))\);
-
-    step _D_or(\$phi\, \$psi\);
-    step WF_or(\$phi\, \$psi\);
-    step WF_negation(\$phi\);
-    step WF_implication(\not $phi\, \$psi\);
-    step WF_biconditional(\($phi or $psi)\, \(not $phi implies $psi)\);
-  }
-*/
 }
 
 /*
@@ -1033,6 +913,12 @@ pred
   judgement
   is_variable(x);
 
+  judgement
+  can_substitute(t, x, phi);
+
+  judgement
+  not_free_in(x, phi);
+
   axiom
   variables_are_terms(x)
   {
@@ -1048,6 +934,72 @@ pred
     assume is_formula(\$phi\);
 
     infer is_formula(\any $x $phi\);
+  }
+
+  axiom
+  _instantiation(x, t, phi)
+  {
+    assume is_variable(\$x\);
+    assume is_term(\$t\);
+    assume is_formula(\$phi\);
+    assume can_substitute(\$t\, \$x\, \$phi\);
+
+    infer has_proof(\(any $x $phi implies $phi[x=\$t\])\);
+  }
+
+  theorem
+  instantiation(x, t, phi)
+  {
+    assume is_variable(\$x\);
+    assume is_term(\$t\);
+    assume is_formula(\$phi\);
+    assume can_substitute(\$t\, \$x\, \$phi\);
+
+    infer has_proof(\(any $x $phi implies $phi[x=\$t\])\);
+    infer is_formula(\any $x $phi\);
+    infer is_formula(\(any $x $phi implies $phi[x=\$t\])\);
+
+    step _instantiation(\$x\, \$t\, \$phi\);
+    step WF_universal(\$x\, \$phi\);
+    step WF_implication(\any $x $phi\, \$phi[x=\$t\]\);
+  }
+
+  axiom
+  _quantified_implication(x, phi, psi)
+  {
+    assume is_variable(\$x\);
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+
+    infer has_proof(\(any $x ($phi implies $psi) implies
+      (any $x $phi implies any $x $psi))\);
+  }
+
+  theorem
+  quantified_implication(x, phi, psi)
+  {
+    assume is_variable(\$x\);
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+
+    infer has_proof(\(any $x ($phi implies $psi) implies
+      (any $x $phi implies any $x $psi))\);
+    infer is_formula(\($phi implies $psi)\);
+    infer is_formula(\any $x ($phi implies $psi)\);
+    infer is_formula(\any $x $phi\);
+    infer is_formula(\any $x $psi\);
+    infer is_formula(\(any $x $phi implies any $x $psi)\);
+    infer is_formula(\(any $x ($phi implies $psi) implies
+      (any $x $phi implies any $x $psi))\);
+
+    step WF_implication(\$phi\, \$psi\);
+    step WF_universal(\$x\, \($phi implies $psi)\);
+    step WF_universal(\$x\, \$phi\);
+    step WF_universal(\$x\, \$psi\);
+    step WF_implication(\any $x $phi\, \any $x $psi\);
+    step WF_implication(\any $x ($phi implies $psi)\,
+      \(any $x $phi implies any $x $psi)\);
+    step _quantified_implication(\$x\, \$phi\, \$psi\);
   }
 
   axiom
@@ -1068,45 +1020,24 @@ pred
     assume has_proof(\$phi\);
 
     infer has_proof(\any $x $phi\);
+    infer is_formula(\any $x $phi\);
 
     step _generalization(\$x\, \$phi\);
     step WF_universal(\$x\, \$phi\);
   }
 
+  /* Introduce equality to our first order theory. */
   axiom
-  _instantiation(x, t, phi)
+  WF_equality(t1, t2)
   {
-    assume is_variable(\$x\);
-    assume is_term(\$t\);
-    assume is_formula(\$phi\);
-    assume free_for(\$x\, \$t\, \$phi\);
+    assume is_term(\$t1\);
+    assume is_term(\$t2\);
 
-    infer has_proof(\any $x $phi implies $phi[x=\$t\]\);
+    infer is_formula(\$t1 = $t2\);
   }
 
   axiom
-  _quantified_implication(x, phi, psi)
-  {
-    assume is_variable(\$x\);
-    assume is_formula(\$phi\);
-    assume is_formula(\$psi\);
-    assume not_free_in(\$x\, \$phi\);
-
-    infer has_proof(\(any $x ($phi implies $psi) implies
-      ($phi implies any $x $psi))\);
-  }
-
-  axiom
-  WF_equality(x, y)
-  {
-    assume is_term(\$x\);
-    assume is_term(\$y\);
-
-    infer is_formula(\$x = $y\);
-  }
-
-  axiom
-  _eq_reflixive(x)
+  _equality_reflexive(x)
   {
     assume is_variable(\$x\);
 
@@ -1114,14 +1045,104 @@ pred
   }
 
   axiom
-  _eq_substitution(x, y, phi)
+  equality_free_variables(t1, t2, x, y)
+  {
+    assume is_term(\$t1\);
+    assume is_term(\$t2\);
+    assume is_variable(\$x\);
+    assume is_variable(\$y\);
+
+    infer can_substitute(\$t1\, \$x\, \$x = $y\);
+    infer can_substitute(\$t2\, \$y\, \$x = $y\);
+  }
+
+  theorem
+  equality_reflexive(x)
+  {
+    assume is_variable(\$x\);
+
+    infer has_proof(\any $x $x = $x\);
+    infer is_formula(\$x = $x\);
+    infer is_formula(\any $x $x = $x\);
+
+    step _equality_reflexive(\$x\);
+    step variables_are_terms(\$x\);
+    step WF_equality(\$x\, \$x\);
+    step WF_universal(\$x\, \$x = $x\);
+  }
+
+  axiom
+  _equality_subsitution(x, y, z, phi)
   {
     assume is_variable(\$x\);
     assume is_variable(\$y\);
+    assume is_variable(\$z\);
     assume is_formula(\$phi\);
-    assume free_for(\$x\, \$y\, \$phi\);
+    assume can_substitute(\$x\, \$z\, \$phi\);
+    assume can_substitute(\$y\, \$z\, \$phi\);
 
-    infer has_proof(\($x = $y implies ($phi[x=\$x\] implies $phi[x=\$y\]))\);
+    infer has_proof(\any $x any $y
+      ($x = $y implies ($phi[z=\$x\] implies $phi[z=\$y\]))\);
+  }
+
+  theorem
+  equality_subsitution(x, y, z, phi)
+  {
+    assume is_variable(\$x\);
+    assume is_variable(\$y\);
+    assume is_variable(\$z\);
+    assume is_formula(\$phi\);
+    assume can_substitute(\$x\, \$z\, \$phi\);
+    assume can_substitute(\$y\, \$z\, \$phi\);
+
+    infer has_proof(\any $x any $y
+      ($x = $y implies ($phi[z=\$x\] implies $phi[z=\$y\]))\);
+    infer is_formula(\$x = $y\);
+    infer is_formula(\($phi[z=\$x\] implies $phi[z=\$y\])\);
+    infer is_formula(\($x = $y implies ($phi[z=\$x\] implies $phi[z=\$y\]))\);
+    infer is_formula(\any $y
+      ($x = $y implies ($phi[z=\$x\] implies $phi[z=\$y\]))\);
+    infer is_formula(\any $x any $y
+      ($x = $y implies ($phi[z=\$x\] implies $phi[z=\$y\]))\);
+
+    step _equality_subsitution(\$x\, \$y\, \$z\, \$phi\);
+    step variables_are_terms(\$x\);
+    step variables_are_terms(\$y\);
+    step WF_equality(\$x\, \$y\);
+    step WF_implication(\$phi[z=\$x\]\, \$phi[z=\$y\]\);
+    step WF_implication(\$x = $y\, \($phi[z=\$x\] implies $phi[z=\$y\])\);
+    step WF_universal(\$y\,
+      \($x = $y implies ($phi[z=\$x\] implies $phi[z=\$y\]))\);
+    step WF_universal(\$x\,
+      \any $y ($x = $y implies ($phi[z=\$x\] implies $phi[z=\$y\]))\);
+  }
+
+  axiom
+  pred_vars()
+  {
+    infer is_variable(\_x\);
+  }
+
+  theorem
+  equality_symmetric(x, y)
+  {
+    assume is_variable(\$x\);
+    assume is_variable(\$y\);
+
+    infer has_proof(\any $x any $y ($x = $y implies $y = $x)\);
+
+    step pred_vars();
+    step variables_are_terms(\_x\);
+    step variables_are_terms(\$x\);
+    step variables_are_terms(\$y\);
+    step WF_equality(\_x\, \$x\);
+    step equality_free_variables(\$x\, \$x\, \_x\, \$x\);
+    step equality_free_variables(\$y\, \$y\, \_x\, \$x\);
+    step equality_subsitution(\$x\, \$y\, \_x\, \_x = $x\);
+    step equality_reflexive(\$x\);
+    step equality_free_variables(\$x\, \$x\, \$x\, \$x\);
+    step instantiation(\$x\, \$x\, \$x = $x\);
+    step modus_ponens(\any $x $x = $x\, \$x = $x\);
   }
 }
 

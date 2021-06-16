@@ -34,60 +34,60 @@ typedef struct DynamicArray Array;
 
 #define ARRAY_INIT(array, type) \
 do { \
-  array.data = malloc(sizeof(type)); \
-  array.element_size = sizeof(type); \
-  array.length = 0; \
-  array.reserved = 1; \
+  (array).data = malloc(sizeof(type)); \
+  (array).element_size = sizeof(type); \
+  (array).length = 0; \
+  (array).reserved = 1; \
 } \
 while(0)
 
 #define ARRAY_INIT_WITH_RESERVED(array, type, to_reserve) \
 do { \
-  array.data = malloc(sizeof(type) * to_reserve); \
-  array.element_size = sizeof(type); \
-  array.length = 0; \
-  array.reserved = to_reserve; \
+  (array).data = malloc(sizeof(type) * to_reserve); \
+  (array).element_size = sizeof(type); \
+  (array).length = 0; \
+  (array).reserved = to_reserve; \
 } \
 while(0)
 
-#define ARRAY_LENGTH(array) array.length
+#define ARRAY_LENGTH(array) (array).length
 
-#define ARRAY_GET(array, type, index) (&(((type *)array.data)[index]))
+#define ARRAY_GET(array, type, index) (&(((type *)(array).data)[index]))
 
 #define ARRAY_APPEND(array, type, item) \
 do { \
-  if (array.reserved < array.length + 1) \
+  if ((array).reserved < (array).length + 1) \
   { \
-    array.reserved = array.reserved * 2; \
-    array.data = realloc(array.data, array.element_size * array.reserved); \
+    (array).reserved = (array).reserved * 2; \
+    (array).data = realloc((array).data, (array).element_size * (array).reserved); \
   } \
-  ((type *)array.data)[array.length] = item; \
-  array.length += 1; \
+  ((type *)(array).data)[(array).length] = item; \
+  (array).length += 1; \
 } \
 while(0)
 
 #define ARRAY_POP(array) \
 do { \
-  array.length -= 1; \
+  (array).length -= 1; \
 } \
 while(0)
 
 #define ARRAY_FREE(array) \
 do { \
-  free(array.data); \
-  array.element_size = 0; \
-  array.length = 0; \
-  array.reserved = 0; \
+  free((array).data); \
+  (array).element_size = 0; \
+  (array).length = 0; \
+  (array).reserved = 0; \
 } \
 while(0)
 
 #define ARRAY_COPY(dst, src) \
 do { \
-  dst.length = src.length; \
-  dst.element_size = src.element_size; \
-  dst.reserved = src.reserved; \
-  dst.data = malloc(src.element_size * src.reserved); \
-  memcpy(dst.data, src.data, src.element_size * src.length); \
+  (dst).length = (src).length; \
+  (dst).element_size = (src).element_size; \
+  (dst).reserved = (src).reserved; \
+  (dst).data = malloc((src).element_size * (src).reserved); \
+  memcpy((dst).data, (src).data, (src).element_size * (src).length); \
 } \
 while(0)
 
