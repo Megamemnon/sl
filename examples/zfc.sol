@@ -914,17 +914,54 @@ pred
   is_variable(x);
 
   judgement
+  is_function(f);
+
+  judgement
+  is_predicate(phi);
+
+  judgement
   can_substitute(t, x, phi);
 
   judgement
   not_free_in(x, phi);
 
+  /* Rules for forming terms and formulas with functions and predicates. */
   axiom
   variables_are_terms(x)
   {
     assume is_variable(\$x\);
 
     infer is_term(\$x\);
+  }
+
+  axiom
+  function_evaluation(f, t)
+  {
+    assume is_function(\$f\);
+    assume is_term(\$t\);
+
+    infer is_term(\$f($t)\);
+  }
+
+  axiom
+  predicate_evaluation(phi, t)
+  {
+    assume is_predicate(\$phi\);
+    assume is_term(\$t\);
+
+    infer is_formula(\$phi($t)\);
+  }
+
+  /* Rules for substitution for functions, predicates, and logical
+     connectives. */
+  axiom
+  substitute_predicate(t, x, phi)
+  {
+    assume is_term(\$t\);
+    assume is_variable(\$x\);
+    assume is_predicate(\$phi\);
+
+    infer can_substitute(\$t\, \$x\, \$phi($x)\);
   }
 
   axiom
@@ -937,31 +974,16 @@ pred
   }
 
   axiom
-  _instantiation(x, t, phi)
+  _instantiation(x, t, phi, phi0)
   {
     assume is_variable(\$x\);
     assume is_term(\$t\);
     assume is_formula(\$phi\);
+    assume is_formula(\$phi0\);
     assume can_substitute(\$t\, \$x\, \$phi\);
+    assume is_full_substitution(\$t\, \$x\, \$phi0\, \$phi\);
 
-    infer has_proof(\(any $x $phi implies $phi[x=\$t\])\);
-  }
-
-  theorem
-  instantiation(x, t, phi)
-  {
-    assume is_variable(\$x\);
-    assume is_term(\$t\);
-    assume is_formula(\$phi\);
-    assume can_substitute(\$t\, \$x\, \$phi\);
-
-    infer has_proof(\(any $x $phi implies $phi[x=\$t\])\);
-    infer is_formula(\any $x $phi\);
-    infer is_formula(\(any $x $phi implies $phi[x=\$t\])\);
-
-    step _instantiation(\$x\, \$t\, \$phi\);
-    step WF_universal(\$x\, \$phi\);
-    step WF_implication(\any $x $phi\, \$phi[x=\$t\]\);
+    infer has_proof(\(any $x $phi implies $phi0)\);
   }
 
   axiom
@@ -1072,49 +1094,15 @@ pred
   }
 
   axiom
-  _equality_subsitution(x, y, z, phi)
+  _equality_substitution(x, y, phi, phi0)
   {
     assume is_variable(\$x\);
     assume is_variable(\$y\);
-    assume is_variable(\$z\);
     assume is_formula(\$phi\);
-    assume can_substitute(\$x\, \$z\, \$phi\);
-    assume can_substitute(\$y\, \$z\, \$phi\);
+    assume can_substitute(\$y\, \$x\, \$phi\);
+    assume is_substitution(\$y\, \$x\, \$phi0\, \$phi\);
 
-    infer has_proof(\any $x any $y
-      ($x = $y implies ($phi[z=\$x\] implies $phi[z=\$y\]))\);
-  }
-
-  theorem
-  equality_subsitution(x, y, z, phi)
-  {
-    assume is_variable(\$x\);
-    assume is_variable(\$y\);
-    assume is_variable(\$z\);
-    assume is_formula(\$phi\);
-    assume can_substitute(\$x\, \$z\, \$phi\);
-    assume can_substitute(\$y\, \$z\, \$phi\);
-
-    infer has_proof(\any $x any $y
-      ($x = $y implies ($phi[z=\$x\] implies $phi[z=\$y\]))\);
-    infer is_formula(\$x = $y\);
-    infer is_formula(\($phi[z=\$x\] implies $phi[z=\$y\])\);
-    infer is_formula(\($x = $y implies ($phi[z=\$x\] implies $phi[z=\$y\]))\);
-    infer is_formula(\any $y
-      ($x = $y implies ($phi[z=\$x\] implies $phi[z=\$y\]))\);
-    infer is_formula(\any $x any $y
-      ($x = $y implies ($phi[z=\$x\] implies $phi[z=\$y\]))\);
-
-    step _equality_subsitution(\$x\, \$y\, \$z\, \$phi\);
-    step variables_are_terms(\$x\);
-    step variables_are_terms(\$y\);
-    step WF_equality(\$x\, \$y\);
-    step WF_implication(\$phi[z=\$x\]\, \$phi[z=\$y\]\);
-    step WF_implication(\$x = $y\, \($phi[z=\$x\] implies $phi[z=\$y\])\);
-    step WF_universal(\$y\,
-      \($x = $y implies ($phi[z=\$x\] implies $phi[z=\$y\]))\);
-    step WF_universal(\$x\,
-      \any $y ($x = $y implies ($phi[z=\$x\] implies $phi[z=\$y\]))\);
+    infer has_proof(\($x = $y implies ($phi implies $phi0))\);
   }
 
   axiom
@@ -1154,6 +1142,7 @@ ZFC Set Theory:
 namespace
 zfc
 {
+/*
   import prop, pred;
 
   axiom

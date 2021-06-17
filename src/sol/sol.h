@@ -3,6 +3,24 @@
 TODO:
 - Verify that judgements are declared before being used.
 
+LANGUAGE DESCRIPTION:
+
+- BUILTINS
+-- `is_not_subexpression([A], [B])`
+
+   This judgement is true when `[B]` does not contain any instances of `[A]`
+   as a subexpression.
+
+-- `is_substitution([A], [B], [TARGET_EXPR], [SOURCE_EXPR])`
+
+   This judgement is true when `[TARGET_EXPR]` can be formed
+   from `[SOURCE_EXPR]` by replacing some occurrences of `[B]` with `[A]`.
+
+-- `is_full_substitution([A], [B], [TARGET_EXPR], [SOURCE_EXPR])`
+
+   This judgement is true when `[TARGET_EXPR]` is formed from `[SOURCE_EXPR]`
+   by replacing all occurrences of `[B]` with `[A]`.
+
 */
 #ifndef SOL_H
 #define SOL_H
@@ -35,8 +53,6 @@ enum SolASTNodeType
   NodeTypeExpressionVariable,
   NodeTypeExpressionPlaceholder,
 
-  NodeTypeSubstitutionMap,
-  NodeTypeSubstitution,
   NodeTypeIdentifierPath,
   NodeTypeIdentifierPathSegment,
   NodeTypeParameterList,
@@ -108,15 +124,6 @@ int
 parse_expression(struct ParserState *state);
 
 int
-parse_expression_variable(struct ParserState *state);
-
-int
-parse_substitution_map(struct ParserState *state);
-
-int
-parse_substitution(struct ParserState *state);
-
-int
 parse_identifier_path(struct ParserState *state);
 
 int
@@ -134,17 +141,17 @@ struct Expression
   Array symbols;
 };
 
-struct Substitution
+enum ExpressionSymbolType
 {
-  char *dst;
-  struct Expression src;
+  ExpressionSymbolTypeConstant = 0,
+  ExpressionSymbolTypeVariable,
+  ExpressionSymbolTypePlaceholder
 };
 
 struct ExpressionSymbol
 {
   char *value;
-  bool is_variable;
-  Array substitutions;
+  enum ExpressionSymbolType type;
 };
 
 void
@@ -175,17 +182,6 @@ enum SolObjectType
   SolObjectTypeTheorem
 };
 
-struct JudgementInstance
-{
-  char *judgement;
-  Array expression_args;
-
-  const struct Token *location;
-};
-
-char *
-judgement_instance_to_string(const struct JudgementInstance *inst);
-
 struct SolObject
 {
   enum SolObjectType type;
@@ -195,18 +191,27 @@ struct SolObject
   Array inferences;
 };
 
-struct ObjectNameSegment
+struct JudgementInstance
 {
-  char *name;
+  const struct SolObject *judgement;
+  Array expression_args;
+
+  const struct Token *location;
 };
+
+char *
+judgement_instance_to_string(const struct JudgementInstance *inst);
 
 struct ObjectName
 {
-  Array segments;
+  Array segments; /* (char *) */
 };
 
+void
+free_name(struct ObjectName *path);
+
 int
-names_equal(const struct ObjectName *a, const struct ObjectName *b);
+extract_path(struct ObjectName *path, const struct ASTNode *identifier_path);
 
 char *
 name_to_string(const struct ObjectName *name);
@@ -251,7 +256,7 @@ init_scope_node(struct ASTNode *node);
 
 /* TODO: Lookup by path, not just a string. */
 struct SolObject *
-lookup_symbol(struct ASTNode *scope, char *symbol_name);
+lookup_symbol(struct ASTNode *scope, const struct ObjectName *path);
 
 struct SolScopeNodeData *
 get_scope_node_data(struct ASTNode *node);
@@ -309,10 +314,6 @@ symbols_equal(const struct ExpressionSymbol *a,
 
 bool
 expressions_equal(const struct Expression *a, const struct Expression *b);
-
-int
-perform_replacement(struct ValidationState *state, struct Expression *dst,
-  const struct ExpressionSymbol *symbol, const struct ArgumentList *args);
 
 int
 instantiate_object(struct ValidationState *state, const struct SolObject *obj,

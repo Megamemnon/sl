@@ -306,6 +306,7 @@ separate_symbols(struct LexState *state)
           tok.value = malloc(sizeof(char) * (length + 1));
           strncpy(tok.value, token_start, length);
           tok.value[length] = '\0';
+          tok.char_offset = token_start - src_tok->value;
           ARRAY_APPEND(*lex_state_back_buffer(state), struct Token, tok);
 
           token_start = c;
