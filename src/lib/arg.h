@@ -10,7 +10,9 @@ struct CommandLineOption
   const char *long_name;
 
   bool takes_argument;
-  char *default_argument;
+  const char *default_argument;
+
+  bool present;
   char *argument;
 };
 

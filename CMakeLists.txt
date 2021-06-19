@@ -6,6 +6,7 @@ set(CMAKE_BUILD_TYPE Debug)
 # Library
 add_library(magma
   src/lib/arg.c
+  src/lib/code.c
   src/lib/lex.c
   src/lib/parse.c
 )
