@@ -4,8 +4,20 @@
 
 #include <string.h>
 
-// TODO: remove debug stuff
-#include <stdio.h>
+int verbose = 0;
+
+#define LOG_NORMAL(out, ...) \
+do { \
+  fprintf(out, __VA_ARGS__); \
+} \
+while (0);
+
+#define LOG_VERBOSE(out, ...) \
+do { \
+  if (verbose) \
+    fprintf(out, __VA_ARGS__); \
+} \
+while (0);
 
 const char *sol_keywords[] = {
   "namespace",
@@ -2159,6 +2171,9 @@ validate_namespace(struct ValidationState *state,
     scope_data->name = strdup(ast_data->name);
   }
 
+  if (scope_data->name != NULL)
+    LOG_NORMAL(state->out, "Validating namespace '%s'.\n", scope_data->name);
+
   /* Next, initialize the symbol table and search path list. */
   ARRAY_INIT(scope_data->symbol_table, struct Symbol);
   ARRAY_INIT(scope_data->symbol_search_locations, struct ASTNode *);
@@ -2222,13 +2237,15 @@ validate_program(struct ValidationState *state)
 }
 
 int
-sol_verify(const char *file_path)
+sol_verify(const char *input_path, FILE *out)
 {
   /* Open the file. */
+  LOG_NORMAL(out, "Validating file '%s'.\n", input_path);
   struct CompilationUnit unit = {};
-  open_compilation_unit(&unit, file_path);
+  open_compilation_unit(&unit, input_path);
 
   /* Lex the file */
+  LOG_VERBOSE(out, "Tokenizing.\n");
   struct LexState lex_out = {};
 
   init_lex_state(&lex_out);
@@ -2243,6 +2260,7 @@ sol_verify(const char *file_path)
   remove_line_ends(&lex_out);
 
   /* Parse the file */
+  LOG_VERBOSE(out, "Parsing.\n");
   struct ParserState parse_out = {};
   parse_out.unit = &unit;
   parse_out.input = &lex_out;
@@ -2254,12 +2272,12 @@ sol_verify(const char *file_path)
     print_errors(&unit);
     return 1;
   }
-
-  /* Free the token list. */
   PROPAGATE_ERROR(err);
 
   /* Validate the file. */
+  LOG_VERBOSE(out, "Validating.\n");
   struct ValidationState validation_out = {};
+  validation_out.out = out;
   validation_out.unit = &unit;
   validation_out.input = &parse_out;
 
@@ -2268,6 +2286,7 @@ sol_verify(const char *file_path)
     print_errors(&unit);
 
   /* Free the AST. */
+  LOG_VERBOSE(out, "Done.\n");
   free_tree(&parse_out.ast_root);
   free_lex_state(&lex_out);
   PROPAGATE_ERROR(err);

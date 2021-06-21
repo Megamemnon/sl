@@ -25,6 +25,12 @@ struct CommandLine
   Array arguments;
 };
 
+void
+init_command_line(struct CommandLine *cl, int argc, char * const *argv);
+
+void
+add_command_line_option(struct CommandLine *cl, struct CommandLineOption *opt);
+
 int
 parse_command_line(struct CommandLine *cl);
 

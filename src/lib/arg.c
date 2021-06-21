@@ -9,8 +9,8 @@ lookup_by_long_name(const char *name, struct CommandLine *cl)
 {
   for (size_t i = 0; i < ARRAY_LENGTH(cl->options); ++i)
   {
-    struct CommandLineOption *opt = ARRAY_GET(cl->options,
-      struct CommandLineOption, i);
+    struct CommandLineOption *opt = *ARRAY_GET(cl->options,
+      struct CommandLineOption *, i);
     if (opt->long_name != NULL)
     {
       if (strcmp(opt->long_name, name) == 0)
@@ -25,8 +25,8 @@ lookup_by_short_name(char c, struct CommandLine *cl)
 {
   for (size_t i = 0; i < ARRAY_LENGTH(cl->options); ++i)
   {
-    struct CommandLineOption *opt = ARRAY_GET(cl->options,
-      struct CommandLineOption, i);
+    struct CommandLineOption *opt = *ARRAY_GET(cl->options,
+      struct CommandLineOption *, i);
     if (opt->short_name == c)
       return opt;
   }
@@ -56,15 +56,29 @@ parse_long_form(int current_arg, struct CommandLine *cl)
       break;
     }
   }
+  if (value == NULL)
+    arg_length = strlen(arg);
   char *arg_temp = malloc(arg_length + 1);
   strncpy(arg_temp, arg, arg_length);
-  arg_temp[arg_length - 1] = '\0';
+  arg_temp[arg_length] = '\0';
   struct CommandLineOption *opt = lookup_by_long_name(arg_temp, cl);
   free(arg_temp);
   if (opt == NULL)
     return 1;
-  opt->argument = strdup(value);
-  return 0;
+  opt->present = TRUE;
+  if (opt->takes_argument)
+  {
+    if (value == NULL)
+      return 1;
+    opt->argument = strdup(value);
+    return 0;
+  }
+  else
+  {
+    if (value != NULL)
+      return 1;
+    return 0;
+  }
 }
 
 /* Return the number of extra arguments consumed (-1 on error,
@@ -113,13 +127,27 @@ add_argument(int current_arg, struct CommandLine *cl)
   ARRAY_APPEND(cl->arguments, char *, arg);
 }
 
+void
+init_command_line(struct CommandLine *cl, int argc, char * const *argv)
+{
+  cl->argc = argc;
+  cl->argv = argv;
+  ARRAY_INIT(cl->options, struct CommandLineOption *);
+  ARRAY_INIT(cl->arguments, char *);
+}
+
+void
+add_command_line_option(struct CommandLine *cl, struct CommandLineOption *opt)
+{
+  ARRAY_APPEND(cl->options, struct CommandLineOption *, opt);
+}
+
 int
 parse_command_line(struct CommandLine *cl)
 {
   /* Iterate through the command line arguments. */
   bool arguments_only = FALSE;
-  ARRAY_INIT(cl->arguments, char *);
-  for (size_t i = 0; i < cl->argc; ++i)
+  for (size_t i = 1; i < cl->argc; ++i)
   {
     const char *arg = cl->argv[i];
     if (!arguments_only)
@@ -158,19 +186,23 @@ parse_command_line(struct CommandLine *cl)
       else
       {
         /* Add this as an argument. */
+        char *argument = strdup(arg);
+        ARRAY_APPEND(cl->arguments, char *, argument);
       }
     }
     else
     {
       /* Just add this argument to the list of true arguments. */
+      char *argument = strdup(arg);
+      ARRAY_APPEND(cl->arguments, char *, argument);
     }
   }
 
   /* Fill in the default arguments if they do not override user arguments. */
   for (size_t i = 0; i < ARRAY_LENGTH(cl->options); ++i)
   {
-    struct CommandLineOption *opt = ARRAY_GET(cl->options,
-      struct CommandLineOption, i);
+    struct CommandLineOption *opt = *ARRAY_GET(cl->options,
+      struct CommandLineOption *, i);
     if (opt->default_argument != NULL && opt->argument == NULL)
       opt->argument = strdup(opt->default_argument);
   }
@@ -189,11 +221,12 @@ free_command_line(struct CommandLine *cl)
 {
   for (size_t i = 0; i < ARRAY_LENGTH(cl->options); ++i)
   {
-    struct CommandLineOption *opt = ARRAY_GET(cl->options,
-      struct CommandLineOption, i);
+    struct CommandLineOption *opt = *ARRAY_GET(cl->options,
+      struct CommandLineOption *, i);
     if (opt->argument != NULL)
       free(opt->argument);
   }
+  ARRAY_FREE(cl->options);
 
   for (size_t i = 0; i < ARRAY_LENGTH(cl->arguments); ++i)
   {

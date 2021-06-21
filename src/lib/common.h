@@ -3,8 +3,6 @@
 
 #include <stdint.h>
 
-extern int verbose;
-
 /* Booleans */
 typedef int bool;
 #define TRUE 1

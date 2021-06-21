@@ -114,9 +114,9 @@ print_errors(struct CompilationUnit *unit)
     if (err->location == NULL)
     {
       if (!err->is_note)
-        printf("Error: %s\n", err->msg);
+        fprintf(stderr, "Error: %s\n", err->msg);
       else
-        printf("Note: %s\n", err->msg);
+        fprintf(stderr, "Note: %s\n", err->msg);
     }
     else
     {
@@ -126,15 +126,15 @@ print_errors(struct CompilationUnit *unit)
       fgets(line_buf, 4096, unit->source);
       if (!err->is_note)
       {
-        printf("Error at line '%zu' of file '%s': %s\n",
+        fprintf(stderr, "Error at line '%zu' of file '%s': %s\n",
           err->location->line + 1, unit->source_file,  err->msg);
       }
       else
       {
-        printf("Note at line '%zu' of file '%s': %s\n",
+        fprintf(stderr, "Note at line '%zu' of file '%s': %s\n",
           err->location->line + 1, unit->source_file,  err->msg);
       }
-      printf("%zu  |  %s", err->location->line + 1, line_buf);
+      fprintf(stderr, "%zu  |  %s", err->location->line + 1, line_buf);
     }
   }
 }
@@ -211,6 +211,151 @@ file_to_lines(struct LexState *state, const struct CompilationUnit *unit)
     tok.char_offset = 0;
     ARRAY_APPEND(*lex_state_back_buffer(state), struct Token, tok);
   }
+  lex_state_swap_buffers(state);
+}
+
+void
+tokenize_strings(struct LexState *state, char string_delimiter)
+{
+  /* TODO: Make escaping the delimiter optional? */
+  lex_state_clear_back_buffer(state);
+
+  struct Token tok = {};
+  tok.id = 0;
+  for (size_t i = 0; i < ARRAY_LENGTH(*lex_state_front_buffer(state)); ++i)
+  {
+    const struct Token *src_tok = ARRAY_GET(*lex_state_front_buffer(state),
+      struct Token, i);
+    if (src_tok->type == TokenTypeIntermediate)
+    {
+      const char *tok_start = src_tok->value;
+      bool in_str = FALSE;
+      bool escape_next = FALSE;
+      tok.line = src_tok->line;
+      for (const char *c = src_tok->value; ; ++c)
+      {
+        if (!in_str && *c == string_delimiter)
+        {
+          in_str = TRUE;
+          if (c - tok_start != 0)
+          {
+            tok.type = TokenTypeIntermediate;
+            tok.value = malloc((c - tok_start) + 1);
+            strncpy(tok.value, tok_start, c - tok_start);
+            tok.value[c - tok_start] = '\0';
+            tok.char_offset = src_tok->char_offset + (c - src_tok->value);
+            ARRAY_APPEND(*lex_state_back_buffer(state), struct Token, tok);
+          }
+          tok_start = c;
+        }
+        else if (in_str && *c == string_delimiter && !escape_next)
+        {
+          in_str = FALSE;
+          tok.type = TokenTypeStringLiteral;
+          tok.value = malloc((c - tok_start) + 2);
+          strncpy(tok.value, tok_start, (c - tok_start) + 1);
+          tok.value[(c - tok_start) + 1] = '\0';
+          tok.char_offset = src_tok->char_offset + (c - src_tok->value);
+          ARRAY_APPEND(*lex_state_back_buffer(state), struct Token, tok);
+          tok_start = c + 1;
+        }
+
+        if (*c == '\0')
+        {
+          if (!in_str && c - tok_start != 0)
+          {
+            tok.type = TokenTypeIntermediate;
+            tok.value = malloc((c - tok_start) + 1);
+            strncpy(tok.value, tok_start, c - tok_start);
+            tok.value[c - tok_start] = '\0';
+            tok.char_offset = src_tok->char_offset + (c - src_tok->value);
+            ARRAY_APPEND(*lex_state_back_buffer(state), struct Token, tok);
+          }
+          else if (in_str)
+          {
+            /* TODO: error. */
+          }
+          break;
+        }
+
+        escape_next = FALSE;
+
+        if (in_str && *c == '\\')
+        {
+          escape_next = TRUE;
+        }
+      }
+    }
+    else
+    {
+      ARRAY_APPEND(*lex_state_back_buffer(state),
+        struct Token, duplicate_token(src_tok));
+    }
+  }
+
+  lex_state_swap_buffers(state);
+}
+
+void
+tokenize_numeric_literals(struct LexState *state)
+{
+  /* TODO: Add options for finer control? */
+  lex_state_clear_back_buffer(state);
+
+  struct Token tok = {};
+  tok.id = 0;
+  for (size_t i = 0; i < ARRAY_LENGTH(*lex_state_front_buffer(state)); ++i)
+  {
+    const struct Token *src_tok = ARRAY_GET(*lex_state_front_buffer(state),
+      struct Token, i);
+    if (src_tok->type == TokenTypeIntermediate)
+    {
+      const char *tok_start = src_tok->value;
+      if (isdigit(tok_start[0]))
+      {
+        const char *numeral_end = NULL;
+        for (const char *c = tok_start; *c != '\0'; ++c)
+        {
+          if (!isalnum(*c))
+          {
+            numeral_end = c;
+            break;
+          }
+        }
+        if (numeral_end != NULL)
+        {
+          tok.type = TokenTypeNumericLiteral;
+          tok.value = malloc((numeral_end - tok_start) + 1);
+          strncpy(tok.value, tok_start, numeral_end - tok_start);
+          tok.value[numeral_end - tok_start] = '\0';
+          tok.char_offset = src_tok->char_offset;
+          ARRAY_APPEND(*lex_state_back_buffer(state), struct Token, tok);
+
+          tok.type = TokenTypeIntermediate;
+          tok.value = strdup(numeral_end);
+          tok.char_offset = src_tok->char_offset + (numeral_end - tok_start);
+          ARRAY_APPEND(*lex_state_back_buffer(state), struct Token, tok);
+        }
+        else
+        {
+          tok = duplicate_token(src_tok);
+          tok.type = TokenTypeNumericLiteral;
+          ARRAY_APPEND(*lex_state_back_buffer(state), struct Token, tok);
+        }
+      }
+      else
+      {
+        ARRAY_APPEND(*lex_state_back_buffer(state),
+          struct Token, duplicate_token(src_tok));
+      }
+    }
+    else
+    {
+      ARRAY_APPEND(*lex_state_back_buffer(state),
+        struct Token, duplicate_token(src_tok));
+    }
+  }
+
   lex_state_swap_buffers(state);
 }
 

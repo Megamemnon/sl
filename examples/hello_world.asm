@@ -1,15 +1,17 @@
-global start
-section .text
-start:
-    mov     rax, 0x2000004 ; write
-    mov     rdi, 1 ; stdout
-    mov     rsi, msg
-    mov     rdx, msg.len
-    syscall
+@asm(bits: 32, start: 0x7C00)
+{
+  mov ah, 0x0E
+  mov al, 'H'
+  int 0x10
+  mov al, 'e'
+  int 0x10
+  mov al, 'l'
+  int 0x10
+  int 0x10
+  mov al, 'o'
+  int 0x10
 
-    mov     rax, 0x2000001 ; exit
-    mov     rdi, 0
-    syscall
-section .data
-msg:    db      "Hello, world!", 10
-.len:   equ     $ - msg
+  jmp @HERE
+
+  @bytes(0x7DFE, 0xAA55)
+}

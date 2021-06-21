@@ -28,8 +28,10 @@ LANGUAGE DESCRIPTION:
 #include <lex.h>
 #include <parse.h>
 
+extern int verbose;
+
 int
-sol_verify(const char *file_path);
+sol_verify(const char *input_path, FILE *out);
 
 enum SolASTNodeType
 {
@@ -267,6 +269,7 @@ get_scope_node_data_c(const struct ASTNode *node);
 struct ValidationState
 {
   struct CompilationUnit *unit;
+  FILE *out;
 
   const struct ParserState *input;
 

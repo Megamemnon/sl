@@ -96,11 +96,15 @@ init_lex_state(struct LexState *state);
 void
 free_lex_state(struct LexState *state);
 
+/* Tokenization operations. */
 void
 file_to_lines(struct LexState *state, const struct CompilationUnit *unit);
 
 void
-tokenize_strings(struct LexState *state, const char *string_delimiter);
+tokenize_strings(struct LexState *state, char string_delimiter);
+
+void
+tokenize_numeric_literals(struct LexState *state);
 
 void
 separate_symbols(struct LexState *state);
