@@ -134,7 +134,12 @@ print_errors(struct CompilationUnit *unit)
         fprintf(stderr, "Note at line '%zu' of file '%s': %s\n",
           err->location->line + 1, unit->source_file,  err->msg);
       }
-      fprintf(stderr, "%zu  |  %s", err->location->line + 1, line_buf);
+      char prefix[32];
+      snprintf(prefix, 32, "%zu  |  ", err->location->line + 1);
+      fprintf(stderr, "%s%s", prefix, line_buf);
+      for (size_t j = 0; j < strlen(prefix) + err->location->char_offset; ++j)
+        fprintf(stderr, " ");
+      fprintf(stderr, "^\n");
     }
   }
 }
@@ -203,6 +208,7 @@ file_to_lines(struct LexState *state, const struct CompilationUnit *unit)
   tok.type = TokenTypeIntermediate;
   for (size_t i = 0; i < ARRAY_LENGTH(unit->line_map); ++i)
   {
+    memset(line_buf, '\0', 4096);
     size_t line_start = *ARRAY_GET(unit->line_map, size_t, i);
     fseek(unit->source, line_start, SEEK_SET);
     fgets(line_buf, 4096, unit->source);
@@ -243,7 +249,8 @@ tokenize_strings(struct LexState *state, char string_delimiter)
             tok.value = malloc((c - tok_start) + 1);
             strncpy(tok.value, tok_start, c - tok_start);
             tok.value[c - tok_start] = '\0';
-            tok.char_offset = src_tok->char_offset + (c - src_tok->value);
+            tok.char_offset = src_tok->char_offset +
+              (tok_start - src_tok->value);
             ARRAY_APPEND(*lex_state_back_buffer(state), struct Token, tok);
           }
           tok_start = c;
@@ -255,7 +262,8 @@ tokenize_strings(struct LexState *state, char string_delimiter)
           tok.value = malloc((c - tok_start) + 2);
           strncpy(tok.value, tok_start, (c - tok_start) + 1);
           tok.value[(c - tok_start) + 1] = '\0';
-          tok.char_offset = src_tok->char_offset + (c - src_tok->value);
+          tok.char_offset = src_tok->char_offset +
+            (tok_start - src_tok->value);
           ARRAY_APPEND(*lex_state_back_buffer(state), struct Token, tok);
           tok_start = c + 1;
         }
@@ -268,7 +276,8 @@ tokenize_strings(struct LexState *state, char string_delimiter)
             tok.value = malloc((c - tok_start) + 1);
             strncpy(tok.value, tok_start, c - tok_start);
             tok.value[c - tok_start] = '\0';
-            tok.char_offset = src_tok->char_offset + (c - src_tok->value);
+            tok.char_offset = src_tok->char_offset +
+              (tok_start - src_tok->value);
             ARRAY_APPEND(*lex_state_back_buffer(state), struct Token, tok);
           }
           else if (in_str)
@@ -387,7 +396,8 @@ remove_whitespace(struct LexState *state)
           tok.value = malloc(sizeof(char) * (length + 1));
           strncpy(tok.value, token_start, length);
           tok.value[length] = '\0';
-          tok.char_offset = token_start - src_tok->value;
+          tok.char_offset = src_tok->char_offset +
+            (token_start - src_tok->value);
           ARRAY_APPEND(*lex_state_back_buffer(state), struct Token, tok);
 
           token_start = NULL;
@@ -398,6 +408,8 @@ remove_whitespace(struct LexState *state)
           /* Add the token */
           tok.type = TokenTypeLineEnd;
           tok.value = NULL;
+          tok.char_offset = src_tok->char_offset +
+            (c - src_tok->value);
           ARRAY_APPEND(*lex_state_back_buffer(state), struct Token, tok);
         }
 
@@ -451,7 +463,8 @@ separate_symbols(struct LexState *state)
           tok.value = malloc(sizeof(char) * (length + 1));
           strncpy(tok.value, token_start, length);
           tok.value[length] = '\0';
-          tok.char_offset = token_start - src_tok->value;
+          tok.char_offset = src_tok->char_offset +
+            (token_start - src_tok->value);
           ARRAY_APPEND(*lex_state_back_buffer(state), struct Token, tok);
 
           token_start = c;
@@ -503,11 +516,15 @@ identify_symbol(struct LexState *state, const char *symbol)
             strncpy(tok.value, symbol_start, prev_length);
             tok.value[prev_length] = '\0';
             tok.identified = 0;
+            tok.char_offset = src_tok->char_offset +
+              (symbol_start - src_tok->value);
             ARRAY_APPEND(*lex_state_back_buffer(state), struct Token, tok);
           }
 
           tok.value = strdup(symbol);
           tok.identified = 1;
+          tok.char_offset = src_tok->char_offset +
+            (c - src_tok->value);
           ARRAY_APPEND(*lex_state_back_buffer(state), struct Token, tok);
 
           c += strlen(symbol);
@@ -523,6 +540,8 @@ identify_symbol(struct LexState *state, const char *symbol)
             strncpy(tok.value, symbol_start, prev_length);
             tok.value[prev_length] = '\0';
             tok.identified = 0;
+            tok.char_offset = src_tok->char_offset +
+              (symbol_start - src_tok->value);
             ARRAY_APPEND(*lex_state_back_buffer(state), struct Token, tok);
           }
 
@@ -566,6 +585,7 @@ separate_identifiers(struct LexState *state)
     {
       /* TODO: Don't be dumb here. */
       tok.value = strdup(src_tok->value);
+      tok.char_offset = src_tok->char_offset;
       ARRAY_APPEND(*lex_state_back_buffer(state), struct Token, tok);
     }
     else

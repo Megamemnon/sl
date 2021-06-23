@@ -500,6 +500,26 @@ prop
       \$phi\);
   }
 
+  theorem
+  intermediate_elimination(phi, psi, chi)
+  {
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+    assume is_formula(\$chi\);
+    assume has_proof(\($phi implies ($psi implies $chi))\);
+    assume has_proof(\$psi\);
+
+    infer has_proof(\($phi implies $chi)\);
+    infer is_formula(\($phi implies $chi)\);
+
+    step distributive(\$phi\, \$psi\, \$chi\);
+    step modus_ponens(\($phi implies ($psi implies $chi))\,
+      \(($phi implies $psi) implies ($phi implies $chi))\);
+    step simplification(\$psi\, \$phi\);
+    step modus_ponens(\$psi\, \($phi implies $psi)\);
+    step modus_ponens(\($phi implies $psi)\, \($phi implies $chi)\);
+  }
+
   /* Extend the system to include the other connectives we use and prove common
      theorems. */
   /* TODO: Instead of explicitly adding these connectives and their properties
@@ -965,6 +985,19 @@ pred
   }
 
   axiom
+  substitute_implication(t, x, phi, psi)
+  {
+    assume is_term(\$t\);
+    assume is_variable(\$x\);
+    assume is_formula(\$phi\);
+    assume is_formula(\$psi\);
+    assume can_substitute(\$t\, \$x\, \$phi\);
+    assume can_substitute(\$t\, \$x\, \$psi\);
+
+    infer can_substitute(\$t\, \$x\, \($phi implies $psi)\);
+  }
+
+  axiom
   WF_universal(x, phi)
   {
     assume is_variable(\$x\);
@@ -981,9 +1014,24 @@ pred
     assume is_formula(\$phi\);
     assume is_formula(\$phi0\);
     assume can_substitute(\$t\, \$x\, \$phi\);
-    assume is_full_substitution(\$t\, \$x\, \$phi0\, \$phi\);
+    require is_full_substitution(\$t\, \$x\, \$phi0\, \$phi\);
 
     infer has_proof(\(any $x $phi implies $phi0)\);
+  }
+
+  theorem
+  instantiation(x, t, phi, phi0)
+  {
+    assume is_variable(\$x\);
+    assume is_term(\$t\);
+    assume is_formula(\$phi\);
+    assume is_formula(\$phi0\);
+    assume can_substitute(\$t\, \$x\, \$phi\);
+    require is_full_substitution(\$t\, \$x\, \$phi0\, \$phi\);
+
+    infer has_proof(\(any $x $phi implies $phi0)\);
+
+    step _instantiation(\$x\, \$t\, \$phi\, \$phi0\);
   }
 
   axiom
@@ -1094,21 +1142,52 @@ pred
   }
 
   axiom
+  pred_vars()
+  {
+    infer is_variable(\_x\);
+  }
+
+  axiom
   _equality_substitution(x, y, phi, phi0)
   {
     assume is_variable(\$x\);
     assume is_variable(\$y\);
     assume is_formula(\$phi\);
     assume can_substitute(\$y\, \$x\, \$phi\);
-    assume is_substitution(\$y\, \$x\, \$phi0\, \$phi\);
+    require is_substitution(\$y\, \$x\, \$phi0\, \$phi\);
 
     infer has_proof(\($x = $y implies ($phi implies $phi0))\);
   }
 
-  axiom
-  pred_vars()
+  theorem
+  equality_substitution(x, y, phi, phi0)
   {
-    infer is_variable(\_x\);
+    assume is_variable(\$x\);
+    assume is_variable(\$y\);
+    assume is_formula(\$phi\);
+    assume can_substitute(\$y\, \$x\, \$phi\);
+    require is_substitution(\$y\, \$x\, \$phi0\, \$phi\);
+
+    infer has_proof(\($x = $y implies ($phi implies $phi0))\);
+
+    step _equality_substitution(\$x\, \$y\, \$phi\, \$phi0\);
+  }
+
+  theorem
+  equality_reflexive_meta(t)
+  {
+    assume is_term(\$t\);
+
+    infer has_proof(\$t = $t\);
+
+    step pred_vars();
+    step equality_reflexive(\_x\);
+    step equality_free_variables(\$t\, \$t\, \_x\, \_x\);
+    step variables_are_terms(\_x\);
+    step WF_equality(\_x\, \_x\);
+    step WF_equality(\$t\, \$t\);
+    step instantiation(\_x\, \$t\, \_x = _x\, \$t = $t\);
+    step modus_ponens(\any _x _x = _x\, \$t = $t\);
   }
 
   theorem
@@ -1118,19 +1197,55 @@ pred
     assume is_variable(\$y\);
 
     infer has_proof(\any $x any $y ($x = $y implies $y = $x)\);
+    infer is_formula(\$x = $y\);
+    infer is_formula(\$y = $x\);
+    infer is_formula(\($x = $y implies $y = $x)\);
+    infer is_formula(\any $y ($x = $y implies $y = $x)\);
+    infer is_formula(\any $x any $y ($x = $y implies $y = $x)\);
 
-    step pred_vars();
-    step variables_are_terms(\_x\);
     step variables_are_terms(\$x\);
     step variables_are_terms(\$y\);
-    step WF_equality(\_x\, \$x\);
-    step equality_free_variables(\$x\, \$x\, \_x\, \$x\);
-    step equality_free_variables(\$y\, \$y\, \_x\, \$x\);
-    step equality_subsitution(\$x\, \$y\, \_x\, \_x = $x\);
-    step equality_reflexive(\$x\);
+    step WF_equality(\$x\, \$y\);
+    step WF_equality(\$x\, \$x\);
+    step WF_equality(\$y\, \$x\);
     step equality_free_variables(\$x\, \$x\, \$x\, \$x\);
-    step instantiation(\$x\, \$x\, \$x = $x\);
-    step modus_ponens(\any $x $x = $x\, \$x = $x\);
+    step equality_free_variables(\$y\, \$x\, \$x\, \$x\);
+    step equality_substitution(\$x\, \$y\, \$x = $x\, \$y = $x\);
+    step equality_reflexive_meta(\$x\);
+    step intermediate_elimination(\$x = $y\, \$x = $x\, \$y = $x\);
+    step generalization(\$y\, \($x = $y implies $y = $x)\);
+    step generalization(\$x\, \any $y ($x = $y implies $y = $x)\);
+  }
+
+  theorem
+  equality_transitive(x, y, z)
+  {
+    assume is_variable(\$x\);
+    assume is_variable(\$y\);
+    assume is_variable(\$z\);
+
+    infer has_proof(\any $x any $y any $z
+      ($x = $y implies ($y = $z implies $x = $z))\);
+
+    step variables_are_terms(\$x\);
+    step variables_are_terms(\$y\);
+    step variables_are_terms(\$z\);
+    step equality_symmetric(\$x\, \$y\);
+    step instantiation(\$x\, \$x\, \any $x any $y ($x = $y implies $y = $x)\,
+      \any $y ($x = $y implies $y = $x)\);
+    step modus_ponens(\any $x any $y ($x = $y implies $y = $x)\,
+      \any $y ($x = $y implies $y = $x)\);
+    step instantiation(\$y\, \$y\, \any $y ($x = $y implies $y = $x)\);
+    step modus_ponens(\any $y ($x = $y implies $y = $x)\,
+      \($x = $y implies $y = $x)\);
+    step equality_substitution(\$y\, \$x\, \$y = $z\, \$x = $z\);
+    step hypothetical_syllogism_meta(\$x = $y\, \$y = $x\,
+      \($y = $z implies $x = $z)\);
+    step generalization(\$z\, \($x = $y implies ($y = $z implies $x = $z))\);
+    step generalization(\$y\,
+      \any $z ($x = $y implies ($y = $z implies $x = $z))\);
+    step generalization(\$x\,
+      \any $y any $z ($x = $y implies ($y = $z implies $x = $z))\);
   }
 }
 

@@ -28,6 +28,7 @@ const char *sol_keywords[] = {
   "theorem",
 
   "assume",
+  "require",
   "infer",
   "step",
   "def",
@@ -44,6 +45,339 @@ const char *sol_symbols[] = {
   "//",
   NULL
 };
+
+enum SolASTNodeType
+{
+  NodeTypeUnidentified = 0,
+  NodeTypeNamespace,
+  NodeTypeImport,
+
+  NodeTypeJudgement,
+  NodeTypeAxiom,
+  NodeTypeTheorem,
+
+  NodeTypeAssume,
+  NodeTypeRequire,
+  NodeTypeInfer,
+  NodeTypeStep,
+  NodeTypeDef,
+
+  NodeTypeJudgementExpression,
+  NodeTypeInferenceExpression,
+  NodeTypeRequireExpression,
+  NodeTypeExpression,
+  NodeTypeExpressionConstant,
+  NodeTypeExpressionVariable,
+  NodeTypeExpressionPlaceholder,
+
+  NodeTypeIdentifierPath,
+  NodeTypeIdentifierPathSegment,
+  NodeTypeParameterList,
+  NodeTypeParameter,
+  NodeTypeArgumentList
+};
+
+/* Parser Methods */
+struct SolASTNodeData
+{
+  enum SolASTNodeType type;
+
+  const struct Token *location;
+  char *name;
+};
+
+void
+free_sol_node(struct ASTNode *node);
+
+void
+copy_sol_node(struct ASTNode *dst, const struct ASTNode *src);
+
+void
+init_sol_node(struct ASTNode *node);
+
+struct SolASTNodeData *
+get_sol_node_data(struct ASTNode *node);
+
+const struct SolASTNodeData *
+get_sol_node_data_c(const struct ASTNode *node);
+
+int
+parse_program(struct ParserState *state);
+
+int
+parse_namespace(struct ParserState *state);
+
+int
+parse_import(struct ParserState *state);
+
+int
+parse_judgement(struct ParserState *state);
+
+int
+parse_axiom(struct ParserState *state);
+
+int
+parse_theorem(struct ParserState *state);
+
+int
+parse_assume(struct ParserState *state);
+
+int
+parse_require(struct ParserState *state);
+
+int
+parse_infer(struct ParserState *state);
+
+int
+parse_step(struct ParserState *state);
+
+int
+parse_def(struct ParserState *state);
+
+int
+parse_judgement_expression(struct ParserState *state);
+
+int
+parse_require_expression(struct ParserState *state);
+
+int
+parse_inference_expression(struct ParserState *state);
+
+int
+parse_expression(struct ParserState *state);
+
+int
+parse_identifier_path(struct ParserState *state);
+
+int
+parse_parameter_list(struct ParserState *state);
+
+int
+parse_argument_list(struct ParserState *state);
+
+void
+print_sol_node(char *buf, size_t len, const struct ASTNode *node);
+
+/* Validation Methods */
+struct Expression
+{
+  Array symbols;
+};
+
+enum ExpressionSymbolType
+{
+  ExpressionSymbolTypeConstant = 0,
+  ExpressionSymbolTypeVariable,
+  ExpressionSymbolTypePlaceholder
+};
+
+struct ExpressionSymbol
+{
+  char *value;
+  enum ExpressionSymbolType type;
+};
+
+void
+free_expression_symbol(struct ExpressionSymbol *symbol);
+
+void
+free_expression(struct Expression *expression);
+
+int
+copy_expression_symbol(struct ExpressionSymbol *dst,
+  const struct ExpressionSymbol *src);
+
+int
+copy_expression(struct Expression *dst, const struct Expression *src);
+
+char *
+expression_to_string(const struct Expression *expr);
+
+struct Parameter
+{
+  char *name;
+};
+
+enum SolObjectType
+{
+  SolObjectTypeNone = 0,
+  SolObjectTypeJudgement,
+  SolObjectTypeTheorem
+};
+
+struct SolObject
+{
+  enum SolObjectType type;
+
+  Array parameters;
+  Array assumptions;
+  Array required;
+  Array inferences;
+};
+
+struct JudgementInstance
+{
+  const struct SolObject *judgement;
+  Array expression_args;
+
+  const struct Token *location;
+};
+
+enum SolRequireType
+{
+  SolRequireTypeNone = 0,
+  SolRequireTypeIsSubstitution,
+  SolRequireTypeIsFullSubstitution
+};
+
+struct RequireInstance
+{
+  enum SolRequireType type;
+  Array expression_args;
+
+  const struct Token *location;
+};
+
+char *
+judgement_instance_to_string(const struct JudgementInstance *inst);
+
+struct ObjectName
+{
+  Array segments; /* (char *) */
+};
+
+void
+free_name(struct ObjectName *path);
+
+int
+extract_path(struct ObjectName *path, const struct ASTNode *identifier_path);
+
+char *
+name_to_string(const struct ObjectName *name);
+
+struct ProofEnv
+{
+  Array proven;
+};
+
+struct Argument
+{
+  char *name;
+  struct Expression value;
+};
+
+struct ArgumentList
+{
+  Array arguments; // Expressions
+};
+
+struct Symbol
+{
+  char *name;
+  struct SolObject *object;
+};
+
+struct SolScopeNodeData
+{
+  char *name;
+  Array symbol_table;
+  Array symbol_search_locations;
+};
+
+void
+free_scope_node(struct ASTNode *node);
+
+void
+copy_scope_node(struct ASTNode *dst, const struct ASTNode *src);
+
+void
+init_scope_node(struct ASTNode *node);
+
+/* TODO: Lookup by path, not just a string. */
+struct SolObject *
+lookup_symbol(struct ASTNode *scope, const struct ObjectName *path);
+
+struct SolScopeNodeData *
+get_scope_node_data(struct ASTNode *node);
+
+const struct SolScopeNodeData *
+get_scope_node_data_c(const struct ASTNode *node);
+
+struct ValidationState
+{
+  struct CompilationUnit *unit;
+  FILE *out;
+
+  const struct ParserState *input;
+
+  struct ASTNode scope_tree_root;
+  struct ASTNode *scope_current;
+};
+
+int
+validate_expression(struct ValidationState *state,
+  struct Expression *dst,
+  const struct ASTNode *ast_expression,
+  const struct SolObject *env,
+  int depth);
+
+int
+validate_assume(struct ValidationState *state,
+  const struct ASTNode *ast_assume,
+  struct SolObject *env);
+
+int
+validate_require(struct ValidationState *state,
+  const struct ASTNode *ast_require,
+  struct SolObject *env);
+
+int
+validate_infer(struct ValidationState *state,
+  const struct ASTNode *ast_infer,
+  struct SolObject *env);
+
+int
+validate_import(struct ValidationState *state,
+  const struct ASTNode *ast_import);
+
+int
+validate_judgement(struct ValidationState *state,
+  const struct ASTNode *ast_judgement);
+
+int
+validate_axiom(struct ValidationState *state,
+  const struct ASTNode *ast_axiom);
+
+int
+substitute_into_expression(struct ValidationState *state,
+  struct Expression *dst, const struct Expression *expr,
+  const struct ArgumentList *args);
+
+bool
+symbols_equal(const struct ExpressionSymbol *a,
+  const struct ExpressionSymbol *b);
+
+bool
+expressions_equal(const struct Expression *a, const struct Expression *b);
+
+int
+instantiate_object(struct ValidationState *state, const struct SolObject *obj,
+  const struct ArgumentList *args, struct ProofEnv *env);
+
+bool
+judgement_proved(struct ValidationState *state, const struct ProofEnv *env,
+  const struct JudgementInstance *judgement);
+
+int
+validate_theorem(struct ValidationState *state,
+  const struct ASTNode *ast_theorem);
+
+int
+validate_namespace(struct ValidationState *state,
+  const struct ASTNode *ast_namespace);
+
+int
+validate_program(struct ValidationState *state);
 
 void
 free_sol_node(struct ASTNode *node)
@@ -312,6 +646,14 @@ parse_axiom(struct ParserState *state)
       ascend(state);
       PROPAGATE_ERROR(err);
     }
+    else if (consume_keyword(state, "require"))
+    {
+      add_child_and_descend(state);
+      init_sol_node(state->ast_current);
+      err = parse_require(state);
+      ascend(state);
+      PROPAGATE_ERROR(err);
+    }
     else if (consume_keyword(state, "infer"))
     {
       add_child_and_descend(state);
@@ -385,6 +727,14 @@ parse_theorem(struct ParserState *state)
       ascend(state);
       PROPAGATE_ERROR(err);
     }
+    else if (consume_keyword(state, "require"))
+    {
+      add_child_and_descend(state);
+      init_sol_node(state->ast_current);
+      err = parse_require(state);
+      ascend(state);
+      PROPAGATE_ERROR(err);
+    }
     else if (consume_keyword(state, "infer"))
     {
       add_child_and_descend(state);
@@ -439,6 +789,29 @@ parse_assume(struct ParserState *state)
   {
     add_error(state->unit, get_current_token(state),
       "Expected ';' after assumption.");
+    return 1;
+  }
+  return 0;
+}
+
+int
+parse_require(struct ParserState *state)
+{
+  get_sol_node_data(state->ast_current)->type = NodeTypeRequire;
+  get_sol_node_data(state->ast_current)->location = get_current_token(state);
+
+  /* There should be an expression for a requirement. */
+  add_child_and_descend(state);
+  init_sol_node(state->ast_current);
+  int err = parse_require_expression(state);
+  ascend(state);
+  PROPAGATE_ERROR(err);
+
+  /* Expect a semicolon. */
+  if (!consume_symbol(state, ";"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "Expected ';' after requirement.");
     return 1;
   }
   return 0;
@@ -549,6 +922,40 @@ parse_judgement_expression(struct ParserState *state)
   add_child_and_descend(state);
   init_sol_node(state->ast_current);
   err = parse_argument_list(state);
+  ascend(state);
+  PROPAGATE_ERROR(err);
+
+  return 0;
+}
+
+int
+parse_require_expression(struct ParserState *state)
+{
+  get_sol_node_data(state->ast_current)->type = NodeTypeRequireExpression;
+  get_sol_node_data(state->ast_current)->location = get_current_token(state);
+
+  /* First, consume the identifier for the associated requirement. */
+  const char *req;
+  if (!consume_identifier(state, &req))
+  {
+    add_error(state->unit, get_current_token(state),
+      "No requirement name provided.");
+    return 1;
+  }
+  get_sol_node_data(state->ast_current)->name = strdup(req);
+
+  /* Expect an opening '(' for the argument list. */
+  if (!consume_symbol(state, "("))
+  {
+    add_error(state->unit, get_current_token(state),
+      "No argument list provided in expression.");
+    return 1;
+  }
+
+  /* Next, parse arguments. */
+  add_child_and_descend(state);
+  init_sol_node(state->ast_current);
+  int err = parse_argument_list(state);
   ascend(state);
   PROPAGATE_ERROR(err);
 
@@ -1270,6 +1677,79 @@ validate_expression(struct ValidationState *state,
 }
 
 int
+validate_require(struct ValidationState *state,
+  const struct ASTNode *ast_require,
+  struct SolObject *env)
+{
+  struct RequireInstance req;
+
+  if (ARRAY_LENGTH(ast_require->children) != 1)
+  {
+    /* TODO: error. */
+    const struct SolASTNodeData *req_data = get_sol_node_data_c(ast_require);
+    add_error(state->unit, req_data->location,
+      "bad AST.");
+    return 1;
+  }
+
+  const struct ASTNode *require_expr = ARRAY_GET(ast_require->children,
+    struct ASTNode, 0);
+  const struct SolASTNodeData *require_data = get_sol_node_data_c(require_expr);
+  if (require_data->type != NodeTypeRequireExpression)
+  {
+    /* TODO: error. */
+    add_error(state->unit, require_data->location,
+      "bad AST.");
+    return 1;
+  }
+
+  if (strcmp(require_data->name, "is_substitution") == 0)
+  {
+    req.type = SolRequireTypeIsSubstitution;
+  }
+  else if (strcmp(require_data->name, "is_full_substitution") == 0)
+  {
+    req.type = SolRequireTypeIsFullSubstitution;
+  }
+  else
+  {
+    /* TODO: error detail. */
+    add_error(state->unit, require_data->location,
+      "unknown requirement.");
+    return 1;
+  }
+
+  const struct ASTNode *ast_args = ARRAY_GET(require_expr->children,
+    struct ASTNode, 0);
+  const struct SolASTNodeData *args_data =
+    get_sol_node_data_c(ast_args);
+  if (args_data->type != NodeTypeArgumentList)
+  {
+    /* TODO: error. */
+    add_error(state->unit, args_data->location,
+      "incorrect node type.");
+    return 1;
+  }
+
+  /* TODO: Verify that the correct number of arguments are supplied. */
+  ARRAY_INIT(req.expression_args, struct Expression);
+  for (size_t i = 0; i < ARRAY_LENGTH(ast_args->children); ++i)
+  {
+    const struct ASTNode *ast_arg = ARRAY_GET(ast_args->children,
+      struct ASTNode, i);
+    const struct SolASTNodeData *arg_data =
+      get_sol_node_data_c(ast_arg);
+    struct Expression expr = {};
+    int err = validate_expression(state, &expr, ast_arg, env, 0);
+    PROPAGATE_ERROR(err);
+    ARRAY_APPEND(req.expression_args, struct Expression, expr);
+  }
+
+  ARRAY_APPEND(env->required, struct RequireInstance, req);
+  return 0;
+}
+
+int
 validate_assume(struct ValidationState *state,
   const struct ASTNode *ast_assume,
   struct SolObject *env)
@@ -1624,6 +2104,7 @@ validate_axiom(struct ValidationState *state,
 
   /* Next, scan for assumptions and inferences. */
   ARRAY_INIT(axiom->assumptions, struct JudgementInstance);
+  ARRAY_INIT(axiom->required, struct RequireInstance);
   ARRAY_INIT(axiom->inferences, struct JudgementInstance);
   for (size_t i = 0; i < ARRAY_LENGTH(ast_axiom->children); ++i)
   {
@@ -1633,6 +2114,11 @@ validate_axiom(struct ValidationState *state,
     if (child_data->type == NodeTypeAssume)
     {
       int err = validate_assume(state, child, axiom);
+      PROPAGATE_ERROR(err);
+    }
+    else if (child_data->type == NodeTypeRequire)
+    {
+      int err = validate_require(state, child, axiom);
       PROPAGATE_ERROR(err);
     }
     else if (child_data->type == NodeTypeInfer)
@@ -1853,33 +2339,6 @@ bool
 judgement_proved(struct ValidationState *state, const struct ProofEnv *env,
   const struct JudgementInstance *judgement)
 {
-  /* First, check for builtins, which should be treated as special cases. */
-#if 0
-  if (strcmp(judgement->judgement, "distinct") == 0)
-  {
-    /* In this case, we should have two arguments. Check for equality
-       of expressions. */
-    if (ARRAY_LENGTH(judgement->expression_args) != 2)
-    {
-      /* TODO: error. */
-      return 1;
-    }
-    const struct Expression *a = ARRAY_GET(judgement->expression_args,
-      struct Expression, 0);
-    const struct Expression *b = ARRAY_GET(judgement->expression_args,
-      struct Expression, 1);
-    if (expressions_equal(a, b))
-    {
-      /* TODO: error. */
-      return 1;
-    }
-    else
-    {
-      return 0;
-    }
-  }
-#endif
-
   /* Loop through the judgements that we have proven, and check for equality
      by comparing names and the arguments passed. */
   for (size_t i = 0; i < ARRAY_LENGTH(env->proven); ++i)

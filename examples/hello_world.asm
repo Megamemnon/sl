@@ -11,7 +11,7 @@
   mov al, 'o'
   int 0x10
 
-  jmp @HERE
+  jmp @here
 
   @bytes(0x7DFE, 0xAA55)
 }
