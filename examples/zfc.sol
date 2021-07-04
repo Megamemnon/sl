@@ -279,26 +279,21 @@ prop
     step WF_negation(\not $phi\);
     step WF_implication(\not not $phi\, \$phi\);
 
+    /* %phi0 can be any formula that is axiomatically true. */
     def phi0 \($phi implies ($phi implies $phi))\;
 
-    step simplification(\$phi\, \$phi\); /* This can be any formula that is axiomatically true */
+    step simplification(\$phi\, \$phi\); /* Prove %phi0. */
     step WF_negation(\($phi implies ($phi implies $phi))\);
-    step transposition(\not $phi\, \not ($phi implies ($phi implies $phi))\);
-    step transposition(\($phi implies ($phi implies $phi))\, \$phi\);
-    step hypothetical_syllogism_meta(\(not not ($phi implies
-      ($phi implies $phi)) implies not not $phi)\,
-      \(not $phi implies not ($phi implies ($phi implies $phi)))\,
-      \(($phi implies ($phi implies $phi)) implies $phi)\);
-    step simplification(\not not $phi\,
-      \not not ($phi implies ($phi implies $phi))\);
+    step transposition(\not $phi\, \not %phi0\);
+    step transposition(\%phi0\, \$phi\);
+    step hypothetical_syllogism_meta(\(not not %phi0 implies not not $phi)\,
+      \(not $phi implies not %phi0)\, \(%phi0 implies $phi)\);
+    step simplification(\not not $phi\, \not not %phi0\);
     step hypothetical_syllogism_meta(\not not $phi\,
-      \(not not ($phi implies ($phi implies $phi)) implies not not $phi)\,
-      \(($phi implies ($phi implies $phi)) implies $phi)\);
-    step double_simplification(\($phi implies ($phi implies $phi))\, \$phi\);
-    step modus_ponens(\($phi implies ($phi implies $phi))\,
-      \((($phi implies ($phi implies $phi)) implies $phi) implies $phi)\);
-    step hypothetical_syllogism_meta(\not not $phi\,
-      \(($phi implies ($phi implies $phi)) implies $phi)\,
+      \(not not %phi0 implies not not $phi)\, \(%phi0 implies $phi)\);
+    step double_simplification(\%phi0\, \$phi\);
+    step modus_ponens(\%phi0\, \((%phi0 implies $phi) implies $phi)\);
+    step hypothetical_syllogism_meta(\not not $phi\, \(%phi0 implies $phi)\,
       \$phi\);
   }
 
@@ -907,7 +902,7 @@ First Order Logic (with Equality):
 Define terms, variables, and quantification. After developing the rules
 for free and bound variables, add the axioms for first order logic with
 equality. Then prove utility theorems. We use the following definitions
-from Mendelsonfor free, bound, and free for:
+from Mendelson for free, bound, and free for:
 
 An occurrence of a variable x is said to be bound in a wf phi
 if either it is the occurrence of x in a quantifier (any x) in phi or it

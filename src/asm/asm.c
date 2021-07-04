@@ -76,6 +76,7 @@ get_node_data_c(const struct ASTNode *node)
 static int
 parse_program(struct ParserState *state)
 {
+  while (state->token_index )
   return 0;
 }
 

@@ -255,8 +255,15 @@ extract_path(struct ObjectName *path, const struct ASTNode *identifier_path);
 char *
 name_to_string(const struct ObjectName *name);
 
+struct Definition
+{
+  char *name;
+  struct Expression expression;
+};
+
 struct ProofEnv
 {
+  Array definitions;
   Array proven;
 };
 
@@ -359,6 +366,11 @@ symbols_equal(const struct ExpressionSymbol *a,
 
 bool
 expressions_equal(const struct Expression *a, const struct Expression *b);
+
+int
+expand_placeholders(struct ValidationState *state,
+  struct Expression *dst, const struct Expression *expr,
+  const struct ProofEnv *env);
 
 int
 instantiate_object(struct ValidationState *state, const struct SolObject *obj,
@@ -2262,6 +2274,92 @@ expressions_equal(const struct Expression *a, const struct Expression *b)
 }
 
 int
+expand_placeholders(struct ValidationState *state,
+  struct Expression *dst, const struct Expression *expr,
+  const struct ProofEnv *env)
+{
+  ARRAY_INIT(dst->symbols, struct ExpressionSymbol);
+
+  Array component_expressions;
+  ARRAY_INIT(component_expressions, struct Expression);
+  /* Loop through the symbols in `expr`. Create a new expression corresponding
+     to each symbol. */
+  for (size_t i = 0; i < ARRAY_LENGTH(expr->symbols); ++i)
+  {
+    const struct ExpressionSymbol *s = ARRAY_GET(expr->symbols,
+      struct ExpressionSymbol, i);
+
+    struct Expression component = {};
+    ARRAY_INIT(component.symbols, struct ExpressionSymbol);
+    if (s->type == ExpressionSymbolTypePlaceholder)
+    {
+      const struct Expression *src = NULL;
+      for (size_t j = 0; j < ARRAY_LENGTH(env->definitions); ++j)
+      {
+        const struct Definition *def = ARRAY_GET(env->definitions,
+          struct Definition, j);
+        if (strcmp(s->value, def->name) == 0)
+        {
+          src = &def->expression;
+          break;
+        }
+      }
+
+      if (src == NULL)
+      {
+        /* TODO: error. */
+        add_error(state->unit, NULL,
+          "error performing placeholder replacement.");
+        return 1;
+      }
+
+      copy_expression(&component, src);
+    }
+    else
+    {
+      /* Just copy the constant into its own expression. */
+      struct ExpressionSymbol symbol = {};
+      int err = copy_expression_symbol(&symbol, s);
+      if (err)
+      {
+        add_error(state->unit, NULL,
+          "error copying symbol.");
+        return 1;
+      }
+      ARRAY_APPEND(component.symbols, struct ExpressionSymbol, symbol);
+    }
+    ARRAY_APPEND(component_expressions, struct Expression, component);
+  }
+
+  /* Join all the expressions together. */
+  for (size_t i = 0; i < ARRAY_LENGTH(component_expressions); ++i)
+  {
+    struct Expression *component = ARRAY_GET(component_expressions,
+      struct Expression, i);
+    for (size_t j = 0; j < ARRAY_LENGTH(component->symbols); ++j)
+    {
+      const struct ExpressionSymbol *src_symbol = ARRAY_GET(component->symbols,
+        struct ExpressionSymbol, j);
+      struct ExpressionSymbol symbol = {};
+      int err = copy_expression_symbol(&symbol, src_symbol);
+      if (err)
+      {
+        add_error(state->unit, NULL,
+          "error joining expressions.");
+        return 1;
+      }
+      ARRAY_APPEND(dst->symbols, struct ExpressionSymbol, symbol);
+    }
+    /* TODO: free `component`. */
+    free_expression(component);
+  }
+
+  ARRAY_FREE(component_expressions);
+
+  return 0;
+}
+
+int
 instantiate_object(struct ValidationState *state, const struct SolObject *obj,
   const struct ArgumentList *args, struct ProofEnv *env)
 {
@@ -2437,6 +2535,7 @@ validate_theorem(struct ValidationState *state,
   /* Set up the proof environment and add in the assumptions
      we started with. */
   struct ProofEnv env = {};
+  ARRAY_INIT(env.definitions, struct Definition);
   ARRAY_INIT(env.proven, struct JudgementInstance);
 
   for (size_t i = 0; i < ARRAY_LENGTH(theorem->assumptions); ++i)
@@ -2465,6 +2564,34 @@ validate_theorem(struct ValidationState *state,
     const struct ASTNode *child = ARRAY_GET(ast_theorem->children,
       struct ASTNode, i);
     const struct SolASTNodeData *child_data = get_sol_node_data_c(child);
+    if (child_data->type == NodeTypeDef)
+    {
+      /* This should have a single definition expression child. */
+      const struct ASTNode *def = ARRAY_GET(child->children, struct ASTNode,
+        0);
+      const struct SolASTNodeData *def_data = get_sol_node_data_c(def);
+      if (def_data->type != NodeTypeExpression)
+      {
+        /* TODO: error. */
+        add_error(state->unit, def_data->location, "incorrect node type.");
+        return 1;
+      }
+
+      /* Parse the expression. */
+      struct Expression raw_expression = {};
+      int err = validate_expression(state, &raw_expression, def,
+        theorem, 0);
+      PROPAGATE_ERROR(err);
+
+      /* If the definition is well-formed, add it to the environment. */
+      struct Definition definition = {};
+      definition.name = strdup(child_data->name);
+      err = expand_placeholders(state, &definition.expression, &raw_expression,
+        &env);
+      PROPAGATE_ERROR(err);
+
+      ARRAY_APPEND(env.definitions, struct Definition, definition);
+    }
     if (child_data->type == NodeTypeStep)
     {
       /* This should have a single inference expression child. */
@@ -2531,8 +2658,13 @@ validate_theorem(struct ValidationState *state,
           struct ASTNode, j);
         const struct SolASTNodeData *expr_data =
           get_sol_node_data_c(expr_node);
-        err = validate_expression(state, &arg.value, expr_node, theorem, 0);
+        struct Expression expr_tmp = {};
+        err = validate_expression(state, &expr_tmp, expr_node, theorem, 0);
         PROPAGATE_ERROR(err);
+
+        err = expand_placeholders(state, &arg.value, &expr_tmp, &env);
+        PROPAGATE_ERROR(err);
+
         ARRAY_APPEND(args.arguments, struct Argument, arg);
       }
 
