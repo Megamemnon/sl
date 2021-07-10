@@ -1,4 +1,4 @@
-#include "sol.h"
+#include "sl.h"
 #include <parse.h>
 #include <common.h>
 
@@ -19,11 +19,11 @@ do { \
 } \
 while (0);
 
-const char *sol_keywords[] = {
+const char *sl_keywords[] = {
   "namespace",
-  "import",
 
-  "judgement",
+  "type",
+  "expr",
   "axiom",
   "theorem",
 
@@ -35,1225 +35,878 @@ const char *sol_keywords[] = {
   NULL
 };
 
-const char *sol_symbols[] = {
+const char *sl_symbols[] = {
   "(", ")",
   "[", "]",
   "{", "}",
   ".", ",", ";",
-  "\\", "$", "=",
+  "%", "$", "=",
   "/*", "*/",
   "//",
   NULL
 };
 
-enum SolASTNodeType
+enum ASTNodeType
 {
-  NodeTypeUnidentified = 0,
-  NodeTypeNamespace,
-  NodeTypeImport,
+  ASTNodeTypeNone = 0,
+  ASTNodeTypeNamespace,
 
-  NodeTypeJudgement,
-  NodeTypeAxiom,
-  NodeTypeTheorem,
+  ASTNodeTypeType,
+  ASTNodeTypeExpression,
+  ASTNodeTypeAxiom,
+  ASTNodeTypeTheorem,
 
-  NodeTypeAssume,
-  NodeTypeRequire,
-  NodeTypeInfer,
-  NodeTypeStep,
-  NodeTypeDef,
+  ASTNodeTypeParameter,
+  ASTNodeTypeDef,
+  ASTNodeTypeAssume,
+  ASTNodeTypeRequire,
+  ASTNodeTypeInfer,
+  ASTNodeTypeStep,
 
-  NodeTypeJudgementExpression,
-  NodeTypeInferenceExpression,
-  NodeTypeRequireExpression,
-  NodeTypeExpression,
-  NodeTypeExpressionConstant,
-  NodeTypeExpressionVariable,
-  NodeTypeExpressionPlaceholder,
+  ASTNodeTypeComposition,
+  ASTNodeTypeConstant,
+  ASTNodeTypeVariable,
+  ASTNodeTypePlaceholder,
+  ASTNodeTypeTheoremReference,
 
-  NodeTypeIdentifierPath,
-  NodeTypeIdentifierPathSegment,
-  NodeTypeParameterList,
-  NodeTypeParameter,
-  NodeTypeArgumentList
+  ASTNodeTypePath,
+
+  ASTNodeTypePathSegment
 };
 
-/* Parser Methods */
-struct SolASTNodeData
+struct ASTNodeData
 {
-  enum SolASTNodeType type;
-
-  const struct Token *location;
+  enum ASTNodeType type;
   char *name;
+  char *typename;
 };
 
-void
-free_sol_node(struct ASTNode *node);
+#define AST_NODE_DATA(node) ((struct ASTNodeData *)node->data)
 
-void
-copy_sol_node(struct ASTNode *dst, const struct ASTNode *src);
-
-void
-init_sol_node(struct ASTNode *node);
-
-struct SolASTNodeData *
-get_sol_node_data(struct ASTNode *node);
-
-const struct SolASTNodeData *
-get_sol_node_data_c(const struct ASTNode *node);
-
-int
-parse_program(struct ParserState *state);
-
-int
-parse_namespace(struct ParserState *state);
-
-int
-parse_import(struct ParserState *state);
-
-int
-parse_judgement(struct ParserState *state);
-
-int
-parse_axiom(struct ParserState *state);
-
-int
-parse_theorem(struct ParserState *state);
-
-int
-parse_assume(struct ParserState *state);
-
-int
-parse_require(struct ParserState *state);
-
-int
-parse_infer(struct ParserState *state);
-
-int
-parse_step(struct ParserState *state);
-
-int
-parse_def(struct ParserState *state);
-
-int
-parse_judgement_expression(struct ParserState *state);
-
-int
-parse_require_expression(struct ParserState *state);
-
-int
-parse_inference_expression(struct ParserState *state);
-
-int
-parse_expression(struct ParserState *state);
-
-int
-parse_identifier_path(struct ParserState *state);
-
-int
-parse_parameter_list(struct ParserState *state);
-
-int
-parse_argument_list(struct ParserState *state);
-
-void
-print_sol_node(char *buf, size_t len, const struct ASTNode *node);
-
-/* Validation Methods */
-struct Expression
+static void
+free_ast_node(struct ASTNode *node)
 {
-  Array symbols;
-};
-
-enum ExpressionSymbolType
-{
-  ExpressionSymbolTypeConstant = 0,
-  ExpressionSymbolTypeVariable,
-  ExpressionSymbolTypePlaceholder
-};
-
-struct ExpressionSymbol
-{
-  char *value;
-  enum ExpressionSymbolType type;
-};
-
-void
-free_expression_symbol(struct ExpressionSymbol *symbol);
-
-void
-free_expression(struct Expression *expression);
-
-int
-copy_expression_symbol(struct ExpressionSymbol *dst,
-  const struct ExpressionSymbol *src);
-
-int
-copy_expression(struct Expression *dst, const struct Expression *src);
-
-char *
-expression_to_string(const struct Expression *expr);
-
-struct Parameter
-{
-  char *name;
-};
-
-enum SolObjectType
-{
-  SolObjectTypeNone = 0,
-  SolObjectTypeJudgement,
-  SolObjectTypeTheorem
-};
-
-struct SolObject
-{
-  enum SolObjectType type;
-
-  Array parameters;
-  Array assumptions;
-  Array required;
-  Array inferences;
-};
-
-struct JudgementInstance
-{
-  const struct SolObject *judgement;
-  Array expression_args;
-
-  const struct Token *location;
-};
-
-enum SolRequireType
-{
-  SolRequireTypeNone = 0,
-  SolRequireTypeIsSubstitution,
-  SolRequireTypeIsFullSubstitution
-};
-
-struct RequireInstance
-{
-  enum SolRequireType type;
-  Array expression_args;
-
-  const struct Token *location;
-};
-
-char *
-judgement_instance_to_string(const struct JudgementInstance *inst);
-
-struct ObjectName
-{
-  Array segments; /* (char *) */
-};
-
-void
-free_name(struct ObjectName *path);
-
-int
-extract_path(struct ObjectName *path, const struct ASTNode *identifier_path);
-
-char *
-name_to_string(const struct ObjectName *name);
-
-struct Definition
-{
-  char *name;
-  struct Expression expression;
-};
-
-struct ProofEnv
-{
-  Array definitions;
-  Array proven;
-};
-
-struct Argument
-{
-  char *name;
-  struct Expression value;
-};
-
-struct ArgumentList
-{
-  Array arguments; // Expressions
-};
-
-struct Symbol
-{
-  char *name;
-  struct SolObject *object;
-};
-
-struct SolScopeNodeData
-{
-  char *name;
-  Array symbol_table;
-  Array symbol_search_locations;
-};
-
-void
-free_scope_node(struct ASTNode *node);
-
-void
-copy_scope_node(struct ASTNode *dst, const struct ASTNode *src);
-
-void
-init_scope_node(struct ASTNode *node);
-
-/* TODO: Lookup by path, not just a string. */
-struct SolObject *
-lookup_symbol(struct ASTNode *scope, const struct ObjectName *path);
-
-struct SolScopeNodeData *
-get_scope_node_data(struct ASTNode *node);
-
-const struct SolScopeNodeData *
-get_scope_node_data_c(const struct ASTNode *node);
-
-struct ValidationState
-{
-  struct CompilationUnit *unit;
-  FILE *out;
-
-  bool valid;
-
-  const struct ParserState *input;
-
-  struct ASTNode scope_tree_root;
-  struct ASTNode *scope_current;
-};
-
-int
-validate_expression(struct ValidationState *state,
-  struct Expression *dst,
-  const struct ASTNode *ast_expression,
-  const struct SolObject *env,
-  int depth);
-
-int
-validate_assume(struct ValidationState *state,
-  const struct ASTNode *ast_assume,
-  struct SolObject *env);
-
-int
-validate_require(struct ValidationState *state,
-  const struct ASTNode *ast_require,
-  struct SolObject *env);
-
-int
-validate_infer(struct ValidationState *state,
-  const struct ASTNode *ast_infer,
-  struct SolObject *env);
-
-int
-validate_import(struct ValidationState *state,
-  const struct ASTNode *ast_import);
-
-int
-validate_judgement(struct ValidationState *state,
-  const struct ASTNode *ast_judgement);
-
-int
-validate_axiom(struct ValidationState *state,
-  const struct ASTNode *ast_axiom);
-
-int
-substitute_into_expression(struct ValidationState *state,
-  struct Expression *dst, const struct Expression *expr,
-  const struct ArgumentList *args);
-
-bool
-symbols_equal(const struct ExpressionSymbol *a,
-  const struct ExpressionSymbol *b);
-
-bool
-expressions_equal(const struct Expression *a, const struct Expression *b);
-
-int
-expand_placeholders(struct ValidationState *state,
-  struct Expression *dst, const struct Expression *expr,
-  const struct ProofEnv *env);
-
-int
-instantiate_object(struct ValidationState *state, const struct SolObject *obj,
-  const struct ArgumentList *args, struct ProofEnv *env);
-
-bool
-judgement_proved(struct ValidationState *state, const struct ProofEnv *env,
-  const struct JudgementInstance *judgement);
-
-int
-validate_theorem(struct ValidationState *state,
-  const struct ASTNode *ast_theorem);
-
-int
-validate_namespace(struct ValidationState *state,
-  const struct ASTNode *ast_namespace);
-
-int
-validate_program(struct ValidationState *state);
-
-void
-free_sol_node(struct ASTNode *node)
-{
-  struct SolASTNodeData *data = (struct SolASTNodeData *)node->data;
-
+  struct ASTNodeData *data = AST_NODE_DATA(node);
   if (data->name != NULL)
     free(data->name);
-
+  if (data->typename != NULL)
+    free(data->typename);
   free(data);
 }
 
-void
-copy_sol_node(struct ASTNode *dst, const struct ASTNode *src)
+static void
+copy_ast_node(struct ASTNode *dst, const struct ASTNode *src)
 {
-  struct SolASTNodeData *dst_data = malloc(sizeof(struct SolASTNodeData));
-  memset(dst_data, 0, sizeof(struct SolASTNodeData));
+  struct ASTNodeData *dst_data = AST_NODE_DATA(src);
+  const struct ASTNodeData *src_data = AST_NODE_DATA(src);
 
-  const struct SolASTNodeData *src_data =
-    (const struct SolASTNodeData *)src->data;
   dst_data->type = src_data->type;
-
   if (src_data->name != NULL)
     dst_data->name = strdup(src_data->name);
   else
     dst_data->name = NULL;
 
-  dst->data = dst_data;
+  if (src_data->typename == NULL)
+    dst_data->typename = strdup(src_data->typename);
+  else
+    dst_data->typename = NULL;
 }
 
-void
-init_sol_node(struct ASTNode *node)
+static void
+init_ast_node(struct ASTNode *node)
 {
-  struct SolASTNodeData *data = malloc(sizeof(struct SolASTNodeData));
-  memset(data, 0, sizeof(struct SolASTNodeData));
-  node->data = data;
-  node->free_callback = &free_sol_node;
-  node->copy_callback = &copy_sol_node;
+  node->data = malloc(sizeof(struct ASTNodeData));
+
+  struct ASTNodeData *data = AST_NODE_DATA(node);
+  data->type = ASTNodeTypeNone;
+  data->name = NULL;
+  data->typename = NULL;
+
+  node->free_callback = &free_ast_node;
+  node->copy_callback = &copy_ast_node;
 }
 
-struct SolASTNodeData *
-get_sol_node_data(struct ASTNode *node)
-{
-  return (struct SolASTNodeData *)node->data;
-}
-
-const struct SolASTNodeData *
-get_sol_node_data_c(const struct ASTNode *node)
-{
-  return (struct SolASTNodeData *)node->data;
-}
-
-/* Implementation of both `parse_program` and `parse_namespace`. */
 static int
-parse_namespace_interior(struct ParserState *state)
+parse_namespace(struct ParserState *state);
+
+static int
+parse_type(struct ParserState *state)
 {
-  int err = 0;
-  while (state->token_index < ARRAY_LENGTH(*parser_token_buffer(state))
-         && !consume_symbol(state, "}"))
-  {
-    if (consume_keyword(state, "namespace"))
-    {
-      add_child_and_descend(state);
-      init_sol_node(state->ast_current);
-      err = parse_namespace(state);
-      ascend(state);
-      PROPAGATE_ERROR(err);
-    }
-    else if (consume_keyword(state, "import"))
-    {
-      add_child_and_descend(state);
-      init_sol_node(state->ast_current);
-      err = parse_import(state);
-      ascend(state);
-      PROPAGATE_ERROR(err);
-    }
-    else if (consume_keyword(state, "judgement"))
-    {
-      add_child_and_descend(state);
-      init_sol_node(state->ast_current);
-      err = parse_judgement(state);
-      ascend(state);
-      PROPAGATE_ERROR(err);
-    }
-    else if (consume_keyword(state, "axiom"))
-    {
-      add_child_and_descend(state);
-      init_sol_node(state->ast_current);
-      err = parse_axiom(state);
-      ascend(state);
-      PROPAGATE_ERROR(err);
-    }
-    else if (consume_keyword(state, "theorem"))
-    {
-      add_child_and_descend(state);
-      init_sol_node(state->ast_current);
-      err = parse_theorem(state);
-      ascend(state);
-      PROPAGATE_ERROR(err);
-    }
-    else
-    {
-      add_error(state->unit, get_current_token(state), "Unrecognized token.");
-      return 1;
-      break;
-    }
-  }
-  return 0;
-}
-
-/* Called at the start of parsing. Almost equivalent to
-   `parse_namespace`, except no curly braces. */
-int
-parse_program(struct ParserState *state)
-{
-  init_tree(&state->ast_root);
-
-  init_sol_node(state->ast_current);
-  get_sol_node_data(state->ast_current)->type = NodeTypeNamespace;
-  return parse_namespace_interior(state);
-}
-
-/* A namespace, which is just a container for other objects. */
-int
-parse_namespace(struct ParserState *state)
-{
-  /* The next token should be an identifier giving the name of the namespace. */
-  const char *namespace_name;
-  if (!consume_identifier(state, &namespace_name))
-  {
-    add_error(state->unit, get_current_token(state),
-      "No name provided for namespace.");
-    return 1;
-  }
-  get_sol_node_data(state->ast_current)->type = NodeTypeNamespace;
-  get_sol_node_data(state->ast_current)->location = get_current_token(state);
-  get_sol_node_data(state->ast_current)->name = strdup(namespace_name);
-
-  /* Then there should be an opening bracket. */
-  if (!consume_symbol(state, "{"))
-  {
-    add_error(state->unit, get_current_token(state),
-      "Expected '{' following namespace name.");
-    return 1;
-  }
-
-  int err = parse_namespace_interior(state);
-  PROPAGATE_ERROR(err);
-
-  return 0;
-}
-
-int
-parse_import(struct ParserState *state)
-{
-  get_sol_node_data(state->ast_current)->type = NodeTypeImport;
-  get_sol_node_data(state->ast_current)->location = get_current_token(state);
-
-  /* Iterate through the list of paths until we find a ';' */
-  int first_path = 1;
-  while (!consume_symbol(state, ";"))
-  {
-    /* Subsequent paths have commas. */
-    if (!first_path && !consume_symbol(state, ","))
-    {
-      /* TODO: error: no separator. */
-      add_error(state->unit, get_current_token(state),
-        "No separator in path list.");
-      return 1;
-    }
-
-    add_child_and_descend(state);
-    init_sol_node(state->ast_current);
-    int err = parse_identifier_path(state);
-    PROPAGATE_ERROR(err);
-    ascend(state);
-
-    if (first_path)
-      first_path = 0;
-  }
-
-  return 0;
-}
-
-int
-parse_judgement(struct ParserState *state)
-{
-  const char *judgement_name;
-  if (!consume_identifier(state, &judgement_name))
-  {
-    add_error(state->unit, get_current_token(state),
-      "No judgement name provided.");
-    return 1;
-  }
-  get_sol_node_data(state->ast_current)->type = NodeTypeJudgement;
-  get_sol_node_data(state->ast_current)->location = get_current_token(state);
-  get_sol_node_data(state->ast_current)->name = strdup(judgement_name);
-
-  /* After the name, there should be a parameter list. */
-  if (!consume_symbol(state, "("))
-  {
-    add_error(state->unit, get_current_token(state),
-      "No parameter list provided.");
-    return 1;
-  }
   add_child_and_descend(state);
-  init_sol_node(state->ast_current);
-  int err = parse_parameter_list(state);
-  ascend(state);
-  PROPAGATE_ERROR(err);
+  init_ast_node(state->ast_current);
+  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeType;
 
-  /* Finally, expect a semicolon. */
+  if (!consume_keyword(state, "type"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing keyword 'type' in type declaration");
+  }
+
+  const char *typename;
+  if (!consume_identifier(state, &typename))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing typename in type declaration");
+  }
+  else
+  {
+    AST_NODE_DATA(state->ast_current)->typename = strdup(typename);
+  }
+
   if (!consume_symbol(state, ";"))
   {
     add_error(state->unit, get_current_token(state),
-      "Expected ';' after expression.");
-    return 1;
+      "missing semicolon ';' after type declaration");
   }
 
+  ascend(state);
   return 0;
 }
 
-int
-parse_axiom(struct ParserState *state)
-{
-  const char *axiom_name;
-  if (!consume_identifier(state, &axiom_name))
-  {
-    add_error(state->unit, get_current_token(state),
-      "Axioms must have a name.");
-    return 1;
-  }
-  get_sol_node_data(state->ast_current)->type = NodeTypeAxiom;
-  get_sol_node_data(state->ast_current)->location = get_current_token(state);
-  get_sol_node_data(state->ast_current)->name = strdup(axiom_name);
-
-  /* After the name, there should be a parameter list. */
-  if (!consume_symbol(state, "("))
-  {
-    add_error(state->unit, get_current_token(state),
-      "Axioms must have a list of parameters.");
-    return 1;
-  }
-  add_child_and_descend(state);
-  init_sol_node(state->ast_current);
-  int err = parse_parameter_list(state);
-  ascend(state);
-  PROPAGATE_ERROR(err);
-
-  /* Expect a definition inside curly brackets. */
-  if (!consume_symbol(state, "{"))
-  {
-    add_error(state->unit, get_current_token(state),
-      "Axioms must have a definition");
-    return 1;
-  }
-
-  while (state->token_index < ARRAY_LENGTH(*parser_token_buffer(state))
-         && !consume_symbol(state, "}"))
-  {
-    if (consume_keyword(state, "assume"))
-    {
-      add_child_and_descend(state);
-      init_sol_node(state->ast_current);
-      err = parse_assume(state);
-      ascend(state);
-      PROPAGATE_ERROR(err);
-    }
-    else if (consume_keyword(state, "require"))
-    {
-      add_child_and_descend(state);
-      init_sol_node(state->ast_current);
-      err = parse_require(state);
-      ascend(state);
-      PROPAGATE_ERROR(err);
-    }
-    else if (consume_keyword(state, "infer"))
-    {
-      add_child_and_descend(state);
-      init_sol_node(state->ast_current);
-      err = parse_infer(state);
-      ascend(state);
-      PROPAGATE_ERROR(err);
-    }
-    else if (consume_keyword(state, "def"))
-    {
-      add_child_and_descend(state);
-      init_sol_node(state->ast_current);
-      err = parse_def(state);
-      ascend(state);
-      PROPAGATE_ERROR(err);
-    }
-    else
-    {
-      add_error(state->unit, get_current_token(state),
-        "Unrecognized token.");
-      return 1;
-      break;
-    }
-  }
-  return 0;
-}
-
-int
-parse_theorem(struct ParserState *state)
-{
-  const char *theorem_name;
-  if (!consume_identifier(state, &theorem_name))
-  {
-    add_error(state->unit, get_current_token(state),
-      "No theorem name provided.");
-    return 1;
-  }
-  get_sol_node_data(state->ast_current)->type = NodeTypeTheorem;
-  get_sol_node_data(state->ast_current)->location = get_current_token(state);
-  get_sol_node_data(state->ast_current)->name = strdup(theorem_name);
-
-  /* After the name, there should be a parameter list. */
-  if (!consume_symbol(state, "("))
-  {
-    add_error(state->unit, get_current_token(state),
-      "No parameter list provided.");
-    return 1;
-  }
-  add_child_and_descend(state);
-  init_sol_node(state->ast_current);
-  int err = parse_parameter_list(state);
-  ascend(state);
-  PROPAGATE_ERROR(err);
-
-  /* Expect a definition inside curly brackets. */
-  if (!consume_symbol(state, "{"))
-  {
-    add_error(state->unit, get_current_token(state),
-      "Theorems must have a statement and proof.");
-    return 1;
-  }
-
-  while (state->token_index < ARRAY_LENGTH(*parser_token_buffer(state))
-         && !consume_symbol(state, "}"))
-  {
-    if (consume_keyword(state, "assume"))
-    {
-      add_child_and_descend(state);
-      init_sol_node(state->ast_current);
-      err = parse_assume(state);
-      ascend(state);
-      PROPAGATE_ERROR(err);
-    }
-    else if (consume_keyword(state, "require"))
-    {
-      add_child_and_descend(state);
-      init_sol_node(state->ast_current);
-      err = parse_require(state);
-      ascend(state);
-      PROPAGATE_ERROR(err);
-    }
-    else if (consume_keyword(state, "infer"))
-    {
-      add_child_and_descend(state);
-      init_sol_node(state->ast_current);
-      err = parse_infer(state);
-      ascend(state);
-      PROPAGATE_ERROR(err);
-    }
-    else if (consume_keyword(state, "step"))
-    {
-      add_child_and_descend(state);
-      init_sol_node(state->ast_current);
-      err = parse_step(state);
-      ascend(state);
-      PROPAGATE_ERROR(err);
-    }
-    else if (consume_keyword(state, "def"))
-    {
-      add_child_and_descend(state);
-      init_sol_node(state->ast_current);
-      err = parse_def(state);
-      ascend(state);
-      PROPAGATE_ERROR(err);
-    }
-    else
-    {
-      add_error(state->unit, get_current_token(state),
-        "Unrecognized token.");
-      return 1;
-      break;
-    }
-  }
-
-  return 0;
-}
-
-int
-parse_assume(struct ParserState *state)
-{
-  get_sol_node_data(state->ast_current)->type = NodeTypeAssume;
-  get_sol_node_data(state->ast_current)->location = get_current_token(state);
-
-  /* There should be an expression for a judgement. */
-  add_child_and_descend(state);
-  init_sol_node(state->ast_current);
-  int err = parse_judgement_expression(state);
-  ascend(state);
-  PROPAGATE_ERROR(err);
-
-  /* Expect a semicolon. */
-  if (!consume_symbol(state, ";"))
-  {
-    add_error(state->unit, get_current_token(state),
-      "Expected ';' after assumption.");
-    return 1;
-  }
-  return 0;
-}
-
-int
-parse_require(struct ParserState *state)
-{
-  get_sol_node_data(state->ast_current)->type = NodeTypeRequire;
-  get_sol_node_data(state->ast_current)->location = get_current_token(state);
-
-  /* There should be an expression for a requirement. */
-  add_child_and_descend(state);
-  init_sol_node(state->ast_current);
-  int err = parse_require_expression(state);
-  ascend(state);
-  PROPAGATE_ERROR(err);
-
-  /* Expect a semicolon. */
-  if (!consume_symbol(state, ";"))
-  {
-    add_error(state->unit, get_current_token(state),
-      "Expected ';' after requirement.");
-    return 1;
-  }
-  return 0;
-}
-
-int
-parse_infer(struct ParserState *state)
-{
-  get_sol_node_data(state->ast_current)->type = NodeTypeInfer;
-  get_sol_node_data(state->ast_current)->location = get_current_token(state);
-
-  /* After the keyword, there should be a judgement expression. */
-  add_child_and_descend(state);
-  init_sol_node(state->ast_current);
-  int err = parse_judgement_expression(state);
-  PROPAGATE_ERROR(err);
-  ascend(state);
-
-  /* Expect a semicolon. */
-  if (!consume_symbol(state, ";"))
-  {
-    add_error(state->unit, get_current_token(state),
-      "Expected ';' after inferrence.");
-    return 1;
-  }
-  return 0;
-}
-
-int
-parse_step(struct ParserState *state)
-{
-  get_sol_node_data(state->ast_current)->location = get_current_token(state);
-  get_sol_node_data(state->ast_current)->type = NodeTypeStep;
-
-  /* After the name, there should be an expression giving the inference. */
-  add_child_and_descend(state);
-  init_sol_node(state->ast_current);
-  int err = parse_inference_expression(state);
-  ascend(state);
-  PROPAGATE_ERROR(err);
-
-  /* Expect a semicolon. */
-  if (!consume_symbol(state, ";"))
-  {
-    add_error(state->unit, get_current_token(state),
-      "Expected ';' after proof step.");
-    return 1;
-  }
-
-  return 0;
-}
-
-int
-parse_def(struct ParserState *state)
-{
-  get_sol_node_data(state->ast_current)->location = get_current_token(state);
-  get_sol_node_data(state->ast_current)->type = NodeTypeDef;
-
-  const char *def_name;
-  if (!consume_identifier(state, &def_name))
-  {
-    add_error(state->unit, get_current_token(state),
-      "No definition name provided.");
-    return 1;
-  }
-  get_sol_node_data(state->ast_current)->name = strdup(def_name);
-
-  /* After the name, there should be an expression. */
-  add_child_and_descend(state);
-  init_sol_node(state->ast_current);
-  int err = parse_expression(state);
-  ascend(state);
-  PROPAGATE_ERROR(err);
-
-  /* Expect a semicolon. */
-  if (!consume_symbol(state, ";"))
-  {
-    add_error(state->unit, get_current_token(state),
-      "Expected ';' after definition.");
-    return 1;
-  }
-
-  return 0;
-}
-
-int
-parse_judgement_expression(struct ParserState *state)
-{
-  get_sol_node_data(state->ast_current)->type = NodeTypeJudgementExpression;
-  get_sol_node_data(state->ast_current)->location = get_current_token(state);
-
-  /* First, consume the path of the associated judgement. */
-  add_child_and_descend(state);
-  init_sol_node(state->ast_current);
-  int err = parse_identifier_path(state);
-  PROPAGATE_ERROR(err);
-  ascend(state);
-
-  /* Expect an opening '(' for the argument list. */
-  if (!consume_symbol(state, "("))
-  {
-    add_error(state->unit, get_current_token(state),
-      "No argument list provided in expression.");
-    return 1;
-  }
-
-  /* Next, parse arguments. */
-  add_child_and_descend(state);
-  init_sol_node(state->ast_current);
-  err = parse_argument_list(state);
-  ascend(state);
-  PROPAGATE_ERROR(err);
-
-  return 0;
-}
-
-int
-parse_require_expression(struct ParserState *state)
-{
-  get_sol_node_data(state->ast_current)->type = NodeTypeRequireExpression;
-  get_sol_node_data(state->ast_current)->location = get_current_token(state);
-
-  /* First, consume the identifier for the associated requirement. */
-  const char *req;
-  if (!consume_identifier(state, &req))
-  {
-    add_error(state->unit, get_current_token(state),
-      "No requirement name provided.");
-    return 1;
-  }
-  get_sol_node_data(state->ast_current)->name = strdup(req);
-
-  /* Expect an opening '(' for the argument list. */
-  if (!consume_symbol(state, "("))
-  {
-    add_error(state->unit, get_current_token(state),
-      "No argument list provided in expression.");
-    return 1;
-  }
-
-  /* Next, parse arguments. */
-  add_child_and_descend(state);
-  init_sol_node(state->ast_current);
-  int err = parse_argument_list(state);
-  ascend(state);
-  PROPAGATE_ERROR(err);
-
-  return 0;
-}
-
-int
-parse_inference_expression(struct ParserState *state)
-{
-  get_sol_node_data(state->ast_current)->type = NodeTypeInferenceExpression;
-  get_sol_node_data(state->ast_current)->location = get_current_token(state);
-
-  /* First, consume the path of the associated axiom/theorem. */
-  add_child_and_descend(state);
-  init_sol_node(state->ast_current);
-  int err = parse_identifier_path(state);
-  PROPAGATE_ERROR(err);
-  ascend(state);
-
-  /* Expect an opening '(' for the argument list. */
-  if (!consume_symbol(state, "("))
-  {
-    add_error(state->unit, get_current_token(state),
-      "No argument list provided in expression.");
-    return 1;
-  }
-
-  /* Next, parse arguments. */
-  add_child_and_descend(state);
-  init_sol_node(state->ast_current);
-  err = parse_argument_list(state);
-  ascend(state);
-  PROPAGATE_ERROR(err);
-
-  return 0;
-}
-
-int
-parse_expression(struct ParserState *state)
-{
-  /* Expect a backslash to start the expression. */
-  if (!consume_symbol(state, "\\"))
-  {
-    add_error(state->unit, get_current_token(state),
-      "Expressions must start with '\\'.");
-    return 1;
-  }
-  get_sol_node_data(state->ast_current)->location = get_current_token(state);
-  get_sol_node_data(state->ast_current)->type = NodeTypeExpression;
-
-  /* Loop through the expression until we find a terminating backslash. */
-  while (!consume_symbol(state, "\\"))
-  {
-    if (consume_symbol(state, "$"))
-    {
-      /* If there is a '$' symbol, parse the variable expression. */
-      add_child_and_descend(state);
-      init_sol_node(state->ast_current);
-      get_sol_node_data(state->ast_current)->type = NodeTypeExpressionVariable;
-      get_sol_node_data(state->ast_current)->location = get_current_token(state);
-      get_sol_node_data(state->ast_current)->name =
-        strdup(get_current_token(state)->value);
-      ascend(state);
-      advance(state);
-    }
-    else if (consume_symbol(state, "%"))
-    {
-      /* If there is a '%' symbol, we have a placeholder (NOT a metavariable,
-         just a C preprocessor-like subsitution). */
-      add_child_and_descend(state);
-      init_sol_node(state->ast_current);
-      get_sol_node_data(state->ast_current)->type =
-        NodeTypeExpressionPlaceholder;
-      get_sol_node_data(state->ast_current)->location = get_current_token(state);
-      get_sol_node_data(state->ast_current)->name =
-        strdup(get_current_token(state)->value);
-      ascend(state);
-      advance(state);
-    }
-    else
-    {
-      /* Otherwise, just add the symbol as a "constant". */
-      add_child_and_descend(state);
-      init_sol_node(state->ast_current);
-      get_sol_node_data(state->ast_current)->type = NodeTypeExpressionConstant;
-      get_sol_node_data(state->ast_current)->location = get_current_token(state);
-      get_sol_node_data(state->ast_current)->name =
-        strdup(get_current_token(state)->value);
-      ascend(state);
-      advance(state);
-    }
-  }
-
-  return 0;
-}
-
-int
-parse_identifier_path(struct ParserState *state)
-{
-  /* We should always start with an identifier, and then alternate between dots
-     and identifiers. */
-  get_sol_node_data(state->ast_current)->type = NodeTypeIdentifierPath;
-  get_sol_node_data(state->ast_current)->location = get_current_token(state);
-  const char *seg;
-  if (!consume_identifier(state, &seg))
-  {
-    add_error(state->unit, get_current_token(state),
-      "An identifier path needs at least one segment.");
-    return 1;
-  }
-
-  /* TODO: should this be its own function? */
-  add_child_and_descend(state);
-  init_sol_node(state->ast_current);
-  get_sol_node_data(state->ast_current)->type = NodeTypeIdentifierPathSegment;
-  get_sol_node_data(state->ast_current)->location = get_current_token(state);
-  get_sol_node_data(state->ast_current)->name = strdup(seg);
-  ascend(state);
-
-  while (consume_symbol(state, "."))
-  {
-    if (!consume_identifier(state, &seg))
-    {
-      add_error(state->unit, get_current_token(state),
-        "All segments in an identifier path must be identifiers");
-      return 1;
-    }
-    add_child_and_descend(state);
-    init_sol_node(state->ast_current);
-    get_sol_node_data(state->ast_current)->type = NodeTypeIdentifierPathSegment;
-    get_sol_node_data(state->ast_current)->location = get_current_token(state);
-    get_sol_node_data(state->ast_current)->name = strdup(seg);
-    ascend(state);
-  }
-
-  return 0;
-}
-
-int
+static int
 parse_parameter_list(struct ParserState *state)
 {
-  get_sol_node_data(state->ast_current)->type = NodeTypeParameterList;
-  get_sol_node_data(state->ast_current)->location = get_current_token(state);
+  if (!consume_symbol(state, "("))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing symbol '(' in parameter list.");
+  }
 
-  /* Iterate through the list until we get a closing ')' */
-  int first_param = 1;
+  bool first_token = TRUE;
   while (!consume_symbol(state, ")"))
   {
-    /* Subsequent parameters have commas. */
-    if (!first_param && !consume_symbol(state, ","))
+    if (!first_token)
     {
-      add_error(state->unit, get_current_token(state),
-        "Parameters must be comma-separated.");
-      return 1;
+      if (!consume_symbol(state, ","))
+      {
+        add_error(state->unit, get_current_token(state),
+          "missing comma ',' separating parameters in parameter list.");
+      }
     }
+    if (first_token)
+      first_token = FALSE;
 
     add_child_and_descend(state);
-    init_sol_node(state->ast_current);
-    get_sol_node_data(state->ast_current)->type = NodeTypeParameter;
-    /* Parameters always have the form `[PARAM_NAME]`. */
+    init_ast_node(state->ast_current);
+    AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeParameter;
+
     const char *parameter_name;
     if (!consume_identifier(state, &parameter_name))
     {
       add_error(state->unit, get_current_token(state),
-        "No parameter name provided.");
-      return 1;
+        "missing parameter name.");
     }
-    get_sol_node_data(state->ast_current)->location = get_current_token(state);
-    get_sol_node_data(state->ast_current)->name = strdup(parameter_name);
-    ascend(state);
+    else
+    {
+      AST_NODE_DATA(state->ast_current)->name = strdup(parameter_name);
+    }
 
-    if (first_param)
-      first_param = 0;
-  }
-
-  /* Next, check for a definition. */
-  return 0;
-}
-
-int
-parse_argument_list(struct ParserState *state)
-{
-  get_sol_node_data(state->ast_current)->type = NodeTypeArgumentList;
-  get_sol_node_data(state->ast_current)->location = get_current_token(state);
-
-  /* Iterate through the list until we get a closing ')' */
-  int first_arg = 1;
-  while (!consume_symbol(state, ")"))
-  {
-    /* Subsequent parameters have commas. */
-    if (!first_arg && !consume_symbol(state, ","))
+    if (!consume_symbol(state, ":"))
     {
       add_error(state->unit, get_current_token(state),
-        "Arguments must be comma-separated.");
-      return 1;
+        "missing colon ':' separating parameter name and type.");
     }
 
-    add_child_and_descend(state);
-    init_sol_node(state->ast_current);
-    int err = parse_expression(state);
-    ascend(state);
-    PROPAGATE_ERROR(err);
+    const char *parameter_type;
+    if (!consume_identifier(state, &parameter_type))
+    {
+      add_error(state->unit, get_current_token(state),
+        "missing parameter type.");
+    }
+    else
+    {
+      AST_NODE_DATA(state->ast_current)->typename = strdup(parameter_type);
+    }
 
-    if (first_arg)
-      first_arg = 0;
+    ascend(state);
   }
 
-  /* Next, check for a definition. */
   return 0;
 }
 
-void
-print_sol_node(char *buf, size_t len, const struct ASTNode *node)
+static int
+parse_expression(struct ParserState *state)
 {
-  const struct SolASTNodeData *data = get_sol_node_data_c(node);
-  const char *name = data->name;
-  switch (get_sol_node_data_c(node)->type)
+  add_child_and_descend(state);
+  init_ast_node(state->ast_current);
+  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeExpression;
+
+  if (!consume_keyword(state, "expr"))
   {
-    case NodeTypeNamespace:
-      if (name == NULL)
+    add_error(state->unit, get_current_token(state),
+      "missing keyword 'expr' in type declaration.");
+  }
+
+  const char *expression_type;
+  if (!consume_identifier(state, &expression_type))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing resulting expression type in expression declaration.");
+  }
+  else
+  {
+    AST_NODE_DATA(state->ast_current)->typename = strdup(expression_type);
+  }
+
+  const char *expression_name;
+  if (!consume_identifier(state, &expression_name))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing expression name in expression declaration.");
+  }
+  else
+  {
+    AST_NODE_DATA(state->ast_current)->name = strdup(expression_name);
+  }
+
+  int err = parse_parameter_list(state);
+  PROPAGATE_ERROR(err);
+
+  if (!consume_symbol(state, ";"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing semicolon ';' after expression declaration.");
+  }
+
+  ascend(state);
+  return 0;
+}
+
+static int
+parse_value(struct ParserState *state)
+{
+  add_child_and_descend(state);
+  init_ast_node(state->ast_current);
+
+  if (consume_symbol(state, "$"))
+  {
+    /* This is a variable. */
+    AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeVariable;
+    const char *variable_name;
+    if (!consume_identifier(state, &variable_name))
+    {
+      add_error(state->unit, get_current_token(state),
+        "missing variable name in value.");
+    }
+    else
+    {
+      AST_NODE_DATA(state->ast_current)->name = strdup(variable_name);
+    }
+  }
+  else if (consume_symbol(state, "%"))
+  {
+    /* This is a placeholder. */
+    AST_NODE_DATA(state->ast_current)->type = ASTNodeTypePlaceholder;
+    const char *placeholder_name;
+    if (!consume_identifier(state, &placeholder_name))
+    {
+      add_error(state->unit, get_current_token(state),
+        "missing placeholder name in value.");
+    }
+    else
+    {
+      AST_NODE_DATA(state->ast_current)->name = strdup(placeholder_name);
+    }
+  }
+  else
+  {
+    /* This is either a constant or a composition. */
+    const char *constant_name;
+    if (!consume_identifier(state, &constant_name))
+    {
+      /* TODO: change error message to depend on whether this is a
+         constant or a composition. */
+      add_error(state->unit, get_current_token(state),
+        "missing constant name in value.");
+    }
+    else
+    {
+      AST_NODE_DATA(state->ast_current)->name = strdup(constant_name);
+    }
+
+    if (consume_symbol(state, "("))
+    {
+      /* We have a composition. Parse the arguments. */
+      AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeComposition;
+
+      bool first_token = TRUE;
+      while (!consume_symbol(state, ")"))
+      {
+        if (!first_token)
+        {
+          if (!consume_symbol(state, ","))
+          {
+            add_error(state->unit, get_current_token(state),
+              "missing comma ',' separating arguments in composition.");
+          }
+        }
+        if (first_token)
+          first_token = FALSE;
+
+        int err = parse_value(state);
+        PROPAGATE_ERROR(err);
+      }
+    }
+    else
+    {
+      /* Just a constant. */
+      AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeConstant;
+    }
+  }
+
+  ascend(state);
+  return 0;
+}
+
+static int
+parse_definition(struct ParserState *state)
+{
+  add_child_and_descend(state);
+  init_ast_node(state->ast_current);
+  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeDef;
+
+  if (!consume_keyword(state, "def"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing keyword 'def' in definition.");
+  }
+
+  const char *definition_name;
+  if (!consume_identifier(state, &definition_name))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing definition name in definition.");
+  }
+  else
+  {
+    AST_NODE_DATA(state->ast_current)->name = strdup(definition_name);
+  }
+
+  int err = parse_value(state);
+  PROPAGATE_ERROR(err);
+
+  if (!consume_symbol(state, ";"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing semicolon ';' after definition.");
+  }
+
+  ascend(state);
+  return 0;
+}
+
+static int
+parse_assume(struct ParserState *state)
+{
+  add_child_and_descend(state);
+  init_ast_node(state->ast_current);
+  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeAssume;
+
+  if (!consume_keyword(state, "assume"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing keyword 'assume' in assumption.");
+  }
+
+  int err = parse_value(state);
+  PROPAGATE_ERROR(err);
+
+  if (!consume_symbol(state, ";"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing semicolon ';' after assumption.");
+  }
+
+  ascend(state);
+  return 0;
+}
+
+static int
+parse_infer(struct ParserState *state)
+{
+  add_child_and_descend(state);
+  init_ast_node(state->ast_current);
+  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeInfer;
+
+  if (!consume_keyword(state, "infer"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing keyword 'infer' in inference.");
+  }
+
+  int err = parse_value(state);
+  PROPAGATE_ERROR(err);
+
+  if (!consume_symbol(state, ";"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing semicolon ';' after inference.");
+  }
+
+  ascend(state);
+  return 0;
+}
+
+static int
+parse_axiom_item(struct ParserState *state)
+{
+  if (next_is_keyword(state, "def"))
+  {
+    int err = parse_definition(state);
+    PROPAGATE_ERROR(err);
+  }
+  else if (next_is_keyword(state, "assume"))
+  {
+    int err = parse_assume(state);
+    PROPAGATE_ERROR(err);
+  }
+  else if (next_is_keyword(state, "infer"))
+  {
+    int err = parse_infer(state);
+    PROPAGATE_ERROR(err);
+  }
+  else
+  {
+    add_error(state->unit, get_current_token(state),
+      "expected a definition, assumption, or inference.");
+    return 1; /* TODO: This should not be fatal. */
+  }
+
+  return 0;
+}
+
+static int
+parse_axiom(struct ParserState *state)
+{
+  add_child_and_descend(state);
+  init_ast_node(state->ast_current);
+  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeAxiom;
+
+  if (!consume_keyword(state, "axiom"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing keyword 'axiom' in axiom statement.");
+  }
+
+  const char *axiom_name;
+  if (!consume_identifier(state, &axiom_name))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing axiom name in axiom statement.");
+  }
+  else
+  {
+    AST_NODE_DATA(state->ast_current)->name = strdup(axiom_name);
+  }
+
+  int err = parse_parameter_list(state);
+  PROPAGATE_ERROR(err);
+
+  if (!consume_symbol(state, "{"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing symbol '{' enclosing axiom statement.");
+  }
+
+  while (!consume_symbol(state, "}"))
+  {
+    err = parse_axiom_item(state);
+    PROPAGATE_ERROR(err);
+  }
+
+  ascend(state);
+  return 0;
+}
+
+static int
+parse_path(struct ParserState *state)
+{
+  add_child_and_descend(state);
+  init_ast_node(state->ast_current);
+  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypePath;
+
+  const char *first_segment;
+  if (!consume_identifier(state, &first_segment))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing first path segment in path to axiom/theorem.");
+  }
+  else
+  {
+    add_child_and_descend(state);
+    init_ast_node(state->ast_current);
+    AST_NODE_DATA(state->ast_current)->type = ASTNodeTypePathSegment;
+    AST_NODE_DATA(state->ast_current)->name = strdup(first_segment);
+    ascend(state);
+  }
+
+  while (consume_symbol(state, "."))
+  {
+    const char *segment;
+    if (!consume_identifier(state, &segment))
+    {
+      add_error(state->unit, get_current_token(state),
+        "missing path segment following dot '.' in path to axiom/theorem.");
+    }
+    else
+    {
+      add_child_and_descend(state);
+      init_ast_node(state->ast_current);
+      AST_NODE_DATA(state->ast_current)->type = ASTNodeTypePathSegment;
+      AST_NODE_DATA(state->ast_current)->name = strdup(segment);
+      ascend(state);
+    }
+  }
+
+  ascend(state);
+  return 0;
+}
+
+static int
+parse_theorem_reference(struct ParserState *state)
+{
+  add_child_and_descend(state);
+  init_ast_node(state->ast_current);
+  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeTheoremReference;
+
+  int err = parse_path(state);
+  PROPAGATE_ERROR(err);
+
+  if (!consume_symbol(state, "("))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing symbol '(' in theorem reference.");
+  }
+
+  bool first_token = TRUE;
+  while (!consume_symbol(state, ")"))
+  {
+    if (!first_token)
+    {
+      if (!consume_symbol(state, ","))
+      {
+        add_error(state->unit, get_current_token(state),
+          "missing comma ',' separating arguments in theorem reference arguments.");
+      }
+    }
+    if (first_token)
+      first_token = FALSE;
+
+    err = parse_value(state);
+    PROPAGATE_ERROR(err);
+  }
+
+  ascend(state);
+  return 0;
+}
+
+static int
+parse_step(struct ParserState *state)
+{
+  add_child_and_descend(state);
+  init_ast_node(state->ast_current);
+  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeStep;
+
+  if (!consume_keyword(state, "step"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing keyword 'step' in step.");
+  }
+
+  int err = parse_theorem_reference(state);
+  PROPAGATE_ERROR(err);
+
+  if (!consume_symbol(state, ";"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing semicolon ';' after step.");
+  }
+
+  ascend(state);
+  return 0;
+}
+
+static int
+parse_theorem_item(struct ParserState *state)
+{
+  if (next_is_keyword(state, "def"))
+  {
+    int err = parse_definition(state);
+    PROPAGATE_ERROR(err);
+  }
+  else if (next_is_keyword(state, "assume"))
+  {
+    int err = parse_assume(state);
+    PROPAGATE_ERROR(err);
+  }
+  else if (next_is_keyword(state, "infer"))
+  {
+    int err = parse_infer(state);
+    PROPAGATE_ERROR(err);
+  }
+  else if (next_is_keyword(state, "step"))
+  {
+    int err = parse_step(state);
+    PROPAGATE_ERROR(err);
+  }
+  else
+  {
+    add_error(state->unit, get_current_token(state),
+      "expected a definition, assumption, inference, or step.");
+    return 1; /* TODO: This should not be fatal. */
+  }
+
+  return 0;
+}
+
+static int
+parse_theorem(struct ParserState *state)
+{
+  add_child_and_descend(state);
+  init_ast_node(state->ast_current);
+  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeTheorem;
+
+  if (!consume_keyword(state, "theorem"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing keyword 'theorem' in theorem statement.");
+  }
+
+  const char *theorem_name;
+  if (!consume_identifier(state, &theorem_name))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing theorem name in theorem statement.");
+  }
+  else
+  {
+    AST_NODE_DATA(state->ast_current)->name = strdup(theorem_name);
+  }
+
+  int err = parse_parameter_list(state);
+  PROPAGATE_ERROR(err);
+
+  if (!consume_symbol(state, "{"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing symbol '{' enclosing theorem statement.");
+  }
+
+  while (!consume_symbol(state, "}"))
+  {
+    err = parse_theorem_item(state);
+    PROPAGATE_ERROR(err);
+  }
+
+  ascend(state);
+  return 0;
+}
+
+static int
+parse_namespace_item(struct ParserState *state)
+{
+  if (next_is_keyword(state, "namespace"))
+  {
+    int err = parse_namespace(state);
+    PROPAGATE_ERROR(err);
+  }
+  else if (next_is_keyword(state, "type"))
+  {
+    int err = parse_type(state);
+    PROPAGATE_ERROR(err);
+  }
+  else if (next_is_keyword(state, "expr"))
+  {
+    int err = parse_expression(state);
+    PROPAGATE_ERROR(err);
+  }
+  else if (next_is_keyword(state, "axiom"))
+  {
+    int err = parse_axiom(state);
+    PROPAGATE_ERROR(err);
+  }
+  else if (next_is_keyword(state, "theorem"))
+  {
+    int err = parse_theorem(state);
+    PROPAGATE_ERROR(err);
+  }
+  else
+  {
+    add_error(state->unit, get_current_token(state),
+      "expected a type, expression, axiom, or theorem.");
+    return 1; /* TODO: This should not be fatal. */
+  }
+
+  return 0;
+}
+
+static int
+parse_namespace(struct ParserState *state)
+{
+  add_child_and_descend(state);
+  init_ast_node(state->ast_current);
+  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeNamespace;
+
+  if (!consume_keyword(state, "namespace"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing keyword 'namespace' in namespace declaration");
+  }
+
+  const char *namespace_name;
+  if (!consume_identifier(state, &namespace_name))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing namespace name in namespace declaration");
+  }
+  else
+  {
+    AST_NODE_DATA(state->ast_current)->name = strdup(namespace_name);
+  }
+
+  if (!consume_symbol(state, "{"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing curly brace '{' in namespace declaration");
+  }
+
+  while (!consume_symbol(state, "}"))
+  {
+    int err = parse_namespace_item(state);
+    PROPAGATE_ERROR(err);
+  }
+
+  ascend(state);
+
+  return 0;
+}
+
+static int
+parse_root(struct ParserState *state)
+{
+  init_tree(&state->ast_root);
+
+  add_child_and_descend(state);
+  init_ast_node(state->ast_current);
+  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeNamespace;
+
+  while (tokens_remain(state))
+  {
+    int err = parse_namespace_item(state);
+    PROPAGATE_ERROR(err);
+  }
+
+  //ascend(state);
+  return 0;
+}
+
+/*
+
+ASTNodeTypeNone = 0,
+ASTNodeTypeNamespace,
+
+ASTNodeTypeType,
+ASTNodeTypeExpression,
+ASTNodeTypeAxiom,
+ASTNodeTypeTheorem,
+
+ASTNodeTypeParameter,
+ASTNodeTypeDef,
+ASTNodeTypeAssume,
+ASTNodeTypeRequire,
+ASTNodeTypeInfer,
+ASTNodeTypeStep,
+
+ASTNodeTypeComposition,
+ASTNodeTypeConstant,
+ASTNodeTypeVariable,
+ASTNodeTypePlaceholder,
+ASTNodeTypeTheoremReference,
+
+ASTNodeTypePath,
+
+ASTNodeTypePathSegment
+
+*/
+static void
+print_ast_node(char *buf, size_t len, const struct ASTNode *node)
+{
+  if (node->data == NULL)
+  {
+    snprintf(buf, len, "");
+    return;
+  }
+  switch (AST_NODE_DATA(node)->type)
+  {
+    case ASTNodeTypeNone:
+      snprintf(buf, len, "Unknown<>");
+    case ASTNodeTypeNamespace:
+      if (AST_NODE_DATA(node)->name == NULL)
         snprintf(buf, len, "Namespace<Unnamed>");
       else
-        snprintf(buf, len, "Namespace<Name: \"%s\">", name);
+        snprintf(buf, len, "Namespace<\"%s\">",
+          AST_NODE_DATA(node)->name);
       break;
-    case NodeTypeImport:
-      snprintf(buf, len, "Import");
+    case ASTNodeTypeType:
+      snprintf(buf, len, "Type<%s>", AST_NODE_DATA(node)->typename);
       break;
-    case NodeTypeJudgement:
-      snprintf(buf, len, "Judgement<Name: \"%s\">", name);
+    case ASTNodeTypeExpression:
+      snprintf(buf, len, "Expression<\"%s\" : %s>",
+        AST_NODE_DATA(node)->name, AST_NODE_DATA(node)->typename);
       break;
-    case NodeTypeAxiom:
-      snprintf(buf, len, "Axiom<Name: \"%s\">", name);
+    case ASTNodeTypeAxiom:
+      snprintf(buf, len, "Axiom<\"%s\">", AST_NODE_DATA(node)->name);
       break;
-    case NodeTypeTheorem:
-      snprintf(buf, len, "Theorem<Name: \"%s\">", name);
+    case ASTNodeTypeTheorem:
+      snprintf(buf, len, "Theorem<\"%s\">", AST_NODE_DATA(node)->name);
       break;
-    case NodeTypeAssume:
-      snprintf(buf, len, "Assume");
+    case ASTNodeTypeParameter:
+      snprintf(buf, len, "Parameter<\"%s\" : %s>",
+        AST_NODE_DATA(node)->name, AST_NODE_DATA(node)->typename);
       break;
-    case NodeTypeInfer:
-      snprintf(buf, len, "Infer");
+    case ASTNodeTypeDef:
+      snprintf(buf, len, "Def<\"%s\">", AST_NODE_DATA(node)->name);
       break;
-    case NodeTypeStep:
-      snprintf(buf, len, "Step");
+    case ASTNodeTypeAssume:
+      snprintf(buf, len, "Assume<>");
       break;
-    case NodeTypeDef:
-      snprintf(buf, len, "Definition<Name: \"%s\">", name);
+    case ASTNodeTypeRequire:
+      snprintf(buf, len, "Require<>");
       break;
-    case NodeTypeJudgementExpression:
-      snprintf(buf, len, "Judgement Expression<Name: \"%s\">", name);
+    case ASTNodeTypeInfer:
+      snprintf(buf, len, "Infer<>");
       break;
-    case NodeTypeInferenceExpression:
-      snprintf(buf, len, "Inference Expression<Name: \"%s\">", name);
+    case ASTNodeTypeStep:
+      snprintf(buf, len, "Step<>");
       break;
-    case NodeTypeExpression:
-      snprintf(buf, len, "Expression");
+    case ASTNodeTypeComposition:
+      snprintf(buf, len, "Composition<\"%s\">", AST_NODE_DATA(node)->name);
       break;
-    case NodeTypeExpressionConstant:
-      snprintf(buf, len, "Constant<Name: \"%s\">", name);
+    case ASTNodeTypeConstant:
+      snprintf(buf, len, "Constant<\"%s\">", AST_NODE_DATA(node)->name);
       break;
-    case NodeTypeExpressionVariable:
-      snprintf(buf, len, "Variable<Name: \"%s\">", name);
+    case ASTNodeTypeVariable:
+      snprintf(buf, len, "Variable<\"%s\">", AST_NODE_DATA(node)->name);
       break;
-    case NodeTypeIdentifierPath:
-      snprintf(buf, len, "Path");
+    case ASTNodeTypePlaceholder:
+      snprintf(buf, len, "Placeholder<\"%s\">", AST_NODE_DATA(node)->name);
       break;
-    case NodeTypeIdentifierPathSegment:
-      snprintf(buf, len, "Path Segment<Identifier: \"%s\">", name);
+    case ASTNodeTypeTheoremReference:
+      snprintf(buf, len, "Theorem Reference<>");
       break;
-    case NodeTypeParameterList:
-      snprintf(buf, len, "Parameter List");
+    case ASTNodeTypePath:
+      snprintf(buf, len, "Path<>");
       break;
-    case NodeTypeParameter:
-      snprintf(buf, len, "Parameter<Name: \"%s\">", name);
-      break;
-    case NodeTypeArgumentList:
-      snprintf(buf, len, "Argument List");
+    case ASTNodeTypePathSegment:
+      snprintf(buf, len, "Path Segment<\"%s\">", AST_NODE_DATA(node)->name);
       break;
     default:
-      snprintf(buf, len, "Unknown");
+      snprintf(buf, len, "");
       break;
   }
 }
 
+#if 0
 int
 copy_expression_symbol(struct ExpressionSymbol *dst,
   const struct ExpressionSymbol *src)
@@ -2854,12 +2507,13 @@ validate_program(struct ValidationState *state)
 
   return err;
 }
+#endif
 
 int
-sol_verify(const char *input_path, FILE *out)
+sl_verify(const char *input_path, FILE *out)
 {
   /* Open the file. */
-  LOG_NORMAL(out, "Validating file '%s'.\n", input_path);
+  LOG_NORMAL(out, "Validating sl file '%s'.\n", input_path);
   struct CompilationUnit unit = {};
   open_compilation_unit(&unit, input_path);
 
@@ -2871,11 +2525,11 @@ sol_verify(const char *input_path, FILE *out)
   file_to_lines(&lex_out, &unit);
   remove_whitespace(&lex_out);
   separate_symbols(&lex_out);
-  identify_symbols(&lex_out, sol_symbols);
+  identify_symbols(&lex_out, sl_symbols);
   remove_block_comments(&lex_out, "/*", "*/");
   remove_line_comments(&lex_out, "//");
   separate_identifiers(&lex_out);
-  identify_keywords(&lex_out, sol_keywords);
+  identify_keywords(&lex_out, sl_keywords);
   remove_line_ends(&lex_out);
 
   /* Parse the file */
@@ -2885,14 +2539,16 @@ sol_verify(const char *input_path, FILE *out)
   parse_out.input = &lex_out;
   parse_out.ast_current = &parse_out.ast_root;
 
-  int err = parse_program(&parse_out);
-  if (err)
+  int err = parse_root(&parse_out);
+  /*if (err)
   {
     print_errors(&unit);
     return 1;
   }
-  PROPAGATE_ERROR(err);
+  PROPAGATE_ERROR(err);*/
+  print_tree(&parse_out.ast_root, &print_ast_node);
 
+#if 0
   /* Validate the file. */
   LOG_VERBOSE(out, "Validating.\n");
   struct ValidationState validation_out = {};
@@ -2904,13 +2560,14 @@ sol_verify(const char *input_path, FILE *out)
   err = validate_program(&validation_out);
   if (err || !validation_out.valid)
     print_errors(&unit);
+#endif
 
   /* Free the AST. */
   LOG_VERBOSE(out, "Done.\n");
   free_tree(&parse_out.ast_root);
-  free_lex_state(&lex_out);
   PROPAGATE_ERROR(err);
 
+  free_lex_state(&lex_out);
   close_compilation_unit(&unit);
 
   return 0;

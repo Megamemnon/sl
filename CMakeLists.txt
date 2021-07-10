@@ -37,6 +37,16 @@ target_link_libraries(gm
   magma
 )
 
+## sl
+add_executable(sl
+  src/sl/main.c
+
+  src/sl/sl.c
+)
+target_link_libraries(sl
+  magma
+)
+
 ## Sol
 add_executable(sol
   src/sol/main.c

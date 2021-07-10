@@ -82,10 +82,19 @@ advance(struct ParserState *state);
 int
 consume_keyword(struct ParserState *state, const char *keyword);
 
+bool
+next_is_keyword(struct ParserState *state, const char *keyword);
+
 int
 consume_symbol(struct ParserState *state, const char *symbol);
 
+bool
+next_is_symbol(struct ParserState *state, const char *symbol);
+
 int
 consume_identifier(struct ParserState *state, const char **identifier);
+
+bool
+tokens_remain(struct ParserState *state);
 
 #endif

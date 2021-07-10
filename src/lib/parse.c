@@ -151,6 +151,17 @@ consume_keyword(struct ParserState *state, const char *keyword)
   return 0;
 }
 
+bool
+next_is_keyword(struct ParserState *state, const char *keyword)
+{
+  if (get_current_token(state)->type == TokenTypeKeyword
+      && strcmp(get_current_token(state)->value, keyword) == 0)
+  {
+    return TRUE;
+  }
+  return FALSE;
+}
+
 int
 consume_symbol(struct ParserState *state, const char *symbol)
 {
@@ -161,6 +172,17 @@ consume_symbol(struct ParserState *state, const char *symbol)
     return 1;
   }
   return 0;
+}
+
+bool
+next_is_symbol(struct ParserState *state, const char *symbol)
+{
+  if (get_current_token(state)->type == TokenTypeSymbol
+      && strcmp(get_current_token(state)->value, symbol) == 0)
+  {
+    return TRUE;
+  }
+  return FALSE;
 }
 
 /* If the current token is an identifier, "consume" it and advance. */
@@ -174,4 +196,12 @@ consume_identifier(struct ParserState *state, const char **identifier)
     return 1;
   }
   return 0;
+}
+
+bool
+tokens_remain(struct ParserState *state)
+{
+  if (state->token_index >= ARRAY_LENGTH(*lex_state_front_buffer(state->input)))
+    return FALSE;
+  return TRUE;
 }
