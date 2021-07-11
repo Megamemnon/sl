@@ -64,6 +64,9 @@ struct ParserState
   struct ASTNode *ast_current;
 };
 
+bool
+done_parsing(struct ParserState *state);
+
 Array *
 parser_token_buffer(struct ParserState *state);
 
@@ -78,6 +81,9 @@ ascend(struct ParserState *state);
 
 int
 advance(struct ParserState *state);
+
+bool
+next_keyword(struct ParserState *state, const char *keyword);
 
 int
 consume_keyword(struct ParserState *state, const char *keyword);

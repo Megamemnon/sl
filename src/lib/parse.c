@@ -106,6 +106,14 @@ traverse_tree(const struct ASTNode *root,
   node_callback(root, user_data);
 }
 
+bool
+done_parsing(struct ParserState *state)
+{
+  if (state->token_index >= ARRAY_LENGTH(*parser_token_buffer(state)))
+    return TRUE;
+  return FALSE;
+}
+
 Array *
 parser_token_buffer(struct ParserState *state)
 {
@@ -128,7 +136,8 @@ add_child_and_descend(struct ParserState *state)
 void
 ascend(struct ParserState *state)
 {
-  state->ast_current = state->ast_current->parent;
+  if (state->ast_current != NULL)
+    state->ast_current = state->ast_current->parent;
 }
 
 int
@@ -167,6 +176,14 @@ consume_symbol(struct ParserState *state, const char *symbol)
 {
   if (get_current_token(state)->type == TokenTypeSymbol
       && strcmp(get_current_token(state)->value, symbol) == 0)
+    return TRUE;
+  return FALSE;
+}
+
+int
+consume_symbol(struct ParserState *state, const char *symbol)
+{
+  if (next_symbol(state, symbol))
   {
     ++state->token_index;
     return 1;
