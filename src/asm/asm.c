@@ -462,7 +462,7 @@ parse_directive(struct ParserState *state)
   }
 
   /* See if the directive is provided with arguments. */
-  if (next_symbol(state, "("))
+  if (next_is_symbol(state, "("))
   {
     PROPAGATE_ERROR(parse_argument_list(state));
   }
@@ -509,15 +509,15 @@ parse_value(struct ParserState *state)
   {
     err |= parse_string_literal(state);
   }
-  else if (next_symbol(state, "{"))
+  else if (next_is_symbol(state, "{"))
   {
     err |= parse_code_block(state);
   }
-  else if (next_symbol(state, "["))
+  else if (next_is_symbol(state, "["))
   {
     err |= parse_list(state);
   }
-  else if (next_symbol(state, "@"))
+  else if (next_is_symbol(state, "@"))
   {
     err |= parse_directive(state);
   }

@@ -37,7 +37,7 @@ copy_tree(struct ASTNode *dst, const struct ASTNode *src);
 typedef void (* print_node_callback_t)(char *, size_t, const struct ASTNode *);
 
 void
-print_tree(struct ASTNode *root, print_node_callback_t print_callback);
+print_tree(const struct ASTNode *root, print_node_callback_t print_callback);
 
 struct ASTNode *
 new_child(struct ASTNode *parent);
@@ -81,9 +81,6 @@ ascend(struct ParserState *state);
 
 int
 advance(struct ParserState *state);
-
-bool
-next_keyword(struct ParserState *state, const char *keyword);
 
 int
 consume_keyword(struct ParserState *state, const char *keyword);

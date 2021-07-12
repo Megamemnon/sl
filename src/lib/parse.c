@@ -60,7 +60,7 @@ copy_tree(struct ASTNode *dst, const struct ASTNode *src)
 }
 
 static void
-print_children(struct ASTNode *root, unsigned int depth,
+print_children(const struct ASTNode *root, unsigned int depth,
   print_node_callback_t print_callback)
 {
   for (size_t i = 0; i < depth; ++i)
@@ -76,7 +76,7 @@ print_children(struct ASTNode *root, unsigned int depth,
 }
 
 void
-print_tree(struct ASTNode *root, print_node_callback_t print_callback)
+print_tree(const struct ASTNode *root, print_node_callback_t print_callback)
 {
   print_children(root, 0, print_callback);
 }
@@ -176,14 +176,6 @@ consume_symbol(struct ParserState *state, const char *symbol)
 {
   if (get_current_token(state)->type == TokenTypeSymbol
       && strcmp(get_current_token(state)->value, symbol) == 0)
-    return TRUE;
-  return FALSE;
-}
-
-int
-consume_symbol(struct ParserState *state, const char *symbol)
-{
-  if (next_symbol(state, symbol))
   {
     ++state->token_index;
     return 1;
