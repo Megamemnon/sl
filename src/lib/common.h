@@ -89,4 +89,7 @@ do { \
 } \
 while(0)
 
+uint32_t
+hash(char *str);
+
 #endif

@@ -48,6 +48,12 @@ namespace propositional_calculus
     infer implies(implies(not($psi), not($phi)), implies($phi, $psi));
   }
 
+  /*
+
+  Common theorems of propositional calculus, based on the list given in
+  https://en.wikipedia.org/wiki/Hilbert_system
+
+  */
   theorem
   identity(phi : Proposition)
   {
@@ -59,5 +65,48 @@ namespace propositional_calculus
       implies(implies($phi, implies($phi, $phi)), implies($phi, $phi)));
     step simplification($phi, $phi);
     step modus_ponens(implies($phi, implies($phi, $phi)), implies($phi, $phi));
+  }
+
+  theorem
+  hypothetical_syllogism(phi : Proposition, psi : Proposition,
+    chi : Proposition)
+  {
+    infer implies(implies($psi, $chi),
+      implies(implies($phi, $psi), implies($phi, $chi)));
+
+    step distributive($phi, $psi, $chi);
+    step simplification(implies(implies($phi, implies($psi, $chi)),
+      implies(implies($phi, $psi), implies($phi, $chi))), implies($psi, $chi));
+    step modus_ponens(implies(implies($phi, implies($psi, $chi)),
+      implies(implies($phi, $psi), implies($phi, $chi))),
+      implies(implies($psi, $chi), implies(implies($phi, implies($psi, $chi)),
+      implies(implies($phi, $psi), implies($phi, $chi)))));
+    step distributive(implies($psi, $chi), implies($phi, implies($psi, $chi)),
+      implies(implies($phi, $psi), implies($phi, $chi)));
+    step modus_ponens(implies(implies($psi, $chi), implies(implies($phi,
+      implies($psi, $chi)), implies(implies($phi, $psi), implies($phi, $chi)))),
+      implies(implies(implies($psi, $chi), implies($phi, implies($psi, $chi))),
+      implies(implies($psi, $chi), implies(implies($phi, $psi),
+      implies($phi, $chi)))));
+    step simplification(implies($psi, $chi), $phi);
+    step modus_ponens(implies(implies($psi, $chi),
+      implies($phi, implies($psi, $chi))),
+      implies(implies($psi, $chi), implies(implies($phi, $psi),
+      implies($phi, $chi))));
+  }
+
+  theorem
+  hypothetical_syllogism_meta(phi : Proposition, psi : Proposition,
+    chi : Proposition)
+  {
+    assume implies($psi, $chi);
+    assume implies($phi, $psi);
+
+    infer implies($phi, $chi);
+
+    step hypothetical_syllogism($phi, $psi, $chi);
+    step modus_ponens(implies($psi, $chi),
+      implies(implies($phi, $psi), implies($phi, $chi)));
+    step modus_ponens(implies($phi, $psi), implies($phi, $chi));
   }
 }

@@ -7,6 +7,7 @@ set(CMAKE_BUILD_TYPE Debug)
 add_library(magma
   src/lib/arg.c
   src/lib/code.c
+  src/lib/common.c
   src/lib/lex.c
   src/lib/parse.c
 )
@@ -41,6 +42,7 @@ target_link_libraries(gm
 add_executable(sl
   src/sl/main.c
 
+  src/sl/logic.c
   src/sl/sl.c
 )
 target_link_libraries(sl

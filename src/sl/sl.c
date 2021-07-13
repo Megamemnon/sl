@@ -896,419 +896,9 @@ print_ast_node(char *buf, size_t len, const struct ASTNode *node)
   }
 }
 
-struct SymbolPath
-{
-  Array segments;
-};
+#include "logic.h"
 
-static void
-init_symbol_path(struct SymbolPath *path)
-{
-  ARRAY_INIT(path->segments, char *);
-}
-
-static void
-copy_symbol_path(struct SymbolPath *dst, const struct SymbolPath *src)
-{
-  init_symbol_path(dst);
-  for (size_t i = 0; i < ARRAY_LENGTH(src->segments); ++i)
-  {
-    ARRAY_APPEND(dst->segments, char *,
-      strdup(*ARRAY_GET(src->segments, char *, i)));
-  }
-}
-
-static void
-free_symbol_path(struct SymbolPath *path)
-{
-  for (size_t i = 0; i < ARRAY_LENGTH(path->segments); ++i)
-  {
-    free(*ARRAY_GET(path->segments, char *, i));
-  }
-  ARRAY_FREE(path->segments);
-}
-
-static int
-length_of_symbol_path(const struct SymbolPath *path)
-{
-  return ARRAY_LENGTH(path->segments);
-}
-
-char *
-string_from_symbol_path(const struct SymbolPath *path)
-{
-  if (ARRAY_LENGTH(path->segments) == 0)
-    return strdup("");
-  size_t str_len = ARRAY_LENGTH(path->segments);
-  for (size_t i = 0; i < ARRAY_LENGTH(path->segments); ++i)
-  {
-    const char *segment = *ARRAY_GET(path->segments, char *, i);
-    str_len += strlen(segment);
-  }
-  char *str = malloc(str_len);
-  char *c = str;
-  for (size_t i = 0; i < ARRAY_LENGTH(path->segments); ++i)
-  {
-    if (i > 0)
-    {
-      *c = '.';
-      ++c;
-    }
-    const char *segment = *ARRAY_GET(path->segments, char *, i);
-    strcpy(c, segment);
-    c += strlen(segment);
-  }
-  *c = '\0';
-  return str;
-}
-
-static void
-push_symbol_path(struct SymbolPath *path, const char *segment)
-{
-  ARRAY_APPEND(path->segments, char *, strdup(segment));
-}
-
-static void
-pop_symbol_path(struct SymbolPath *path)
-{
-  free(*ARRAY_GET(path->segments, char *, ARRAY_LENGTH(path->segments) - 1));
-  ARRAY_POP(path->segments);
-}
-
-static void
-append_symbol_path(struct SymbolPath *path, const struct SymbolPath *to_append)
-{
-  for (size_t i = 0; i < ARRAY_LENGTH(to_append->segments); ++i)
-  {
-    const char *segment = *ARRAY_GET(to_append->segments, char *, i);
-    push_symbol_path(path, segment);
-  }
-}
-
-static bool
-symbol_paths_equal(const struct SymbolPath *a, const struct SymbolPath *b)
-{
-  if (ARRAY_LENGTH(a->segments) != ARRAY_LENGTH(b->segments))
-    return FALSE;
-  for (size_t i = 0; i < ARRAY_LENGTH(a->segments); ++i)
-  {
-    const char *a_segment = *ARRAY_GET(a->segments, char *, i);
-    const char *b_segment = *ARRAY_GET(b->segments, char *, i);
-    if (strcmp(a_segment, b_segment) != 0)
-      return FALSE;
-  }
-  return TRUE;
-}
-
-/* There is no reason to differentiate between axioms and theorems that have
-   been proven, so the verifier refers to these both as "theorems". */
-enum SymbolType
-{
-  SymbolTypeNone = 0,
-  SymbolTypeType,
-  SymbolTypeExpression,
-  SymbolTypeTheorem
-};
-
-struct ObjectType
-{
-  char *typename;
-};
-
-static bool
-types_equal(const struct ObjectType *a, const struct ObjectType *b)
-{
-  if (strcmp(a->typename, b->typename) == 0)
-    return TRUE;
-  return FALSE;
-}
-
-static void
-free_type(struct ObjectType *type)
-{
-  free(type->typename);
-}
-
-struct Parameter
-{
-  char *name;
-  const struct ObjectType *type;
-};
-
-static void
-copy_parameter(struct Parameter *dst, const struct Parameter *src)
-{
-  dst->name = strdup(src->name);
-  dst->type = src->type;
-}
-
-static void
-free_parameter(struct Parameter *param)
-{
-  free(param->name);
-}
-
-struct ObjectExpression
-{
-  char *name;
-  const struct ObjectType *type;
-  Array parameters;
-};
-
-static void
-free_expression(struct ObjectExpression *expr)
-{
-  free(expr->name);
-  for (size_t i = 0; i < ARRAY_LENGTH(expr->parameters); ++i)
-  {
-    struct Parameter *param = ARRAY_GET(expr->parameters, struct Parameter, i);
-    free_parameter(param);
-  }
-  ARRAY_FREE(expr->parameters);
-}
-
-enum ValueType
-{
-  ValueTypeComposition,
-  ValueTypeConstant,
-  ValueTypeVariable
-};
-
-struct Value
-{
-  char *name;
-  enum ValueType type;
-  const struct ObjectType *object_type;
-  Array arguments;
-};
-
-static bool
-values_equal(const struct Value *a, const struct Value *b)
-{
-  if (strcmp(a->name, b->name) != 0)
-    return FALSE;
-  if (a->type != b->type)
-    return FALSE;
-  if (!types_equal(a->object_type, b->object_type))
-    return FALSE;
-  if (a->type == ValueTypeComposition)
-  {
-    if (ARRAY_LENGTH(a->arguments) != ARRAY_LENGTH(b->arguments))
-      return FALSE;
-    for (size_t i = 0; i < ARRAY_LENGTH(a->arguments); ++i)
-    {
-      const struct Value *arg_a =
-        ARRAY_GET(a->arguments, struct Value, i);
-      const struct Value *arg_b =
-        ARRAY_GET(b->arguments, struct Value, i);
-      if (!values_equal(arg_a, arg_b))
-        return FALSE;
-    }
-  }
-  return TRUE;
-}
-
-static char *
-string_from_value(const struct Value *value)
-{
-  switch (value->type)
-  {
-    case ValueTypeComposition:
-      {
-        if (ARRAY_LENGTH(value->arguments) == 0)
-        {
-          size_t len = 3 + strlen(value->name);
-          char *str = malloc(len);
-          char *c = str;
-          strcpy(c, value->name);
-          c += strlen(value->name);
-          strcpy(c, "()");
-          c += 2;
-          *c = '\0';
-          return str;
-        }
-        else
-        {
-          size_t len = 3 + strlen(value->name);
-          char **args = malloc(sizeof(char *) * ARRAY_LENGTH(value->arguments));
-          for (size_t i = 0; i < ARRAY_LENGTH(value->arguments); ++i)
-          {
-            const struct Value *arg =
-              ARRAY_GET(value->arguments, struct Value, i);
-            args[i] = string_from_value(arg);
-            len += strlen(args[i]);
-          }
-          len += (ARRAY_LENGTH(value->arguments) - 1) * 2;
-
-          char *str = malloc(len);
-          char *c = str;
-          strcpy(c, value->name);
-          c += strlen(value->name);
-          *c = '(';
-          ++c;
-          bool first_arg = TRUE;
-          for (size_t i = 0; i < ARRAY_LENGTH(value->arguments); ++i)
-          {
-            if (!first_arg)
-            {
-              strcpy(c, ", ");
-              c += 2;
-            }
-            if (first_arg)
-              first_arg = FALSE;
-            strcpy(c, args[i]);
-            c += strlen(args[i]);
-            free(args[i]);
-          }
-          free(args);
-          *c = ')';
-          ++c;
-          *c = '\0';
-          ++c;
-
-          return str;
-        }
-      }
-      break;
-    case ValueTypeConstant:
-      {
-        size_t len = 1 + strlen(value->name);
-        char *str = malloc(len);
-        char *c = str;
-        strcpy(c, value->name);
-        c += strlen(value->name);
-        *c = '\0';
-        return str;
-      }
-      break;
-    case ValueTypeVariable:
-      {
-        size_t len = 2 + strlen(value->name);
-        char *str = malloc(len);
-        char *c = str;
-        *c = '$';
-        ++c;
-        strcpy(c, value->name);
-        c += strlen(value->name);
-        *c = '\0';
-        return str;
-      }
-      break;
-  }
-}
-
-static void
-copy_value(struct Value *dst, const struct Value *src)
-{
-  dst->name = strdup(src->name);
-  dst->type = src->type;
-  dst->object_type = src->object_type;
-  if (src->type == ValueTypeComposition)
-  {
-    ARRAY_INIT(dst->arguments, struct Value);
-    for (size_t i = 0; i < ARRAY_LENGTH(src->arguments); ++i)
-    {
-      const struct Value *arg =
-        ARRAY_GET(src->arguments, struct Value, i);
-      struct Value copy;
-      copy_value(&copy, arg);
-      ARRAY_APPEND(dst->arguments, struct Value, copy);
-    }
-  }
-}
-
-static void
-free_value(struct Value *value)
-{
-  free(value->name);
-  if (value->type == ValueTypeComposition)
-  {
-    for (size_t i = 0; i < ARRAY_LENGTH(value->arguments); ++i)
-    {
-      struct Value *arg = ARRAY_GET(value->arguments, struct Value, i);
-      free_value(arg);
-    }
-    ARRAY_FREE(value->arguments);
-  }
-}
-
-struct Theorem
-{
-  char *name;
-  Array parameters;
-
-  Array assumptions;
-  Array inferences;
-};
-
-static void
-free_theorem(struct Theorem *theorem)
-{
-  free(theorem->name);
-
-  for (size_t i = 0; i < ARRAY_LENGTH(theorem->parameters); ++i)
-  {
-    struct Parameter *param =
-      ARRAY_GET(theorem->parameters, struct Parameter, i);
-    free_parameter(param);
-  }
-  ARRAY_FREE(theorem->parameters);
-
-  for (size_t i = 0; i < ARRAY_LENGTH(theorem->assumptions); ++i)
-  {
-    struct Value *assumption = ARRAY_GET(theorem->assumptions, struct Value, i);
-    free_value(assumption);
-  }
-  ARRAY_FREE(theorem->assumptions);
-
-  for (size_t i = 0; i < ARRAY_LENGTH(theorem->inferences); ++i)
-  {
-    struct Value *inference = ARRAY_GET(theorem->inferences, struct Value, i);
-    free_value(inference);
-  }
-  ARRAY_FREE(theorem->inferences);
-}
-
-struct Symbol
-{
-  struct SymbolPath path;
-  enum SymbolType type;
-  void *object;
-};
-
-static void
-free_symbol(struct Symbol *sym)
-{
-  free_symbol_path(&sym->path);
-  switch (sym->type)
-  {
-    case SymbolTypeType:
-      free_type(sym->object);
-      break;
-    case SymbolTypeExpression:
-      free_expression(sym->object);
-      break;
-    case SymbolTypeTheorem:
-      free_theorem(sym->object);
-      break;
-    default:
-      break;
-  }
-  free(sym->object);
-}
-
-struct ValidationState
-{
-  bool valid;
-  FILE *out;
-
-  struct CompilationUnit *unit;
-  const struct ParserState *input;
-
-  struct SymbolPath prefix_path;
-  Array symbol_table;
-};
-
+#if 0
 static struct Symbol *
 lookup_symbol(struct ValidationState *state, const struct SymbolPath *path)
 {
@@ -1346,46 +936,6 @@ lookup_symbol(struct ValidationState *state, const struct SymbolPath *path)
 }
 
 static int
-validate_type(struct ValidationState *state,
-  const struct ASTNode *type)
-{
-  const struct ASTNodeData *data = AST_NODE_DATA(type);
-  if (data->type != ASTNodeTypeType)
-  {
-    add_error(state->unit, data->location,
-      "expected a type declaration but found the wrong type of node.");
-    state->valid = FALSE;
-  }
-
-  struct Symbol sym = {};
-
-  init_symbol_path(&sym.path);
-  append_symbol_path(&sym.path, &state->prefix_path);
-
-  struct SymbolPath local_path;
-  init_symbol_path(&local_path);
-  push_symbol_path(&local_path, data->typename);
-  append_symbol_path(&sym.path, &local_path);
-  if (lookup_symbol(state, &local_path) != NULL)
-  {
-    add_error(state->unit, data->location,
-      "type name already exists.");
-    state->valid = FALSE;
-  }
-  free_symbol_path(&local_path);
-
-  sym.type = SymbolTypeType;
-
-  struct ObjectType *type_object = malloc(sizeof(struct ObjectType));
-  type_object->typename = strdup(data->typename);
-  sym.object = type_object;
-
-  ARRAY_APPEND(state->symbol_table, struct Symbol, sym);
-
-  return 0;
-}
-
-static int
 extract_parameter(struct ValidationState *state,
   const struct ASTNode *parameter, Array *parameter_list)
 {
@@ -1419,75 +969,6 @@ extract_parameter(struct ValidationState *state,
   free_symbol_path(&type_path);
 
   ARRAY_APPEND(*parameter_list, struct Parameter, param);
-
-  return 0;
-}
-
-static int
-validate_expression(struct ValidationState *state,
-  const struct ASTNode *expression)
-{
-  const struct ASTNodeData *data = AST_NODE_DATA(expression);
-  if (data->type != ASTNodeTypeExpression)
-  {
-    add_error(state->unit, data->location,
-      "expected an expression declaration but found the wrong type of node.");
-    state->valid = FALSE;
-  }
-
-  struct Symbol sym = {};
-
-  init_symbol_path(&sym.path);
-  append_symbol_path(&sym.path, &state->prefix_path);
-
-  struct SymbolPath local_path;
-  init_symbol_path(&local_path);
-  push_symbol_path(&local_path, data->name);
-  append_symbol_path(&sym.path, &local_path);
-  if (lookup_symbol(state, &local_path) != NULL)
-  {
-    add_error(state->unit, data->location,
-      "expression name already in use.");
-    state->valid = FALSE;
-  }
-  free_symbol_path(&local_path);
-
-  sym.type = SymbolTypeExpression;
-
-  struct ObjectExpression *expr_object =
-    malloc(sizeof(struct ObjectExpression));
-  expr_object->name = strdup(data->name);
-
-  struct SymbolPath type_path;
-  init_symbol_path(&type_path);
-  push_symbol_path(&type_path, data->typename);
-  struct Symbol *type = lookup_symbol(state, &type_path);
-  if (type == NULL)
-  {
-    add_error(state->unit, data->location,
-      "unknown type of expression.");
-    state->valid = FALSE;
-  }
-  if (type->type != SymbolTypeType)
-  {
-    add_error(state->unit, data->location,
-      "Type provided as type of expression is not a type.");
-    state->valid = FALSE;
-  }
-  expr_object->type = (struct ObjectType *)type->object;
-  free_symbol_path(&type_path);
-
-  ARRAY_INIT(expr_object->parameters, struct Parameter);
-  for (size_t i = 0; i < ARRAY_LENGTH(expression->children); ++i)
-  {
-    const struct ASTNode *param =
-      ARRAY_GET(expression->children, struct ASTNode, i);
-    int err = extract_parameter(state, param, &expr_object->parameters);
-    PROPAGATE_ERROR(err);
-  }
-  sym.object = expr_object;
-
-  ARRAY_APPEND(state->symbol_table, struct Symbol, sym);
 
   return 0;
 }
@@ -2222,6 +1703,117 @@ validate_theorem(struct ValidationState *state, const struct ASTNode *theorem)
 
   return 0;
 }
+#endif
+
+struct ValidationState
+{
+  bool valid;
+  FILE *out;
+
+  struct CompilationUnit *unit;
+  const struct ParserState *input;
+
+  LogicState *logic;
+  SymbolPath *prefix_path;
+};
+
+static int
+validate_type(struct ValidationState *state,
+  const struct ASTNode *type)
+{
+  const struct ASTNodeData *data = AST_NODE_DATA(type);
+  if (data->type != ASTNodeTypeType)
+  {
+    add_error(state->unit, data->location,
+      "expected a type declaration but found the wrong type of node.");
+    state->valid = FALSE;
+  }
+
+  SymbolPath *path = copy_symbol_path(state->prefix_path);
+  push_symbol_path(path, data->typename);
+
+  LogicError err = add_type(state->logic, path);
+  if (err == LogicErrorSymbolAlreadyExists)
+  {
+    add_error(state->unit, data->location,
+      "symbol already exists when declaring type.");
+    state->valid = FALSE;
+  }
+
+  free_symbol_path(path);
+
+  return 0;
+}
+
+static int
+validate_expression(struct ValidationState *state,
+  const struct ASTNode *expression)
+{
+  const struct ASTNodeData *data = AST_NODE_DATA(expression);
+  if (data->type != ASTNodeTypeExpression)
+  {
+    add_error(state->unit, data->location,
+      "expected an expression declaration but found the wrong type of node.");
+    state->valid = FALSE;
+  }
+
+  /*
+  struct Symbol sym = {};
+
+  init_symbol_path(&sym.path);
+  append_symbol_path(&sym.path, &state->prefix_path);
+
+  struct SymbolPath local_path;
+  init_symbol_path(&local_path);
+  push_symbol_path(&local_path, data->name);
+  append_symbol_path(&sym.path, &local_path);
+  if (lookup_symbol(state, &local_path) != NULL)
+  {
+    add_error(state->unit, data->location,
+      "expression name already in use.");
+    state->valid = FALSE;
+  }
+  free_symbol_path(&local_path);
+
+  sym.type = SymbolTypeExpression;
+
+  struct ObjectExpression *expr_object =
+    malloc(sizeof(struct ObjectExpression));
+  expr_object->name = strdup(data->name);
+
+  struct SymbolPath type_path;
+  init_symbol_path(&type_path);
+  push_symbol_path(&type_path, data->typename);
+  struct Symbol *type = lookup_symbol(state, &type_path);
+  if (type == NULL)
+  {
+    add_error(state->unit, data->location,
+      "unknown type of expression.");
+    state->valid = FALSE;
+  }
+  if (type->type != SymbolTypeType)
+  {
+    add_error(state->unit, data->location,
+      "Type provided as type of expression is not a type.");
+    state->valid = FALSE;
+  }
+  expr_object->type = (struct ObjectType *)type->object;
+  free_symbol_path(&type_path);
+
+  ARRAY_INIT(expr_object->parameters, struct Parameter);
+  for (size_t i = 0; i < ARRAY_LENGTH(expression->children); ++i)
+  {
+    const struct ASTNode *param =
+      ARRAY_GET(expression->children, struct ASTNode, i);
+    int err = extract_parameter(state, param, &expr_object->parameters);
+    PROPAGATE_ERROR(err);
+  }
+  sym.object = expr_object;
+
+  ARRAY_APPEND(state->symbol_table, struct Symbol, sym);*/
+
+  return 0;
+}
 
 static int
 validate_namespace(struct ValidationState *state,
@@ -2237,7 +1829,7 @@ validate_namespace(struct ValidationState *state,
 
   if (data->name != NULL)
   {
-    push_symbol_path(&state->prefix_path, data->name);
+    push_symbol_path(state->prefix_path, data->name);
   }
 
   /* Validate all the objects contained in this namespace. */
@@ -2262,12 +1854,12 @@ validate_namespace(struct ValidationState *state,
         PROPAGATE_ERROR(err);
         break;
       case ASTNodeTypeAxiom:
-        err = validate_axiom(state, child);
-        PROPAGATE_ERROR(err);
+        //err = validate_axiom(state, child);
+        //PROPAGATE_ERROR(err);
         break;
       case ASTNodeTypeTheorem:
-        err = validate_theorem(state, child);
-        PROPAGATE_ERROR(err);
+        //err = validate_theorem(state, child);
+        //PROPAGATE_ERROR(err);
         break;
       default:
         add_error(state->unit, child_data->location,
@@ -2279,7 +1871,7 @@ validate_namespace(struct ValidationState *state,
 
   if (data->name != NULL)
   {
-    pop_symbol_path(&state->prefix_path);
+    pop_symbol_path(state->prefix_path);
   }
 
   return 0;
@@ -2288,8 +1880,8 @@ validate_namespace(struct ValidationState *state,
 static int
 validate(struct ValidationState *state)
 {
-  ARRAY_INIT(state->symbol_table, struct Symbol);
-  init_symbol_path(&state->prefix_path);
+  state->logic = new_logic_state();
+  state->prefix_path = init_symbol_path();
 
   /* The root node should have a child that is the root namespace. */
   const struct ASTNode *root_node = &state->input->ast_root;
@@ -2306,14 +1898,8 @@ validate(struct ValidationState *state)
   int err = validate_namespace(state, root_namespace);
   PROPAGATE_ERROR(err);
 
-  for (size_t i = 0; i < ARRAY_LENGTH(state->symbol_table); ++i)
-  {
-    struct Symbol *sym = ARRAY_GET(state->symbol_table, struct Symbol, i);
-    free_symbol(sym);
-  }
-
-  ARRAY_FREE(state->symbol_table);
-  free_symbol_path(&state->prefix_path);
+  free_logic_state(state->logic);
+  free_symbol_path(state->prefix_path);
   return 0;
 }
 
