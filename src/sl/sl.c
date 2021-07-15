@@ -1431,6 +1431,7 @@ extract_step(struct ValidationState *state, const struct ASTNode *step,
       ARRAY_GET(thm_ref->children, struct ASTNode, i + 1);
     dst->arguments[i] = extract_value(state, arg, env);
   }
+  dst->arguments[ARRAY_LENGTH(thm_ref->children) - 1] = NULL;
 
   return dst;
 }
@@ -1526,6 +1527,7 @@ validate_theorem(struct ValidationState *state,
   proto.parameters[args_n] = NULL;
   proto.assumptions[assumptions_n] = NULL;
   proto.inferences[inferences_n] = NULL;
+  proto.steps[steps_n] = NULL;
 
   free_theorem_environment(&env);
 

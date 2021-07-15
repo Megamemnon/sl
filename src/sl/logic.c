@@ -911,7 +911,7 @@ struct Argument
 };
 
 static Value *
-instantiate_value(const Value *src, Array args)
+instantiate_value(struct LogicState *state, const Value *src, Array args)
 {
   switch (src->value_type)
   {
@@ -933,10 +933,24 @@ instantiate_value(const Value *src, Array args)
         }
         if (arg == NULL)
         {
+          char *value_str = string_from_value(src);
+          LOG_NORMAL(state->log_out,
+            "Cannot instantiate value '%s' because there is no matching argument.\n",
+            value_str);
+          free(value_str);
           return NULL;
         }
-        if (types_equal(arg->value->type, src->type))
+        if (!types_equal(arg->value->type, src->type))
         {
+          char *value_str = string_from_value(src);
+          char *src_type = string_from_symbol_path(src->type->path);
+          char *arg_type = string_from_symbol_path(arg->value->type->path);
+          LOG_NORMAL(state->log_out,
+            "Cannot instantiate value '%s' of type '%s' because the variable has type '%s'.\n",
+            value_str, src_type, arg_type);
+          free(value_str);
+          free(src_type);
+          free(arg_type);
           return NULL;
         }
         return copy_value(arg->value);
@@ -952,7 +966,8 @@ instantiate_value(const Value *src, Array args)
         for (size_t i = 0; i < ARRAY_LENGTH(src->arguments); ++i)
         {
           const Value *arg = *ARRAY_GET(src->arguments, struct Value *, i);
-          ARRAY_APPEND(dst->arguments, Value *, instantiate_value(arg, args));
+          ARRAY_APPEND(dst->arguments, Value *,
+            instantiate_value(state, arg, args));
         }
         return dst;
       }
@@ -974,7 +989,8 @@ statement_proven(const Value *statement, Array proven)
 }
 
 static int
-instantiate_theorem(const struct Theorem *src, Array args, Array proven)
+instantiate_theorem(struct LogicState *state,
+  const struct Theorem *src, Array args, Array *proven)
 {
   /* First, instantiate the assumptions. */
   Array instantiated_assumptions;
@@ -982,7 +998,7 @@ instantiate_theorem(const struct Theorem *src, Array args, Array proven)
   for (size_t i = 0; i < ARRAY_LENGTH(src->assumptions); ++i)
   {
     const Value *assumption = *ARRAY_GET(src->assumptions, Value *, i);
-    Value *instantiated = instantiate_value(assumption, args);
+    Value *instantiated = instantiate_value(state, assumption, args);
     if (instantiated == NULL)
       return 1;
     ARRAY_APPEND(instantiated_assumptions, Value *, instantiated);
@@ -992,8 +1008,17 @@ instantiate_theorem(const struct Theorem *src, Array args, Array proven)
   for (size_t i = 0; i < ARRAY_LENGTH(instantiated_assumptions); ++i)
   {
     Value *assumption = *ARRAY_GET(instantiated_assumptions, Value *, i);
-    if (!statement_proven(assumption, proven))
+    if (!statement_proven(assumption, *proven))
+    {
+      char *theorem_str = string_from_symbol_path(src->path);
+      char *assumption_str = string_from_value(assumption);
+      LOG_NORMAL(state->log_out,
+        "Cannot instantiate theorem '%s' because the assumption '%s' is not satisfied.\n",
+        theorem_str, assumption_str);
+      free(theorem_str);
+      free(assumption_str);
       return 1;
+    }
     free_value(assumption);
   }
   ARRAY_FREE(instantiated_assumptions);
@@ -1002,13 +1027,26 @@ instantiate_theorem(const struct Theorem *src, Array args, Array proven)
   for (size_t i = 0; i < ARRAY_LENGTH(src->inferences); ++i)
   {
     const Value *inference = *ARRAY_GET(src->inferences, Value *, i);
-    Value *instantiated = instantiate_value(inference, args);
+    Value *instantiated = instantiate_value(state, inference, args);
     if (instantiated == NULL)
       return 1;
-    ARRAY_APPEND(proven, Value *, instantiated);
+    ARRAY_APPEND(*proven, Value *, instantiated);
   }
 
   return 0;
+}
+
+static void
+list_proven(LogicState *state, Array proven)
+{
+  LOG_NORMAL(state->log_out, "Statements proven:\n");
+  for (size_t i = 0; i < ARRAY_LENGTH(proven); ++i)
+  {
+    Value *stmt = *ARRAY_GET(proven, Value *, i);
+    char *str = string_from_value(stmt);
+    LOG_NORMAL(state->log_out, "> '%s'\n", str);
+    free(str);
+  }
 }
 
 /* TODO: The return value should be a struct, or modify the PrototypeTheorem,
@@ -1121,10 +1159,11 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
       ARRAY_APPEND(args, struct Argument, arg);
     }
 
-    if (instantiate_theorem(thm, args, proven) != 0)
+    if (instantiate_theorem(state, thm, args, &proven) != 0)
     {
       LOG_NORMAL(state->log_out,
         "Cannot add theorem because an axiom/theorem referenced could not be instantiated.\n");
+      list_proven(state, proven);
       return LogicErrorSymbolAlreadyExists;
     }
   }
