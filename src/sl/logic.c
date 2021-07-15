@@ -1,5 +1,19 @@
 #include "logic.h"
+#include "sl.h"
 #include <string.h>
+
+#define LOG_NORMAL(out, ...) \
+do { \
+  fprintf(out, __VA_ARGS__); \
+} \
+while (0);
+
+#define LOG_VERBOSE(out, ...) \
+do { \
+  if (verbose) \
+    fprintf(out, __VA_ARGS__); \
+} \
+while (0);
 
 struct SymbolPath
 {
@@ -15,14 +29,45 @@ struct Parameter
 struct Type
 {
   uint32_t id;
+  const SymbolPath *path;
+
   //bool atomic;
 };
 
 struct Expression
 {
   uint32_t id;
+  const SymbolPath *path;
+
   const struct Type *type;
   Array parameters;
+};
+
+enum ValueType
+{
+  ValueTypeConstant,
+  ValueTypeVariable,
+  ValueTypeComposition
+};
+
+struct Value
+{
+  enum ValueType value_type;
+  const struct Type *type;
+
+  char *variable_name;
+  const struct Expression *expression;
+  Array arguments;
+};
+
+struct Theorem
+{
+  uint32_t id;
+  const SymbolPath *path;
+
+  Array parameters;
+  Array assumptions;
+  Array inferences;
 };
 
 enum SymbolType
@@ -43,6 +88,8 @@ struct LogicState
 {
   Array symbol_table;
   uint32_t next_id;
+
+  FILE *log_out;
 };
 
 /* Paths */
@@ -167,13 +214,134 @@ free_type(struct Type *type)
 static void
 free_expression(struct Expression *expr)
 {
-  for (size_t i = 0; ARRAY_LENGTH(expr->parameters); ++i)
+  for (size_t i = 0; i < ARRAY_LENGTH(expr->parameters); ++i)
   {
     struct Parameter *param =
       ARRAY_GET(expr->parameters, struct Parameter, i);
     free_parameter(param);
   }
   ARRAY_FREE(expr->parameters);
+}
+
+static char *
+string_from_expression(const struct Expression *expr)
+{
+  size_t len = 5; /* two pairs of parentheses "()" and terminator. */
+  char *path = string_from_symbol_path(expr->path);
+  char *type = string_from_symbol_path(expr->type->path);
+  len += strlen(path) + strlen(type) + 3; /* '[NAME] : [TYPE]' */
+
+  if (ARRAY_LENGTH(expr->parameters) == 0)
+  {
+    char *str = malloc(len);
+    char *c = str;
+    *c = '(';
+    ++c;
+    strcpy(c, path);
+    c += strlen(path);
+    strcpy(c, " : ");
+    c += 3;
+    strcpy(c, type);
+    c += strlen(type);
+    *c = ')';
+    ++c;
+    strcpy(c, "()");
+    c += 2;
+    *c = '\0';
+    free(path);
+    free(type);
+    return str;
+  }
+  else
+  {
+    bool first_param = TRUE;
+    Array param_types;
+    ARRAY_INIT(param_types, char *);
+    for (size_t i = 0; i < ARRAY_LENGTH(expr->parameters); ++i)
+    {
+      if (!first_param)
+        len += 2;
+      if (first_param)
+        first_param = FALSE;
+      const struct Parameter *param =
+        ARRAY_GET(expr->parameters, struct Parameter, i);
+      char *param_type = string_from_symbol_path(param->type->path);
+      len += strlen(param->name) + strlen(param_type) + 3; /* '[NAME] : [TYPE]' */
+      ARRAY_APPEND(param_types, char *, param_type);
+    }
+
+    char *str = malloc(len);
+    char *c = str;
+    *c = '(';
+    ++c;
+    strcpy(c, path);
+    c += strlen(path);
+    strcpy(c, " : ");
+    c += 3;
+    strcpy(c, type);
+    c += strlen(type);
+    *c = ')';
+    ++c;
+    *c = '(';
+    ++c;
+    first_param = TRUE;
+    for (size_t i = 0; i < ARRAY_LENGTH(expr->parameters); ++i)
+    {
+      if (!first_param)
+      {
+        strcpy(c, ", ");
+        c += 2;
+      }
+      if (first_param)
+        first_param = FALSE;
+      const struct Parameter *param =
+        ARRAY_GET(expr->parameters, struct Parameter, i);
+      char *param_type = *ARRAY_GET(param_types, char *, i);
+      strcpy(c, param->name);
+      c += strlen(param->name);
+      strcpy(c, " : ");
+      c += 3;
+      strcpy(c, param_type);
+      c += strlen(param_type);
+      free(param_type);
+    }
+    *c = ')';
+    ++c;
+    *c = '\0';
+    free(path);
+    free(type);
+    ARRAY_FREE(param_types);
+    return str;
+  }
+}
+
+/* Theorems. */
+static void
+free_theorem(struct Theorem *thm)
+{
+  for (size_t i = 0; i < ARRAY_LENGTH(thm->parameters); ++i)
+  {
+    struct Parameter *param =
+      ARRAY_GET(thm->parameters, struct Parameter, i);
+    free_parameter(param);
+  }
+  ARRAY_FREE(thm->parameters);
+
+  for (size_t i = 0; i < ARRAY_LENGTH(thm->assumptions); ++i)
+  {
+    struct Value *value =
+      *ARRAY_GET(thm->assumptions, struct Value *, i);
+    free_value(value);
+  }
+  ARRAY_FREE(thm->assumptions);
+
+  for (size_t i = 0; i < ARRAY_LENGTH(thm->inferences); ++i)
+  {
+    struct Value *value =
+      *ARRAY_GET(thm->inferences, struct Value *, i);
+    free_value(value);
+  }
+  ARRAY_FREE(thm->inferences);
 }
 
 /* Symbols */
@@ -190,6 +358,7 @@ free_symbol(struct Symbol *sym)
       free_expression((struct Expression *)sym->object);
       break;
     case SymbolTypeTheorem:
+      free_theorem((struct Theorem *)sym->object);
       break;
   }
   free(sym->object);
@@ -197,11 +366,12 @@ free_symbol(struct Symbol *sym)
 
 /* Core Logic */
 LogicState *
-new_logic_state()
+new_logic_state(FILE *log_out)
 {
   LogicState *state = malloc(sizeof(LogicState));
   ARRAY_INIT(state->symbol_table, struct Symbol);
   state->next_id = 0;
+  state->log_out = log_out;
   return state;
 }
 
@@ -216,6 +386,19 @@ free_logic_state(LogicState *state)
   }
   ARRAY_FREE(state->symbol_table);
   free(state);
+}
+
+bool
+logic_state_path_occupied(const LogicState *state, const SymbolPath *path)
+{
+  for (size_t i = 0; i < ARRAY_LENGTH(state->symbol_table); ++i)
+  {
+    struct Symbol *sym =
+      ARRAY_GET(state->symbol_table, struct Symbol, i);
+    if (symbol_paths_equal(sym->path, path))
+      return TRUE;
+  }
+  return FALSE;
 }
 
 static struct Symbol *
@@ -254,6 +437,10 @@ add_type(LogicState *state, const SymbolPath *type)
 {
   if (locate_symbol(state, type) != NULL)
   {
+    char *type_str = string_from_symbol_path(type);
+    LOG_NORMAL(state->log_out,
+      "Cannot add type '%s' because the path is in use.\n", type_str);
+    free(type_str);
     return LogicErrorSymbolAlreadyExists;
   }
 
@@ -267,9 +454,21 @@ add_type(LogicState *state, const SymbolPath *type)
   sym.type = SymbolTypeType;
   sym.object = t;
 
+  t->path = sym.path;
+
   add_symbol(state, sym);
 
+  char *type_str = string_from_symbol_path(type);
+  LOG_NORMAL(state->log_out, "Successfully added type '%s'.\n", type_str);
+  free(type_str);
+
   return LogicErrorNone;
+}
+
+static bool
+types_equal(const struct Type *a, const struct Type *b)
+{
+  return (a->id == b->id) ? TRUE : FALSE;
 }
 
 LogicError
@@ -277,140 +476,159 @@ add_expression(LogicState *state, struct PrototypeExpression proto)
 {
   if (locate_symbol(state, proto.expression_path) != NULL)
   {
+    char *expr_str = string_from_symbol_path(proto.expression_path);
+    LOG_NORMAL(state->log_out,
+      "Cannot add expression '%s' because the path is in use.\n", expr_str);
+    free(expr_str);
     return LogicErrorSymbolAlreadyExists;
-  }
-
-  struct Symbol *expression_type =
-    locate_symbol_with_type(state, proto.expression_type, SymbolTypeType);
-  if (expression_type == NULL)
-    return LogicErrorSymbolAlreadyExists;
-
-  for (const struct PrototypeParameter *param = proto.parameters;
-    *param != NULL; ++param)
-  {
-    
   }
 
   struct Expression *e = malloc(sizeof(struct Expression));
   e->id = state->next_id;
   ++state->next_id;
 
+  struct Symbol *type_symbol = locate_symbol_with_type(state,
+    proto.expression_type, SymbolTypeType);
+  if (type_symbol == NULL)
+  {
+    char *expr_str = string_from_symbol_path(proto.expression_path);
+    char *type_str = string_from_symbol_path(proto.expression_type);
+    LOG_NORMAL(state->log_out,
+      "Cannot add expression '%s' because there is no such type '%s'.\n",
+      expr_str, type_str);
+    free(expr_str);
+    free(type_str);
+    free(e);
+    return LogicErrorSymbolAlreadyExists;
+  }
+  e->type = (struct Type *)type_symbol->object;
+
+  ARRAY_INIT(e->parameters, struct Parameter);
+  for (struct PrototypeParameter **param = proto.parameters;
+    *param != NULL; ++param)
+  {
+    struct Parameter p;
+    type_symbol = locate_symbol_with_type(state,
+      (*param)->type, SymbolTypeType);
+    if (type_symbol == NULL)
+    {
+      char *expr_str = string_from_symbol_path(proto.expression_path);
+      char *type_str = string_from_symbol_path((*param)->type);
+      LOG_NORMAL(state->log_out,
+        "Cannot add expression '%s' because there is no such type '%s'.\n",
+        expr_str, type_str);
+      free(expr_str);
+      free(type_str);
+      free_expression(e);
+      free(e);
+      return LogicErrorSymbolAlreadyExists;
+    }
+    p.type = (struct Type *)type_symbol->object;
+    p.name = strdup((*param)->name);
+    ARRAY_APPEND(e->parameters, struct Parameter, p);
+  }
+
   struct Symbol sym;
   sym.path = copy_symbol_path(proto.expression_path);
   sym.type = SymbolTypeExpression;
   sym.object = e;
 
+  e->path = sym.path;
+
   add_symbol(state, sym);
+
+  char *expr_str = string_from_symbol_path(proto.expression_path);
+  LOG_NORMAL(state->log_out,
+    "Successfully added expression '%s'.\n", expr_str);
+  free(expr_str);
+  if (verbose)
+  {
+    expr_str = string_from_expression(e);
+    LOG_VERBOSE(state->log_out, "Signature: '%s'.\n", expr_str);
+    free(expr_str);
+  }
 
   return LogicErrorNone;
 }
 
-#if 0
-struct ObjectType
-{
-  char *typename;
-};
-
-struct Parameter
-{
-  char *name;
-  const ObjectType *type;
-};
-
-struct ObjectExpression
-{
-  char *name;
-  const struct ObjectType *type;
-  Array parameters;
-};
-
-struct Value
-{
-  char *name;
-  enum ValueType type;
-  const struct ObjectType *object_type;
-  Array arguments;
-};
-
-struct ObjectTheorem
-{
-  char *name;
-  Array parameters;
-
-  Array assumptions;
-  Array inferences;
-};
-
-struct Symbol
-{
-  SymbolPath path;
-  enum SymbolType type;
-  void *object;
-};
-
-bool
-types_equal(const ObjectType *a, const ObjectType *b)
-{
-  if (strcmp(a->typename, b->typename) == 0)
-    return TRUE;
-  return FALSE;
-}
-
+/* Values */
 void
-free_type(ObjectType *type)
+free_value(Value *value)
 {
-  free(type->typename);
-}
-
-Parameter *
-copy_parameter(const Parameter *src)
-{
-  Parameter *dst = malloc(sizeof(Parameter));
-  dst->name = strdup(src->name);
-  dst->type = src->type;
-  return dst;
-}
-
-void
-free_parameter(Parameter *param)
-{
-  free(param->name);
-}
-
-void
-free_expression(ObjectExpression *expr)
-{
-  free(expr->name);
-  for (size_t i = 0; i < ARRAY_LENGTH(expr->parameters); ++i)
+  if (value->value_type == ValueTypeVariable)
   {
-    struct Parameter *param = ARRAY_GET(expr->parameters, struct Parameter, i);
-    free_parameter(param);
+    free(value->variable_name);
   }
-  ARRAY_FREE(expr->parameters);
+  else if (value->value_type == ValueTypeComposition)
+  {
+    for (size_t i = 0; i < ARRAY_LENGTH(value->arguments); ++i)
+    {
+      Value *arg = *ARRAY_GET(value->arguments, Value *, i);
+      free_value(arg);
+    }
+    ARRAY_FREE(value->arguments);
+  }
+  free(value);
+}
+
+Value *
+copy_value(const Value *value)
+{
+  Value *v = malloc(sizeof(Value));
+  if (value->value_type == ValueTypeVariable)
+  {
+    v->variable_name = strdup(value->variable_name);
+    v->value_type = ValueTypeVariable;
+    v->type = value->type;
+  }
+  else if (value->value_type == ValueTypeComposition)
+  {
+    v->value_type = ValueTypeComposition;
+    v->type = value->type;
+    v->expression = value->expression;
+    ARRAY_INIT(v->arguments, Value *);
+    for (size_t i = 0; i < ARRAY_LENGTH(value->arguments); ++i)
+    {
+      const struct Value *arg =
+        *ARRAY_GET(value->arguments, Value *, i);
+      struct Value *arg_copy = copy_value(arg);
+      ARRAY_APPEND(v->arguments, Value *, arg_copy);
+    }
+  }
+  return v;
 }
 
 bool
 values_equal(const Value *a, const Value *b)
 {
-  if (strcmp(a->name, b->name) != 0)
+  if (a->value_type != b->value_type)
     return FALSE;
-  if (a->type != b->type)
-    return FALSE;
-  if (!types_equal(a->object_type, b->object_type))
-    return FALSE;
-  if (a->type == ValueTypeComposition)
+  switch (a->value_type)
   {
-    if (ARRAY_LENGTH(a->arguments) != ARRAY_LENGTH(b->arguments))
-      return FALSE;
-    for (size_t i = 0; i < ARRAY_LENGTH(a->arguments); ++i)
-    {
-      const struct Value *arg_a =
-        ARRAY_GET(a->arguments, struct Value, i);
-      const struct Value *arg_b =
-        ARRAY_GET(b->arguments, struct Value, i);
-      if (!values_equal(arg_a, arg_b))
+    case ValueTypeConstant:
+      /* TODO */
+      break;
+    case ValueTypeVariable:
+      if (!types_equal(a->type, b->type))
         return FALSE;
-    }
+      if (strcmp(a->variable_name, b->variable_name) != 0)
+        return FALSE;
+      break;
+    case ValueTypeComposition:
+      if (!types_equal(a->type, b->type))
+        return FALSE;
+      if (a->expression != b->expression) /* TODO: Use an equivalence function instead of pointer equality. */
+        return FALSE;
+      if (ARRAY_LENGTH(a->arguments) != ARRAY_LENGTH(b->arguments))
+        return FALSE;
+      for (size_t i = 0; i < ARRAY_LENGTH(a->arguments); ++i)
+      {
+        const Value *arg_a = *ARRAY_GET(a->arguments, Value *, i);
+        const Value *arg_b = *ARRAY_GET(b->arguments, Value *, i);
+        if (!values_equal(arg_a, arg_b))
+          return FALSE;
+      }
+      break;
   }
   return TRUE;
 }
@@ -418,17 +636,19 @@ values_equal(const Value *a, const Value *b)
 char *
 string_from_value(const Value *value)
 {
-  switch (value->type)
+  switch (value->value_type)
   {
     case ValueTypeComposition:
       {
+        char *expr_str = string_from_symbol_path(value->expression->path);
+        char *str;
         if (ARRAY_LENGTH(value->arguments) == 0)
         {
-          size_t len = 3 + strlen(value->name);
-          char *str = malloc(len);
+          size_t len = 3 + strlen(expr_str);
+          str = malloc(len);
           char *c = str;
-          strcpy(c, value->name);
-          c += strlen(value->name);
+          strcpy(c, expr_str);
+          c += strlen(expr_str);
           strcpy(c, "()");
           c += 2;
           *c = '\0';
@@ -436,21 +656,21 @@ string_from_value(const Value *value)
         }
         else
         {
-          size_t len = 3 + strlen(value->name);
+          size_t len = 3 + strlen(expr_str);
           char **args = malloc(sizeof(char *) * ARRAY_LENGTH(value->arguments));
           for (size_t i = 0; i < ARRAY_LENGTH(value->arguments); ++i)
           {
             const struct Value *arg =
-              ARRAY_GET(value->arguments, struct Value, i);
+              *ARRAY_GET(value->arguments, struct Value *, i);
             args[i] = string_from_value(arg);
             len += strlen(args[i]);
           }
           len += (ARRAY_LENGTH(value->arguments) - 1) * 2;
 
-          char *str = malloc(len);
+          str = malloc(len);
           char *c = str;
-          strcpy(c, value->name);
-          c += strlen(value->name);
+          strcpy(c, expr_str);
+          c += strlen(expr_str);
           *c = '(';
           ++c;
           bool first_arg = TRUE;
@@ -472,31 +692,31 @@ string_from_value(const Value *value)
           ++c;
           *c = '\0';
           ++c;
-
-          return str;
         }
+        free(expr_str);
+        return str;
       }
       break;
     case ValueTypeConstant:
       {
-        size_t len = 1 + strlen(value->name);
+        size_t len = 1 + strlen(value->variable_name);
         char *str = malloc(len);
         char *c = str;
-        strcpy(c, value->name);
-        c += strlen(value->name);
+        strcpy(c, value->variable_name);
+        c += strlen(value->variable_name);
         *c = '\0';
         return str;
       }
       break;
     case ValueTypeVariable:
       {
-        size_t len = 2 + strlen(value->name);
+        size_t len = 2 + strlen(value->variable_name);
         char *str = malloc(len);
         char *c = str;
         *c = '$';
         ++c;
-        strcpy(c, value->name);
-        c += strlen(value->name);
+        strcpy(c, value->variable_name);
+        c += strlen(value->variable_name);
         *c = '\0';
         return str;
       }
@@ -504,95 +724,457 @@ string_from_value(const Value *value)
   }
 }
 
-static void
-copy_value_to(Value *dst, const Value *src)
+Value *
+new_variable_value(LogicState *state, const char *name, const SymbolPath *type)
 {
-  dst->name = strdup(src->name);
-  dst->type = src->type;
-  dst->object_type = src->object_type;
-  if (src->type == ValueTypeComposition)
+  Value *value = malloc(sizeof(Value));
+
+  value->variable_name = strdup(name);
+  value->value_type = ValueTypeVariable;
+  struct Symbol *type_symbol = locate_symbol_with_type(state,
+    type, SymbolTypeType);
+  if (type_symbol == NULL)
   {
-    ARRAY_INIT(dst->arguments, struct Value);
-    for (size_t i = 0; i < ARRAY_LENGTH(src->arguments); ++i)
-    {
-      const struct Value *arg =
-        ARRAY_GET(src->arguments, struct Value, i);
-      struct Value copy;
-      copy_value_to(&copy, arg);
-      ARRAY_APPEND(dst->arguments, struct Value, copy);
-    }
+    char *type_str = string_from_symbol_path(type);
+    LOG_NORMAL(state->log_out,
+      "Cannot create value because there is no such type '%s'.\n", type_str);
+    free(type_str);
+    free(value->variable_name);
+    free(value);
+    return NULL;
   }
+  value->type = (struct Type *)type_symbol->object;
+
+  return value;
 }
 
 Value *
-copy_value(const Value *src)
+new_composition_value(LogicState *state, const SymbolPath *expr_path,
+  Value * const *args)
 {
-  Value *dst = malloc(sizeof(Value));
-  copy_value_to(dst, src);
-  return dst;
-}
+  Value *value = malloc(sizeof(Value));
 
-void
-free_value(Value *value)
-{
-  free(value->name);
-  if (value->type == ValueTypeComposition)
+  value->value_type = ValueTypeComposition;
+  struct Symbol *expr_symbol = locate_symbol_with_type(state,
+    expr_path, SymbolTypeExpression);
+  if (expr_symbol == NULL)
   {
-    for (size_t i = 0; i < ARRAY_LENGTH(value->arguments); ++i)
+    char *expr_str = string_from_symbol_path(expr_path);
+    LOG_NORMAL(state->log_out,
+      "Cannot create value because there is no such expression '%s'.\n",
+      expr_str);
+    free(expr_str);
+    free(value);
+    return NULL;
+  }
+  value->expression = (struct Expression *)expr_symbol->object;
+  value->type = value->expression->type;
+
+  ARRAY_INIT(value->arguments, Value *);
+  for (Value * const *arg = args;
+    *arg != NULL; ++arg)
+  {
+    ARRAY_APPEND(value->arguments, Value *, copy_value(*arg));
+  }
+
+  /* Make sure that the arguments match the types of the parameters of
+     the expression. */
+  if (ARRAY_LENGTH(value->arguments) !=
+    ARRAY_LENGTH(value->expression->parameters))
+  {
+    char *expr_str = string_from_symbol_path(expr_path);
+    LOG_NORMAL(state->log_out,
+      "Cannot create value because the wrong number of arguments are supplied to the expression '%s'\n",
+      expr_str);
+    free(expr_str);
+    free_value(value);
+    return NULL;
+  }
+  for (size_t i = 0; i < ARRAY_LENGTH(value->arguments); ++i)
+  {
+    Value *arg = *ARRAY_GET(value->arguments, Value *, i);
+    const struct Parameter *param =
+      ARRAY_GET(value->expression->parameters, struct Parameter, i);
+    if (!types_equal(arg->type, param->type))
     {
-      struct Value *arg = ARRAY_GET(value->arguments, struct Value, i);
-      free_value(arg);
+      char *expr_str = string_from_symbol_path(expr_path);
+      LOG_NORMAL(state->log_out,
+        "Cannot create value because the type of an argument does not match the required value of the corresponding parameter of expression '%s'\n",
+        expr_str);
+      free(expr_str);
+      free_value(value);
+      return NULL;
     }
-    ARRAY_FREE(value->arguments);
   }
+
+  return value;
 }
 
-void
-free_theorem(ObjectTheorem *theorem)
+LogicError
+add_axiom(LogicState *state, struct PrototypeTheorem proto)
 {
-  free(theorem->name);
-
-  for (size_t i = 0; i < ARRAY_LENGTH(theorem->parameters); ++i)
+  if (locate_symbol(state, proto.theorem_path) != NULL)
   {
-    struct Parameter *param =
-      ARRAY_GET(theorem->parameters, struct Parameter, i);
-    free_parameter(param);
+    char *axiom_str = string_from_symbol_path(proto.theorem_path);
+    LOG_NORMAL(state->log_out,
+      "Cannot add axiom '%s' because the path is in use.\n", axiom_str);
+    free(axiom_str);
+    return LogicErrorSymbolAlreadyExists;
   }
-  ARRAY_FREE(theorem->parameters);
 
-  for (size_t i = 0; i < ARRAY_LENGTH(theorem->assumptions); ++i)
+  struct Theorem *a = malloc(sizeof(struct Theorem));
+  a->id = state->next_id;
+  ++state->next_id;
+
+  /* Parameters. */
+  ARRAY_INIT(a->parameters, struct Parameter);
+  for (struct PrototypeParameter **param = proto.parameters;
+    *param != NULL; ++param)
   {
-    struct Value *assumption = ARRAY_GET(theorem->assumptions, struct Value, i);
+    struct Parameter p;
+    const struct Symbol *type_symbol = locate_symbol_with_type(state,
+      (*param)->type, SymbolTypeType);
+    if (type_symbol == NULL)
+    {
+      char *axiom_str = string_from_symbol_path(proto.theorem_path);
+      char *type_str = string_from_symbol_path((*param)->type);
+      LOG_NORMAL(state->log_out,
+        "Cannot add axiom '%s' because there is no such type '%s'.\n",
+        axiom_str, type_str);
+      free(axiom_str);
+      free(type_str);
+      //free_expression(e);
+      free(a);
+      return LogicErrorSymbolAlreadyExists;
+    }
+    p.type = (struct Type *)type_symbol->object;
+    p.name = strdup((*param)->name);
+    ARRAY_APPEND(a->parameters, struct Parameter, p);
+  }
+
+  /* Assumptions & inferences. */
+  ARRAY_INIT(a->assumptions, struct Value *);
+  ARRAY_INIT(a->inferences, struct Value *);
+  for (Value **assume = proto.assumptions;
+    *assume != NULL; ++assume)
+  {
+    ARRAY_APPEND(a->assumptions, struct Value *, copy_value(*assume));
+  }
+  for (Value **infer = proto.inferences;
+    *infer != NULL; ++infer)
+  {
+    ARRAY_APPEND(a->inferences, struct Value *, copy_value(*infer));
+  }
+
+  struct Symbol sym;
+  sym.path = copy_symbol_path(proto.theorem_path);
+  sym.type = SymbolTypeTheorem;
+  sym.object = a;
+
+  a->path = sym.path;
+
+  add_symbol(state, sym);
+
+  char *axiom_str = string_from_symbol_path(proto.theorem_path);
+  LOG_NORMAL(state->log_out,
+    "Successfully added axiom '%s'.\n", axiom_str);
+  free(axiom_str);
+
+  if (verbose)
+  {
+    for (size_t i = 0; i < ARRAY_LENGTH(a->assumptions); ++i)
+    {
+      char *str = string_from_value(*ARRAY_GET(a->assumptions,
+        struct Value *, i));
+      printf("Assumption %zu: %s\n", i, str);
+      free(str);
+    }
+    for (size_t i = 0; i < ARRAY_LENGTH(a->inferences); ++i)
+    {
+      char *str = string_from_value(*ARRAY_GET(a->inferences,
+        struct Value *, i));
+      printf("Inference %zu: %s\n", i, str);
+      free(str);
+    }
+    /*expr_str = string_from_expression(e);
+    LOG_VERBOSE(state->log_out, "Signature: '%s'.\n", expr_str);
+    free(expr_str);*/
+  }
+
+  return LogicErrorNone;
+}
+
+struct Argument
+{
+  char *name;
+  Value *value;
+};
+
+static Value *
+instantiate_value(const Value *src, Array args)
+{
+  switch (src->value_type)
+  {
+    case ValueTypeConstant:
+      return copy_value(src);
+      break;
+    case ValueTypeVariable:
+      /* Find the corresponding argument. */
+      {
+        const struct Argument *arg = NULL;
+        for (size_t i = 0; i < ARRAY_LENGTH(args); ++i)
+        {
+          const struct Argument *a = ARRAY_GET(args, struct Argument, i);
+          if (strcmp(a->name, src->variable_name) == 0)
+          {
+            arg = a;
+            break;
+          }
+        }
+        if (arg == NULL)
+        {
+          return NULL;
+        }
+        if (types_equal(arg->value->type, src->type))
+        {
+          return NULL;
+        }
+        return copy_value(arg->value);
+      }
+      break;
+    case ValueTypeComposition:
+      {
+        Value *dst = malloc(sizeof(Value));
+        dst->type = src->type;
+        dst->value_type = ValueTypeComposition;
+        dst->expression = src->expression;
+        ARRAY_INIT(dst->arguments, struct Value);
+        for (size_t i = 0; i < ARRAY_LENGTH(src->arguments); ++i)
+        {
+          const Value *arg = *ARRAY_GET(src->arguments, struct Value *, i);
+          ARRAY_APPEND(dst->arguments, Value *, instantiate_value(arg, args));
+        }
+        return dst;
+      }
+      break;
+  }
+  return 0;
+}
+
+static bool
+statement_proven(const Value *statement, Array proven)
+{
+  for (size_t i = 0; i < ARRAY_LENGTH(proven); ++i)
+  {
+    const Value *s = *ARRAY_GET(proven, Value *, i);
+    if (values_equal(statement, s))
+      return TRUE;
+  }
+  return FALSE;
+}
+
+static int
+instantiate_theorem(const struct Theorem *src, Array args, Array proven)
+{
+  /* First, instantiate the assumptions. */
+  Array instantiated_assumptions;
+  ARRAY_INIT(instantiated_assumptions, Value *);
+  for (size_t i = 0; i < ARRAY_LENGTH(src->assumptions); ++i)
+  {
+    const Value *assumption = *ARRAY_GET(src->assumptions, Value *, i);
+    Value *instantiated = instantiate_value(assumption, args);
+    if (instantiated == NULL)
+      return 1;
+    ARRAY_APPEND(instantiated_assumptions, Value *, instantiated);
+  }
+
+  /* Verify that each assumption has been proven. */
+  for (size_t i = 0; i < ARRAY_LENGTH(instantiated_assumptions); ++i)
+  {
+    Value *assumption = *ARRAY_GET(instantiated_assumptions, Value *, i);
+    if (!statement_proven(assumption, proven))
+      return 1;
     free_value(assumption);
   }
-  ARRAY_FREE(theorem->assumptions);
+  ARRAY_FREE(instantiated_assumptions);
 
-  for (size_t i = 0; i < ARRAY_LENGTH(theorem->inferences); ++i)
+  /* Add all the inferences to the environment as proven statements. */
+  for (size_t i = 0; i < ARRAY_LENGTH(src->inferences); ++i)
   {
-    struct Value *inference = ARRAY_GET(theorem->inferences, struct Value, i);
-    free_value(inference);
+    const Value *inference = *ARRAY_GET(src->inferences, Value *, i);
+    Value *instantiated = instantiate_value(inference, args);
+    if (instantiated == NULL)
+      return 1;
+    ARRAY_APPEND(proven, Value *, instantiated);
   }
-  ARRAY_FREE(theorem->inferences);
+
+  return 0;
 }
 
-void
-free_symbol(Symbol *sym)
+/* TODO: The return value should be a struct, or modify the PrototypeTheorem,
+   in order to propagate errors with full detail. */
+LogicError
+add_theorem(LogicState *state, struct PrototypeTheorem proto)
 {
-  free_symbol_path(&sym->path);
-  switch (sym->type)
+  if (locate_symbol(state, proto.theorem_path) != NULL)
   {
-    case SymbolTypeType:
-      free_type(sym->object);
-      break;
-    case SymbolTypeExpression:
-      free_expression(sym->object);
-      break;
-    case SymbolTypeTheorem:
-      free_theorem(sym->object);
-      break;
-    default:
-      break;
+    char *axiom_str = string_from_symbol_path(proto.theorem_path);
+    LOG_NORMAL(state->log_out,
+      "Cannot add theorem '%s' because the path is in use.\n", axiom_str);
+    free(axiom_str);
+    return LogicErrorSymbolAlreadyExists;
   }
-  free(sym->object);
+
+  struct Theorem *a = malloc(sizeof(struct Theorem));
+  a->id = state->next_id;
+  ++state->next_id;
+
+  /* Parameters. */
+  ARRAY_INIT(a->parameters, struct Parameter);
+  for (struct PrototypeParameter **param = proto.parameters;
+    *param != NULL; ++param)
+  {
+    struct Parameter p;
+    const struct Symbol *type_symbol = locate_symbol_with_type(state,
+      (*param)->type, SymbolTypeType);
+    if (type_symbol == NULL)
+    {
+      char *axiom_str = string_from_symbol_path(proto.theorem_path);
+      char *type_str = string_from_symbol_path((*param)->type);
+      LOG_NORMAL(state->log_out,
+        "Cannot add theorem '%s' because there is no such type '%s'.\n",
+        axiom_str, type_str);
+      free(axiom_str);
+      free(type_str);
+      //free_expression(e);
+      free(a);
+      return LogicErrorSymbolAlreadyExists;
+    }
+    p.type = (struct Type *)type_symbol->object;
+    p.name = strdup((*param)->name);
+    ARRAY_APPEND(a->parameters, struct Parameter, p);
+  }
+
+  /* Assumptions & inferences. */
+  ARRAY_INIT(a->assumptions, struct Value *);
+  ARRAY_INIT(a->inferences, struct Value *);
+  for (Value **assume = proto.assumptions;
+    *assume != NULL; ++assume)
+  {
+    ARRAY_APPEND(a->assumptions, struct Value *, copy_value(*assume));
+  }
+  for (Value **infer = proto.inferences;
+    *infer != NULL; ++infer)
+  {
+    ARRAY_APPEND(a->inferences, struct Value *, copy_value(*infer));
+  }
+
+  /* Finally, check the proof. */
+  Array proven;
+  ARRAY_INIT(proven, Value *);
+  for (Value **assume = proto.assumptions;
+    *assume != NULL; ++assume)
+  {
+    ARRAY_APPEND(proven, struct Value *, copy_value(*assume));
+  }
+  for (struct PrototypeProofStep **step = proto.steps;
+    *step != NULL; ++step)
+  {
+    const struct Symbol *thm_symbol = locate_symbol_with_type(state,
+      (*step)->theorem_path, SymbolTypeTheorem);
+    if (thm_symbol == NULL)
+    {
+      LOG_NORMAL(state->log_out,
+        "Cannot add theorem because an axiom/theorem referenced in proof does not exist.\n");
+      return LogicErrorSymbolAlreadyExists;
+    }
+    struct Theorem *thm = (struct Theorem *)thm_symbol->object;
+
+    /* Build a list of arguments. */
+    size_t args_n = 0;
+    for (Value **arg = (*step)->arguments; *arg != NULL; ++arg)
+      ++args_n;
+    if (args_n != ARRAY_LENGTH(thm->parameters))
+    {
+      LOG_NORMAL(state->log_out,
+        "Cannot add theorem because an axiom/theorem referenced received the wrong number of arguments.\n");
+      return LogicErrorSymbolAlreadyExists;
+    }
+
+    Array args;
+    ARRAY_INIT(args, struct Argument);
+    for (size_t i = 0; i < args_n; ++i)
+    {
+      struct Parameter *param = ARRAY_GET(thm->parameters, struct Parameter, i);
+
+      struct Argument arg;
+      arg.name = strdup(param->name);
+      arg.value = copy_value((*step)->arguments[i]);
+
+      if (!types_equal(param->type, arg.value->type))
+      {
+        LOG_NORMAL(state->log_out,
+          "Cannot add theorem because an axiom/theorem referenced received an argument with the wrong type.\n");
+        return LogicErrorSymbolAlreadyExists;
+      }
+
+      ARRAY_APPEND(args, struct Argument, arg);
+    }
+
+    if (instantiate_theorem(thm, args, proven) != 0)
+    {
+      LOG_NORMAL(state->log_out,
+        "Cannot add theorem because an axiom/theorem referenced could not be instantiated.\n");
+      return LogicErrorSymbolAlreadyExists;
+    }
+  }
+
+  /* Check that all the inferences have been proven. */
+  for (size_t i = 0; i < ARRAY_LENGTH(a->inferences); ++i)
+  {
+    Value *infer = *ARRAY_GET(a->inferences, Value *, i);
+    if (!statement_proven(infer, proven))
+    {
+      LOG_NORMAL(state->log_out,
+        "Cannot add theorem because an inference was not proven.\n");
+      return LogicErrorSymbolAlreadyExists;
+    }
+  }
+
+  struct Symbol sym;
+  sym.path = copy_symbol_path(proto.theorem_path);
+  sym.type = SymbolTypeTheorem;
+  sym.object = a;
+
+  a->path = sym.path;
+
+  add_symbol(state, sym);
+
+  char *axiom_str = string_from_symbol_path(proto.theorem_path);
+  LOG_NORMAL(state->log_out,
+    "Successfully added theorem '%s'.\n", axiom_str);
+  free(axiom_str);
+
+  if (verbose)
+  {
+    for (size_t i = 0; i < ARRAY_LENGTH(a->assumptions); ++i)
+    {
+      char *str = string_from_value(*ARRAY_GET(a->assumptions,
+        struct Value *, i));
+      printf("Assumption %zu: %s\n", i, str);
+      free(str);
+    }
+    for (size_t i = 0; i < ARRAY_LENGTH(a->inferences); ++i)
+    {
+      char *str = string_from_value(*ARRAY_GET(a->inferences,
+        struct Value *, i));
+      printf("Inference %zu: %s\n", i, str);
+      free(str);
+    }
+    /*expr_str = string_from_expression(e);
+    LOG_VERBOSE(state->log_out, "Signature: '%s'.\n", expr_str);
+    free(expr_str);*/
+  }
+
+  return LogicErrorNone;
 }
-#endif

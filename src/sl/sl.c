@@ -898,813 +898,6 @@ print_ast_node(char *buf, size_t len, const struct ASTNode *node)
 
 #include "logic.h"
 
-#if 0
-static struct Symbol *
-lookup_symbol(struct ValidationState *state, const struct SymbolPath *path)
-{
-  /* In order to locate the symbol, make a list of all the possible global paths
-     that this symbol could be referring to, depending on the namespace we are
-     in. */
-  struct SymbolPath prefix_path;
-  copy_symbol_path(&prefix_path, &state->prefix_path);
-
-  while (TRUE)
-  {
-    struct SymbolPath target_path;
-    init_symbol_path(&target_path);
-    append_symbol_path(&target_path, &prefix_path);
-    append_symbol_path(&target_path, path);
-
-    for (size_t i = 0; i < ARRAY_LENGTH(state->symbol_table); ++i)
-    {
-      struct Symbol *symbol = ARRAY_GET(state->symbol_table, struct Symbol, i);
-      if (symbol_paths_equal(&symbol->path, &target_path))
-      {
-        free_symbol_path(&target_path);
-        free_symbol_path(&prefix_path);
-        return symbol;
-      }
-    }
-
-    free_symbol_path(&target_path);
-    if (length_of_symbol_path(&prefix_path) == 0)
-      break;
-    pop_symbol_path(&prefix_path);
-  }
-  free_symbol_path(&prefix_path);
-  return NULL;
-}
-
-static int
-extract_parameter(struct ValidationState *state,
-  const struct ASTNode *parameter, Array *parameter_list)
-{
-  const struct ASTNodeData *data = AST_NODE_DATA(parameter);
-  struct Parameter param = {};
-  if (data->type != ASTNodeTypeParameter)
-  {
-    add_error(state->unit, data->location,
-      "expected a parameter but found the wrong type of node.");
-    state->valid = FALSE;
-  }
-  param.name = strdup(data->name);
-
-  struct SymbolPath type_path;
-  init_symbol_path(&type_path);
-  push_symbol_path(&type_path, data->typename);
-  struct Symbol *type = lookup_symbol(state, &type_path);
-  if (type == NULL)
-  {
-    add_error(state->unit, data->location,
-      "unknown type in parameter to expression.");
-    state->valid = FALSE;
-  }
-  if (type->type != SymbolTypeType)
-  {
-    add_error(state->unit, data->location,
-      "Type provided as type of expression argument is not a type.");
-    state->valid = FALSE;
-  }
-  param.type = (struct ObjectType *)type->object;
-  free_symbol_path(&type_path);
-
-  ARRAY_APPEND(*parameter_list, struct Parameter, param);
-
-  return 0;
-}
-
-struct Definition
-{
-  char *name;
-  struct Value value;
-};
-
-static void
-free_definition(struct Definition *def)
-{
-  free(def->name);
-  free_value(&def->value);
-}
-
-struct ProofEnvironment
-{
-  Array parameters;
-  Array definitions;
-  Array proven;
-};
-
-static void
-init_proof_environment(struct ProofEnvironment *env)
-{
-  ARRAY_INIT(env->parameters, struct Parameter);
-  ARRAY_INIT(env->definitions, struct Definition);
-  ARRAY_INIT(env->proven, struct Value);
-}
-
-static void
-free_proof_environment(struct ProofEnvironment *env)
-{
-  for (size_t i = 0; i < ARRAY_LENGTH(env->parameters); ++i)
-  {
-    struct Parameter *param =
-      ARRAY_GET(env->parameters, struct Parameter, i);
-    free_parameter(param);
-  }
-  ARRAY_FREE(env->parameters);
-
-  for (size_t i = 0; i < ARRAY_LENGTH(env->definitions); ++i)
-  {
-    struct Definition *def =
-      ARRAY_GET(env->definitions, struct Definition, i);
-    free_definition(def);
-  }
-  ARRAY_FREE(env->definitions);
-
-  for (size_t i = 0; i < ARRAY_LENGTH(env->proven); ++i)
-  {
-    struct Value *v =
-      ARRAY_GET(env->proven, struct Value, i);
-    free_value(v);
-  }
-  ARRAY_FREE(env->proven);
-}
-
-static int
-extract_value(struct ValidationState *state,
-  const struct ASTNode *value, struct Value *dst,
-  const struct ProofEnvironment *env)
-{
-  const struct ASTNodeData *data = AST_NODE_DATA(value);
-  if (data->type == ASTNodeTypeComposition)
-  {
-    /* Locate the corresponding expression, and verify that the types of
-       the arguments match. */
-    struct SymbolPath expr_path;
-    init_symbol_path(&expr_path);
-    push_symbol_path(&expr_path, data->name);
-    const struct Symbol *sym = lookup_symbol(state, &expr_path);
-    free_symbol_path(&expr_path);
-    if (sym == NULL)
-    {
-      add_error(state->unit, data->location,
-        "unknown expression referenced.");
-      state->valid = FALSE;
-      return 1;
-    }
-    if (sym->type != SymbolTypeExpression)
-    {
-      add_error(state->unit, data->location,
-        "compositions must reference expressions.");
-      state->valid = FALSE;
-      return 1;
-    }
-    const struct ObjectExpression *expr =
-      (struct ObjectExpression *)sym->object;
-
-    /* Go over the children. */
-    if (ARRAY_LENGTH(expr->parameters) != ARRAY_LENGTH(value->children))
-    {
-      add_error(state->unit, data->location,
-        "incorrect number of arguments supplied to expression.");
-      state->valid = FALSE;
-      return 1;
-    }
-    dst->name = strdup(data->name);
-    dst->type = ValueTypeComposition;
-    dst->object_type = expr->type;
-    ARRAY_INIT(dst->arguments, struct Value);
-    for (size_t i = 0; i < ARRAY_LENGTH(value->children); ++i)
-    {
-      const struct Parameter *param =
-        ARRAY_GET(expr->parameters, struct Parameter, i);
-      const struct ASTNode *child =
-        ARRAY_GET(value->children, struct ASTNode, i);
-
-      struct Value child_value;
-      int err = extract_value(state, child, &child_value, env);
-      PROPAGATE_ERROR(err);
-      if (!types_equal(param->type, child_value.object_type))
-      {
-        add_error(state->unit, data->location,
-          "arguments to composition do not match types.");
-        state->valid = FALSE;
-        return 1;
-      }
-      ARRAY_APPEND(dst->arguments, struct Value, child_value);
-    }
-  }
-  else if (data->type == ASTNodeTypeConstant)
-  {
-    /* TODO: implement constants. */
-  }
-  else if (data->type == ASTNodeTypeVariable)
-  {
-    /* Check that this corresponds to a parameter, and copy the corresponding
-       type. */
-    const struct Parameter *param = NULL;
-    for (size_t i = 0; i < ARRAY_LENGTH(env->parameters); ++i)
-    {
-      const struct Parameter *p =
-        ARRAY_GET(env->parameters, struct Parameter, i);
-      if (strcmp(p->name, data->name) == 0)
-      {
-        param = p;
-        break;
-      }
-    }
-
-    if (param == NULL)
-    {
-      add_error(state->unit, data->location,
-        "variable does not correspond to any parameter.");
-      state->valid = FALSE;
-      return 1;
-    }
-
-    dst->name = strdup(data->name);
-    dst->type = ValueTypeVariable;
-    dst->object_type = param->type;
-  }
-  else if (data->type == ASTNodeTypePlaceholder)
-  {
-    /* Look up the corresponding definition. */
-    const struct Definition *def = NULL;
-    for (size_t i = 0; i < ARRAY_LENGTH(env->definitions); ++i)
-    {
-      const struct Definition *d =
-        ARRAY_GET(env->definitions, struct Definition, i);
-      if (strcmp(d->name, data->name) == 0)
-      {
-        def = d;
-        break;
-      }
-    }
-
-    if (def == NULL)
-    {
-      add_error(state->unit, data->location,
-        "placeholder does not correspond to any definition.");
-      state->valid = FALSE;
-      return 1;
-    }
-
-    copy_value(dst, &def->value);
-  }
-  else
-  {
-    add_error(state->unit, data->location,
-      "expected a composition, constant, variable, or placeholder but found the wrong type of node.");
-    state->valid = FALSE;
-    return 1;
-  }
-  return 0;
-}
-
-static int
-extract_definition(struct ValidationState *state,
-  const struct ASTNode *definition, struct ProofEnvironment *env)
-{
-  const struct ASTNodeData *data = AST_NODE_DATA(definition);
-  if (data->type != ASTNodeTypeDef)
-  {
-    add_error(state->unit, data->location,
-      "expected a definition but found the wrong type of node.");
-    state->valid = FALSE;
-  }
-
-  if (ARRAY_LENGTH(definition->children) != 1)
-  {
-    add_error(state->unit, data->location,
-      "expected a single child of the definition node to contain the value.");
-    state->valid = FALSE;
-  }
-
-  const struct ASTNode *value_node =
-    ARRAY_GET(definition->children, struct ASTNode, 0);
-  struct Value value;
-  int err = extract_value(state, value_node, &value, env);
-  PROPAGATE_ERROR(err);
-
-  struct Definition def;
-  def.name = strdup(data->name);
-  def.value = value;
-
-  ARRAY_APPEND(env->definitions, struct Definition, def);
-
-  return 0;
-}
-
-static int
-extract_assumption(struct ValidationState *state,
-  const struct ASTNode *assumption, struct Theorem *thm,
-  struct ProofEnvironment *env)
-{
-  const struct ASTNodeData *data = AST_NODE_DATA(assumption);
-  if (data->type != ASTNodeTypeAssume)
-  {
-    add_error(state->unit, data->location,
-      "expected an assumption declaration but found the wrong type of node.");
-    state->valid = FALSE;
-  }
-
-  if (ARRAY_LENGTH(assumption->children) != 1)
-  {
-    add_error(state->unit, data->location,
-      "expected a single child of the assumption node to contain the value.");
-    state->valid = FALSE;
-  }
-
-  const struct ASTNode *value_node =
-    ARRAY_GET(assumption->children, struct ASTNode, 0);
-  struct Value value;
-  int err = extract_value(state, value_node, &value, env);
-  PROPAGATE_ERROR(err);
-
-  ARRAY_APPEND(thm->assumptions, struct Value, value);
-
-  return 0;
-}
-
-static int
-extract_inference(struct ValidationState *state,
-  const struct ASTNode *inference, struct Theorem *thm,
-  struct ProofEnvironment *env)
-{
-  const struct ASTNodeData *data = AST_NODE_DATA(inference);
-  if (data->type != ASTNodeTypeInfer)
-  {
-    add_error(state->unit, data->location,
-      "expected an inference declaration but found the wrong type of node.");
-    state->valid = FALSE;
-  }
-
-  if (ARRAY_LENGTH(inference->children) != 1)
-  {
-    add_error(state->unit, data->location,
-      "expected a single child of the inference node to contain the value.");
-    state->valid = FALSE;
-  }
-
-  const struct ASTNode *value_node =
-    ARRAY_GET(inference->children, struct ASTNode, 0);
-  struct Value value;
-  int err = extract_value(state, value_node, &value, env);
-  PROPAGATE_ERROR(err);
-
-  ARRAY_APPEND(thm->inferences, struct Value, value);
-
-  return 0;
-}
-
-static int
-validate_axiom(struct ValidationState *state, const struct ASTNode *axiom)
-{
-  const struct ASTNodeData *data = AST_NODE_DATA(axiom);
-  if (data->type != ASTNodeTypeAxiom)
-  {
-    add_error(state->unit, data->location,
-      "expected an axiom statement but found the wrong type of node.");
-    state->valid = FALSE;
-  }
-
-  struct Symbol sym = {};
-
-  init_symbol_path(&sym.path);
-  append_symbol_path(&sym.path, &state->prefix_path);
-
-  struct SymbolPath local_path;
-  init_symbol_path(&local_path);
-  push_symbol_path(&local_path, data->name);
-  append_symbol_path(&sym.path, &local_path);
-  if (lookup_symbol(state, &local_path) != NULL)
-  {
-    add_error(state->unit, data->location,
-      "axiom name already in use.");
-    state->valid = FALSE;
-  }
-  free_symbol_path(&local_path);
-
-  sym.type = SymbolTypeTheorem;
-
-  struct Theorem *thm =
-    malloc(sizeof(struct Theorem));
-  thm->name = strdup(data->name);
-
-  /* First, extract parameters. */
-  ARRAY_INIT(thm->parameters, struct Parameter);
-  for (size_t i = 0; i < ARRAY_LENGTH(axiom->children); ++i)
-  {
-    const struct ASTNode *child =
-      ARRAY_GET(axiom->children, struct ASTNode, i);
-    const struct ASTNodeData *child_data = AST_NODE_DATA(child);
-    if (child_data->type == ASTNodeTypeParameter)
-    {
-      int err = extract_parameter(state, child, &thm->parameters);
-      PROPAGATE_ERROR(err);
-    }
-  }
-  sym.object = thm;
-
-  /* Then extract assumptions and inferences. */
-  struct ProofEnvironment env;
-  init_proof_environment(&env);
-  for (size_t i = 0; i < ARRAY_LENGTH(thm->parameters); ++i)
-  {
-    const struct Parameter *param =
-      ARRAY_GET(thm->parameters, struct Parameter, i);
-    struct Parameter copy;
-    copy_parameter(&copy, param);
-    ARRAY_APPEND(env.parameters, struct Parameter, copy);
-  }
-
-  ARRAY_INIT(thm->assumptions, struct Value);
-  ARRAY_INIT(thm->inferences, struct Value);
-  for (size_t i = 0; i < ARRAY_LENGTH(axiom->children); ++i)
-  {
-    const struct ASTNode *child =
-      ARRAY_GET(axiom->children, struct ASTNode, i);
-    const struct ASTNodeData *child_data = AST_NODE_DATA(child);
-    if (child_data->type == ASTNodeTypeDef)
-    {
-      int err = extract_definition(state, child, &env);
-      PROPAGATE_ERROR(err);
-    }
-    else if (child_data->type == ASTNodeTypeAssume)
-    {
-      int err = extract_assumption(state, child, thm, &env);
-      PROPAGATE_ERROR(err);
-    }
-    else if (child_data->type == ASTNodeTypeInfer)
-    {
-      int err = extract_inference(state, child, thm, &env);
-      PROPAGATE_ERROR(err);
-    }
-  }
-
-  free_proof_environment(&env);
-  ARRAY_APPEND(state->symbol_table, struct Symbol, sym);
-
-  return 0;
-}
-
-static int
-extract_path(struct ValidationState *state, const struct ASTNode *path,
-  struct SymbolPath *dst)
-{
-  const struct ASTNodeData *data = AST_NODE_DATA(path);
-  if (data->type != ASTNodeTypePath)
-  {
-    add_error(state->unit, data->location,
-      "expected a path but found the wrong type of node.");
-    state->valid = FALSE;
-  }
-
-  init_symbol_path(dst);
-  for (size_t i = 0; i < ARRAY_LENGTH(path->children); ++i)
-  {
-    const struct ASTNode *seg =
-      ARRAY_GET(path->children, struct ASTNode, i);
-    const struct ASTNodeData *seg_data = AST_NODE_DATA(seg);
-    if (seg_data->type != ASTNodeTypePathSegment)
-    {
-      add_error(state->unit, data->location,
-        "expected a path segment but found the wrong type of node.");
-      state->valid = FALSE;
-    }
-    else
-    {
-      push_symbol_path(dst, seg_data->name);
-    }
-  }
-
-  return 0;
-}
-
-static int
-instantiate_value(struct ValidationState *state, struct Value *dst,
-  const struct Value *src, Array args)
-{
-  switch (src->type)
-  {
-    case ValueTypeConstant:
-      copy_value(dst, src);
-      break;
-    case ValueTypeVariable:
-      /* Find the corresponding argument. */
-      {
-        const struct Definition *arg = NULL;
-        for (size_t i = 0; i < ARRAY_LENGTH(args); ++i)
-        {
-          const struct Definition *a =
-            ARRAY_GET(args, struct Definition, i);
-          if (strcmp(a->name, src->name) == 0)
-          {
-            arg = a;
-            break;
-          }
-        }
-        if (arg == NULL)
-        {
-          add_error(state->unit, NULL,
-            "not all arguments supplied for instantiation of value.");
-          state->valid = FALSE;
-          return 1;
-        }
-        copy_value(dst, &arg->value);
-      }
-      break;
-    case ValueTypeComposition:
-      dst->name = strdup(src->name);
-      dst->type = ValueTypeComposition;
-      dst->object_type = src->object_type;
-      ARRAY_INIT(dst->arguments, struct Value);
-      for (size_t i = 0; i < ARRAY_LENGTH(src->arguments); ++i)
-      {
-        const struct Value *arg =
-          ARRAY_GET(src->arguments, struct Value, i);
-        struct Value instantiated_arg;
-        int err = instantiate_value(state, &instantiated_arg, arg, args);
-        PROPAGATE_ERROR(err);
-        ARRAY_APPEND(dst->arguments, struct Value, instantiated_arg);
-      }
-      break;
-  }
-  return 0;
-}
-
-static bool
-statement_proven(const struct Value *stmt, const struct ProofEnvironment *env)
-{
-  for (size_t i = 0; i < ARRAY_LENGTH(env->proven); ++i)
-  {
-    const struct Value *proven = ARRAY_GET(env->proven, struct Value, i);
-    if (values_equal(stmt, proven))
-      return TRUE;
-  }
-  return FALSE;
-}
-
-static int
-instantiate_theorem(struct ValidationState *state,
-  const struct Theorem *src, Array args, struct ProofEnvironment *env)
-{
-  /* First, instantiate the assumptions. */
-  Array instantiated_assumptions;
-  ARRAY_INIT(instantiated_assumptions, struct Value);
-  for (size_t i = 0; i < ARRAY_LENGTH(src->assumptions); ++i)
-  {
-    const struct Value *assumption =
-      ARRAY_GET(src->assumptions, struct Value, i);
-    struct Value instantiated;
-    int err = instantiate_value(state, &instantiated, assumption, args);
-    PROPAGATE_ERROR(err);
-    ARRAY_APPEND(instantiated_assumptions, struct Value, instantiated);
-  }
-
-  /* Verify that each assumption has been proven. */
-  for (size_t i = 0; i < ARRAY_LENGTH(instantiated_assumptions); ++i)
-  {
-    struct Value *assumption =
-      ARRAY_GET(instantiated_assumptions, struct Value, i);
-    if (!statement_proven(assumption, env))
-    {
-      add_error(state->unit, NULL,
-        "assumption not proven while instantiating theorem.");
-      state->valid = FALSE;
-    }
-    free_value(assumption);
-  }
-  ARRAY_FREE(instantiated_assumptions);
-
-  /* Add all the inferences to the environment as proven statements. */
-  for (size_t i = 0; i < ARRAY_LENGTH(src->inferences); ++i)
-  {
-    const struct Value *inference =
-      ARRAY_GET(src->inferences, struct Value, i);
-    struct Value instantiated;
-    int err = instantiate_value(state, &instantiated, inference, args);
-    PROPAGATE_ERROR(err);
-    ARRAY_APPEND(env->proven, struct Value, instantiated);
-  }
-
-  return 0;
-}
-
-static int
-validate_step(struct ValidationState *state, const struct ASTNode *step,
-  struct Theorem *thm, struct ProofEnvironment *env)
-{
-  /* Find the theorem that is being referenced here. */
-  const struct ASTNodeData *data = AST_NODE_DATA(step);
-  if (data->type != ASTNodeTypeStep)
-  {
-    add_error(state->unit, data->location,
-      "expected a proof step but found the wrong type of node.");
-    state->valid = FALSE;
-  }
-  if (ARRAY_LENGTH(step->children) != 1)
-  {
-    add_error(state->unit, data->location,
-      "a step node must have exactly one child, the theorem reference.");
-    state->valid = FALSE;
-  }
-
-  const struct ASTNode *thm_ref =
-    ARRAY_GET(step->children, struct ASTNode, 0);
-  const struct ASTNodeData *thm_ref_data = AST_NODE_DATA(thm_ref);
-  if (thm_ref_data->type != ASTNodeTypeTheoremReference)
-  {
-    add_error(state->unit, thm_ref_data->location,
-      "expected a theorem reference but found the wrong type of node.");
-    state->valid = FALSE;
-  }
-  if (ARRAY_LENGTH(thm_ref->children) == 0)
-  {
-    add_error(state->unit, thm_ref_data->location,
-      "a theorem reference must have at least on child, the path to the theorem.");
-    state->valid = FALSE;
-  }
-
-  const struct ASTNode *thm_path =
-    ARRAY_GET(thm_ref->children, struct ASTNode, 0);
-  struct SymbolPath path;
-  extract_path(state, thm_path, &path);
-  const struct Symbol *ref = lookup_symbol(state, &path);
-  if (ref == NULL)
-  {
-    add_error(state->unit, data->location,
-      "proof step references unknown theorem/axiom.");
-    state->valid = FALSE;
-  }
-  free_symbol_path(&path);
-  if (ref->type != SymbolTypeTheorem)
-  {
-    add_error(state->unit, data->location,
-      "proof step references object that is not a theorem/axiom.");
-    state->valid = FALSE;
-  }
-  const struct Theorem *referenced = (struct Theorem *)ref->object;
-
-  /* Next, extract all the arguments being passed to the theorem, and check
-     that the types match. */
-  if (ARRAY_LENGTH(referenced->parameters) !=
-    ARRAY_LENGTH(thm_ref->children) - 1)
-  {
-    add_error(state->unit, data->location,
-      "incorrect number of arguments supplied to theorem/axiom.");
-    state->valid = FALSE;
-  }
-  Array args;
-  ARRAY_INIT(args, struct Definition);
-  for (size_t i = 0; i < ARRAY_LENGTH(referenced->parameters); ++i)
-  {
-    const struct ASTNode *arg =
-      ARRAY_GET(thm_ref->children, struct ASTNode, i + 1);
-    const struct ASTNodeData *arg_data = AST_NODE_DATA(arg);
-    struct Value arg_value;
-    int err = extract_value(state, arg, &arg_value, env);
-    PROPAGATE_ERROR(err);
-
-    const struct Parameter *param =
-      ARRAY_GET(referenced->parameters, struct Parameter, i);
-    if (!types_equal(arg_value.object_type, param->type))
-    {
-      add_error(state->unit, arg_data->location,
-        "type of argument supplied to theorem/axiom is incorrect.");
-      state->valid = FALSE;
-    }
-
-    struct Definition def;
-    def.name = strdup(param->name);
-    def.value = arg_value;
-    ARRAY_APPEND(args, struct Definition, def);
-  }
-  int err = instantiate_theorem(state, referenced, args, env);
-  PROPAGATE_ERROR(err);
-
-  return 0;
-}
-
-static int
-validate_theorem(struct ValidationState *state, const struct ASTNode *theorem)
-{
-  const struct ASTNodeData *data = AST_NODE_DATA(theorem);
-  if (data->type != ASTNodeTypeTheorem)
-  {
-    add_error(state->unit, data->location,
-      "expected an theorem statement but found the wrong type of node.");
-    state->valid = FALSE;
-  }
-
-  struct Symbol sym = {};
-
-  init_symbol_path(&sym.path);
-  append_symbol_path(&sym.path, &state->prefix_path);
-
-  struct SymbolPath local_path;
-  init_symbol_path(&local_path);
-  push_symbol_path(&local_path, data->name);
-  append_symbol_path(&sym.path, &local_path);
-  if (lookup_symbol(state, &local_path) != NULL)
-  {
-    add_error(state->unit, data->location,
-      "theorem name already in use.");
-    state->valid = FALSE;
-  }
-  free_symbol_path(&local_path);
-
-  sym.type = SymbolTypeTheorem;
-
-  struct Theorem *thm =
-    malloc(sizeof(struct Theorem));
-  thm->name = strdup(data->name);
-
-  /* First, extract parameters. */
-  ARRAY_INIT(thm->parameters, struct Parameter);
-  for (size_t i = 0; i < ARRAY_LENGTH(theorem->children); ++i)
-  {
-    const struct ASTNode *child =
-      ARRAY_GET(theorem->children, struct ASTNode, i);
-    const struct ASTNodeData *child_data = AST_NODE_DATA(child);
-    if (child_data->type == ASTNodeTypeParameter)
-    {
-      int err = extract_parameter(state, child, &thm->parameters);
-      PROPAGATE_ERROR(err);
-    }
-  }
-  sym.object = thm;
-
-  /* Then extract assumptions and inferences. */
-  struct ProofEnvironment env;
-  init_proof_environment(&env);
-  for (size_t i = 0; i < ARRAY_LENGTH(thm->parameters); ++i)
-  {
-    const struct Parameter *param =
-      ARRAY_GET(thm->parameters, struct Parameter, i);
-    struct Parameter copy;
-    copy_parameter(&copy, param);
-    ARRAY_APPEND(env.parameters, struct Parameter, copy);
-  }
-
-  ARRAY_INIT(thm->assumptions, struct Value);
-  ARRAY_INIT(thm->inferences, struct Value);
-  for (size_t i = 0; i < ARRAY_LENGTH(theorem->children); ++i)
-  {
-    const struct ASTNode *child =
-      ARRAY_GET(theorem->children, struct ASTNode, i);
-    const struct ASTNodeData *child_data = AST_NODE_DATA(child);
-    if (child_data->type == ASTNodeTypeDef)
-    {
-      int err = extract_definition(state, child, &env);
-      PROPAGATE_ERROR(err);
-    }
-    else if (child_data->type == ASTNodeTypeAssume)
-    {
-      int err = extract_assumption(state, child, thm, &env);
-      PROPAGATE_ERROR(err);
-    }
-    else if (child_data->type == ASTNodeTypeInfer)
-    {
-      int err = extract_inference(state, child, thm, &env);
-      PROPAGATE_ERROR(err);
-    }
-  }
-
-  /* To validate the theorem, first add the assumptions to the environment as
-     statements that have been proven, then go through the steps, adding the
-     inferences of each to the list of proven statements. */
-  for (size_t i = 0; i < ARRAY_LENGTH(theorem->children); ++i)
-  {
-    const struct ASTNode *child =
-      ARRAY_GET(theorem->children, struct ASTNode, i);
-    const struct ASTNodeData *child_data = AST_NODE_DATA(child);
-    if (child_data->type == ASTNodeTypeStep)
-    {
-      int err = validate_step(state, child, thm, &env);
-      PROPAGATE_ERROR(err);
-    }
-  }
-
-  /* Finally, make sure each inference claimed in the statement is proven. */
-  for (size_t i = 0; i < ARRAY_LENGTH(thm->inferences); ++i)
-  {
-    const struct Value *inference =
-      ARRAY_GET(thm->inferences, struct Value, i);
-    if (!statement_proven(inference, &env))
-    {
-      add_error(state->unit, NULL,
-        "inference not proven.");
-      state->valid = FALSE;
-    }
-  }
-
-  free_proof_environment(&env);
-  ARRAY_APPEND(state->symbol_table, struct Symbol, sym);
-
-  return 0;
-}
-#endif
-
 struct ValidationState
 {
   bool valid;
@@ -1746,6 +939,26 @@ validate_type(struct ValidationState *state,
 }
 
 static int
+extract_parameter(struct ValidationState *state,
+  const struct ASTNode *parameter, struct PrototypeParameter *dst)
+{
+  const struct ASTNodeData *data = AST_NODE_DATA(parameter);
+  if (data->type != ASTNodeTypeParameter)
+  {
+    add_error(state->unit, data->location,
+      "expected a parameter but found the wrong type of node.");
+    state->valid = FALSE;
+  }
+  dst->name = strdup(data->name);
+
+  /* TODO: Search globally for an occupied path. */
+  dst->type = copy_symbol_path(state->prefix_path);
+  push_symbol_path(dst->type, data->typename);
+
+  return 0;
+}
+
+static int
 validate_expression(struct ValidationState *state,
   const struct ASTNode *expression)
 {
@@ -1757,60 +970,591 @@ validate_expression(struct ValidationState *state,
     state->valid = FALSE;
   }
 
-  /*
-  struct Symbol sym = {};
+  /* Construct a prototype expression, then try adding it to the logical
+     state. */
+  struct PrototypeExpression proto;
+  proto.expression_path = copy_symbol_path(state->prefix_path);
+  push_symbol_path(proto.expression_path, data->name);
 
-  init_symbol_path(&sym.path);
-  append_symbol_path(&sym.path, &state->prefix_path);
+  proto.expression_type = copy_symbol_path(state->prefix_path);
+  push_symbol_path(proto.expression_type, data->typename);
 
-  struct SymbolPath local_path;
-  init_symbol_path(&local_path);
-  push_symbol_path(&local_path, data->name);
-  append_symbol_path(&sym.path, &local_path);
-  if (lookup_symbol(state, &local_path) != NULL)
-  {
-    add_error(state->unit, data->location,
-      "expression name already in use.");
-    state->valid = FALSE;
-  }
-  free_symbol_path(&local_path);
-
-  sym.type = SymbolTypeExpression;
-
-  struct ObjectExpression *expr_object =
-    malloc(sizeof(struct ObjectExpression));
-  expr_object->name = strdup(data->name);
-
-  struct SymbolPath type_path;
-  init_symbol_path(&type_path);
-  push_symbol_path(&type_path, data->typename);
-  struct Symbol *type = lookup_symbol(state, &type_path);
-  if (type == NULL)
-  {
-    add_error(state->unit, data->location,
-      "unknown type of expression.");
-    state->valid = FALSE;
-  }
-  if (type->type != SymbolTypeType)
-  {
-    add_error(state->unit, data->location,
-      "Type provided as type of expression is not a type.");
-    state->valid = FALSE;
-  }
-  expr_object->type = (struct ObjectType *)type->object;
-  free_symbol_path(&type_path);
-
-  ARRAY_INIT(expr_object->parameters, struct Parameter);
-  for (size_t i = 0; i < ARRAY_LENGTH(expression->children); ++i)
+  size_t args_n = ARRAY_LENGTH(expression->children);
+  proto.parameters = malloc(sizeof(struct PrototypeParameter *) * (args_n + 1));
+  for (size_t i = 0; i < args_n; ++i)
   {
     const struct ASTNode *param =
       ARRAY_GET(expression->children, struct ASTNode, i);
-    int err = extract_parameter(state, param, &expr_object->parameters);
+    proto.parameters[i] = malloc(sizeof(struct PrototypeParameter));
+    int err = extract_parameter(state, param, proto.parameters[i]);
     PROPAGATE_ERROR(err);
   }
-  sym.object = expr_object;
+  proto.parameters[args_n] = NULL;
 
-  ARRAY_APPEND(state->symbol_table, struct Symbol, sym);*/
+  LogicError err = add_expression(state->logic, proto);
+  if (err != LogicErrorNone)
+  {
+    add_error(state->unit, data->location,
+      "cannot add expression to logic state.");
+    state->valid = FALSE;
+  }
+
+  free_symbol_path(proto.expression_path);
+  free_symbol_path(proto.expression_type);
+  for (size_t i = 0; i < args_n; ++i)
+  {
+    free(proto.parameters[i]->name);
+    free_symbol_path(proto.parameters[i]->type);
+    free(proto.parameters[i]);
+  }
+  free(proto.parameters);
+
+  return 0;
+}
+
+struct Definition
+{
+  char *name;
+  Value *value;
+};
+
+static void
+free_definition(struct Definition *def)
+{
+  free(def->name);
+  free_value(def->value);
+
+}
+
+struct TheoremEnvironment
+{
+  Array parameters;
+  Array definitions;
+};
+
+static void
+init_theorem_environment(struct TheoremEnvironment *thm)
+{
+  ARRAY_INIT(thm->parameters, struct PrototypeParameter);
+  ARRAY_INIT(thm->definitions, struct Definition);
+}
+
+static void
+free_theorem_environment(struct TheoremEnvironment *thm)
+{
+  ARRAY_FREE(thm->parameters);
+  for (size_t i = 0; i < ARRAY_LENGTH(thm->definitions); ++i)
+  {
+    struct Definition *def = ARRAY_GET(thm->definitions, struct Definition, i);
+    free_definition(def);
+  }
+  ARRAY_FREE(thm->definitions);
+}
+
+static Value *
+extract_value(struct ValidationState *state,
+  const struct ASTNode *value, const struct TheoremEnvironment *env)
+{
+  const struct ASTNodeData *data = AST_NODE_DATA(value);
+  if (data->type == ASTNodeTypeComposition)
+  {
+    /* Locate the corresponding expression, and verify that the types of
+       the arguments match. */
+    SymbolPath *expr_path = copy_symbol_path(state->prefix_path);
+    push_symbol_path(expr_path, data->name);
+
+    Value **args =
+      malloc(sizeof(Value *) * (ARRAY_LENGTH(value->children) + 1));
+    for (size_t i = 0; i < ARRAY_LENGTH(value->children); ++i)
+    {
+      const struct ASTNode *child =
+        ARRAY_GET(value->children, struct ASTNode, i);
+      args[i] = extract_value(state, child, env);
+      if (args[i] == NULL)
+      {
+        /* TODO: free. */
+        return NULL;
+      }
+    }
+    args[ARRAY_LENGTH(value->children)] = NULL;
+
+    Value *v = new_composition_value(state->logic, expr_path, args);
+
+    for (size_t i = 0; i < ARRAY_LENGTH(value->children); ++i)
+    {
+      free_value(args[i]);
+    }
+    free_symbol_path(expr_path);
+    free(args);
+
+    return v;
+  }
+  else if (data->type == ASTNodeTypeConstant)
+  {
+    /* TODO: implement constants. */
+  }
+  else if (data->type == ASTNodeTypeVariable)
+  {
+    /* Check that this corresponds to a parameter, and copy the corresponding
+       type. */
+    const struct PrototypeParameter *param = NULL;
+    for (size_t i = 0; i < ARRAY_LENGTH(env->parameters); ++i)
+    {
+      const struct PrototypeParameter *p =
+        ARRAY_GET(env->parameters, struct PrototypeParameter, i);
+      if (strcmp(p->name, data->name) == 0)
+      {
+        param = p;
+        break;
+      }
+    }
+
+    if (param == NULL)
+    {
+      add_error(state->unit, data->location,
+        "variable does not correspond to any parameter.");
+      state->valid = FALSE;
+      return NULL;
+    }
+
+    return new_variable_value(state->logic, param->name, param->type);
+  }
+  else if (data->type == ASTNodeTypePlaceholder)
+  {
+    /* Look up the corresponding definition. */
+    const struct Definition *def = NULL;
+    for (size_t i = 0; i < ARRAY_LENGTH(env->definitions); ++i)
+    {
+      const struct Definition *d =
+        ARRAY_GET(env->definitions, struct Definition, i);
+      if (strcmp(d->name, data->name) == 0)
+      {
+        def = d;
+        break;
+      }
+    }
+
+    if (def == NULL)
+    {
+      add_error(state->unit, data->location,
+        "placeholder does not correspond to any definition.");
+      state->valid = FALSE;
+      return NULL;
+    }
+
+    return copy_value(def->value);
+  }
+  else
+  {
+    add_error(state->unit, data->location,
+      "expected a composition, constant, variable, or placeholder but found the wrong type of node.");
+    state->valid = FALSE;
+    return NULL;
+  }
+}
+
+static int
+extract_definition(struct ValidationState *state,
+  const struct ASTNode *definition, struct TheoremEnvironment *env)
+{
+  const struct ASTNodeData *data = AST_NODE_DATA(definition);
+  if (data->type != ASTNodeTypeDef)
+  {
+    add_error(state->unit, data->location,
+      "expected a definition but found the wrong type of node.");
+    state->valid = FALSE;
+  }
+
+  if (ARRAY_LENGTH(definition->children) != 1)
+  {
+    add_error(state->unit, data->location,
+      "expected a single child of the definition node to contain the value.");
+    state->valid = FALSE;
+  }
+
+  const struct ASTNode *value_node =
+    ARRAY_GET(definition->children, struct ASTNode, 0);
+
+  struct Definition def;
+  def.name = strdup(data->name);
+  def.value = extract_value(state, value_node, env);
+
+  if (def.value == NULL)
+    return 1;
+
+  ARRAY_APPEND(env->definitions, struct Definition, def);
+
+  return 0;
+}
+
+static Value *
+extract_assumption(struct ValidationState *state,
+  const struct ASTNode *assumption, struct TheoremEnvironment *env)
+{
+  const struct ASTNodeData *data = AST_NODE_DATA(assumption);
+  if (data->type != ASTNodeTypeAssume)
+  {
+    add_error(state->unit, data->location,
+      "expected an assumption declaration but found the wrong type of node.");
+    state->valid = FALSE;
+  }
+
+  if (ARRAY_LENGTH(assumption->children) != 1)
+  {
+    add_error(state->unit, data->location,
+      "expected a single child of the assumption node to contain the value.");
+    state->valid = FALSE;
+  }
+
+  const struct ASTNode *value_node =
+    ARRAY_GET(assumption->children, struct ASTNode, 0);
+  return extract_value(state, value_node, env);
+}
+
+static Value *
+extract_inference(struct ValidationState *state,
+  const struct ASTNode *inference, struct TheoremEnvironment *env)
+{
+  const struct ASTNodeData *data = AST_NODE_DATA(inference);
+  if (data->type != ASTNodeTypeInfer)
+  {
+    add_error(state->unit, data->location,
+      "expected an inference declaration but found the wrong type of node.");
+    state->valid = FALSE;
+  }
+
+  if (ARRAY_LENGTH(inference->children) != 1)
+  {
+    add_error(state->unit, data->location,
+      "expected a single child of the inference node to contain the value.");
+    state->valid = FALSE;
+  }
+
+  const struct ASTNode *value_node =
+    ARRAY_GET(inference->children, struct ASTNode, 0);
+  return extract_value(state, value_node, env);
+}
+
+static int
+validate_axiom(struct ValidationState *state,
+  const struct ASTNode *axiom)
+{
+  const struct ASTNodeData *data = AST_NODE_DATA(axiom);
+  if (data->type != ASTNodeTypeAxiom)
+  {
+    add_error(state->unit, data->location,
+      "expected an axiom statement but found the wrong type of node.");
+    state->valid = FALSE;
+  }
+
+  /* Construct a prototype theorem, then try adding it to the logical
+     state. */
+  struct PrototypeTheorem proto;
+  proto.theorem_path = copy_symbol_path(state->prefix_path);
+  push_symbol_path(proto.theorem_path, data->name);
+
+  size_t args_n = 0;
+  size_t assumptions_n = 0;
+  size_t inferences_n = 0;
+  for (size_t i = 0; i < ARRAY_LENGTH(axiom->children); ++i)
+  {
+    const struct ASTNode *child =
+      ARRAY_GET(axiom->children, struct ASTNode, i);
+    const struct ASTNodeData *child_data = AST_NODE_DATA(child);
+    if (child_data->type == ASTNodeTypeParameter)
+      ++args_n;
+    else if (child_data->type == ASTNodeTypeAssume)
+      ++assumptions_n;
+    else if (child_data->type == ASTNodeTypeInfer)
+      ++inferences_n;
+  }
+  proto.parameters = malloc(sizeof(struct PrototypeParameter *) * (args_n + 1));
+  proto.assumptions =
+    malloc(sizeof(Value *) * (assumptions_n + 1));
+  proto.inferences =
+    malloc(sizeof(Value *) * (inferences_n + 1));
+
+  struct TheoremEnvironment env;
+  init_theorem_environment(&env);
+
+  size_t param_index = 0;
+  size_t assume_index = 0;
+  size_t infer_index = 0;
+  for (size_t i = 0; i < ARRAY_LENGTH(axiom->children); ++i)
+  {
+    const struct ASTNode *child =
+      ARRAY_GET(axiom->children, struct ASTNode, i);
+    const struct ASTNodeData *child_data = AST_NODE_DATA(child);
+    if (child_data->type == ASTNodeTypeParameter)
+    {
+      proto.parameters[param_index] = malloc(sizeof(struct PrototypeParameter));
+      int err = extract_parameter(state, child, proto.parameters[param_index]);
+      ARRAY_APPEND(env.parameters, struct PrototypeParameter,
+        *proto.parameters[param_index]);
+      PROPAGATE_ERROR(err);
+      ++param_index;
+    }
+    else if (child_data->type == ASTNodeTypeDef)
+    {
+      int err = extract_definition(state, child, &env);
+      PROPAGATE_ERROR(err);
+    }
+    else if (child_data->type == ASTNodeTypeAssume)
+    {
+      proto.assumptions[assume_index] = extract_assumption(state, child, &env);
+      char *str = string_from_value(proto.assumptions[assume_index]);
+      free(str);
+      ++assume_index;
+    }
+    else if (child_data->type == ASTNodeTypeInfer)
+    {
+      proto.inferences[infer_index] = extract_inference(state, child, &env);
+      ++infer_index;
+    }
+  }
+  proto.parameters[args_n] = NULL;
+  proto.assumptions[assumptions_n] = NULL;
+  proto.inferences[inferences_n] = NULL;
+
+  free_theorem_environment(&env);
+
+  LogicError err = add_axiom(state->logic, proto);
+  if (err != LogicErrorNone)
+  {
+    add_error(state->unit, data->location,
+      "cannot add axiom to logic state.");
+    state->valid = FALSE;
+  }
+
+  free_symbol_path(proto.theorem_path);
+  for (size_t i = 0; i < args_n; ++i)
+  {
+    free(proto.parameters[i]->name);
+    free_symbol_path(proto.parameters[i]->type);
+    free(proto.parameters[i]);
+  }
+  for (size_t i = 0; i < assumptions_n; ++i)
+  {
+    free_value(proto.assumptions[i]);
+  }
+  for (size_t i = 0; i < inferences_n; ++i)
+  {
+    free_value(proto.inferences[i]);
+  }
+  free(proto.parameters);
+  free(proto.assumptions);
+  free(proto.inferences);
+
+  return 0;
+}
+
+static SymbolPath *
+extract_path(struct ValidationState *state, const struct ASTNode *path)
+{
+  const struct ASTNodeData *data = AST_NODE_DATA(path);
+  if (data->type != ASTNodeTypePath)
+  {
+    add_error(state->unit, data->location,
+      "expected a path but found the wrong type of node.");
+    state->valid = FALSE;
+    return NULL;
+  }
+
+  SymbolPath *dst = copy_symbol_path(state->prefix_path);
+  for (size_t i = 0; i < ARRAY_LENGTH(path->children); ++i)
+  {
+    const struct ASTNode *seg =
+      ARRAY_GET(path->children, struct ASTNode, i);
+    const struct ASTNodeData *seg_data = AST_NODE_DATA(seg);
+    if (seg_data->type != ASTNodeTypePathSegment)
+    {
+      add_error(state->unit, data->location,
+        "expected a path segment but found the wrong type of node.");
+      state->valid = FALSE;
+      return NULL;
+    }
+    else
+    {
+      push_symbol_path(dst, seg_data->name);
+    }
+  }
+
+  return dst;
+}
+
+static struct PrototypeProofStep *
+extract_step(struct ValidationState *state, const struct ASTNode *step,
+  struct TheoremEnvironment *env)
+{
+  struct PrototypeProofStep *dst = malloc(sizeof(struct PrototypeProofStep));
+
+  /* Find the theorem that is being referenced here. */
+  const struct ASTNodeData *data = AST_NODE_DATA(step);
+  if (data->type != ASTNodeTypeStep)
+  {
+    add_error(state->unit, data->location,
+      "expected a proof step but found the wrong type of node.");
+    state->valid = FALSE;
+  }
+  if (ARRAY_LENGTH(step->children) != 1)
+  {
+    add_error(state->unit, data->location,
+      "a step node must have exactly one child, the theorem reference.");
+    state->valid = FALSE;
+  }
+
+  const struct ASTNode *thm_ref =
+    ARRAY_GET(step->children, struct ASTNode, 0);
+  const struct ASTNodeData *thm_ref_data = AST_NODE_DATA(thm_ref);
+  if (thm_ref_data->type != ASTNodeTypeTheoremReference)
+  {
+    add_error(state->unit, thm_ref_data->location,
+      "expected a theorem reference but found the wrong type of node.");
+    state->valid = FALSE;
+  }
+  if (ARRAY_LENGTH(thm_ref->children) == 0)
+  {
+    add_error(state->unit, thm_ref_data->location,
+      "a theorem reference must have at least one child, the path to the theorem.");
+    state->valid = FALSE;
+  }
+
+  const struct ASTNode *thm_path =
+    ARRAY_GET(thm_ref->children, struct ASTNode, 0);
+  dst->theorem_path = extract_path(state, thm_path);
+  dst->arguments = malloc(sizeof(Value *) * (ARRAY_LENGTH(thm_ref->children)));
+
+  /* Next, extract all the arguments being passed to the theorem. */
+  for (size_t i = 0; i < ARRAY_LENGTH(thm_ref->children) - 1; ++i)
+  {
+    const struct ASTNode *arg =
+      ARRAY_GET(thm_ref->children, struct ASTNode, i + 1);
+    dst->arguments[i] = extract_value(state, arg, env);
+  }
+
+  return dst;
+}
+
+static int
+validate_theorem(struct ValidationState *state,
+  const struct ASTNode *theorem)
+{
+  const struct ASTNodeData *data = AST_NODE_DATA(theorem);
+  if (data->type != ASTNodeTypeTheorem)
+  {
+    add_error(state->unit, data->location,
+      "expected a theorem statement but found the wrong type of node.");
+    state->valid = FALSE;
+  }
+
+  /* Construct a prototype theorem, then try adding it to the logical
+     state. */
+  struct PrototypeTheorem proto;
+  proto.theorem_path = copy_symbol_path(state->prefix_path);
+  push_symbol_path(proto.theorem_path, data->name);
+
+  size_t args_n = 0;
+  size_t assumptions_n = 0;
+  size_t inferences_n = 0;
+  size_t steps_n = 0;
+  for (size_t i = 0; i < ARRAY_LENGTH(theorem->children); ++i)
+  {
+    const struct ASTNode *child =
+      ARRAY_GET(theorem->children, struct ASTNode, i);
+    const struct ASTNodeData *child_data = AST_NODE_DATA(child);
+    if (child_data->type == ASTNodeTypeParameter)
+      ++args_n;
+    else if (child_data->type == ASTNodeTypeAssume)
+      ++assumptions_n;
+    else if (child_data->type == ASTNodeTypeInfer)
+      ++inferences_n;
+    else if (child_data->type == ASTNodeTypeStep)
+      ++steps_n;
+  }
+  proto.parameters = malloc(sizeof(struct PrototypeParameter *) * (args_n + 1));
+  proto.assumptions =
+    malloc(sizeof(Value *) * (assumptions_n + 1));
+  proto.inferences =
+    malloc(sizeof(Value *) * (inferences_n + 1));
+  proto.steps =
+    malloc(sizeof(struct PrototypeProofStep) * (steps_n + 1));
+
+  struct TheoremEnvironment env;
+  init_theorem_environment(&env);
+
+  size_t param_index = 0;
+  size_t assume_index = 0;
+  size_t infer_index = 0;
+  size_t step_index = 0;
+  for (size_t i = 0; i < ARRAY_LENGTH(theorem->children); ++i)
+  {
+    const struct ASTNode *child =
+      ARRAY_GET(theorem->children, struct ASTNode, i);
+    const struct ASTNodeData *child_data = AST_NODE_DATA(child);
+    if (child_data->type == ASTNodeTypeParameter)
+    {
+      proto.parameters[param_index] = malloc(sizeof(struct PrototypeParameter));
+      int err = extract_parameter(state, child, proto.parameters[param_index]);
+      ARRAY_APPEND(env.parameters, struct PrototypeParameter,
+        *proto.parameters[param_index]);
+      PROPAGATE_ERROR(err);
+      ++param_index;
+    }
+    else if (child_data->type == ASTNodeTypeDef)
+    {
+      int err = extract_definition(state, child, &env);
+      PROPAGATE_ERROR(err);
+    }
+    else if (child_data->type == ASTNodeTypeAssume)
+    {
+      proto.assumptions[assume_index] = extract_assumption(state, child, &env);
+      char *str = string_from_value(proto.assumptions[assume_index]);
+      free(str);
+      ++assume_index;
+    }
+    else if (child_data->type == ASTNodeTypeInfer)
+    {
+      proto.inferences[infer_index] = extract_inference(state, child, &env);
+      ++infer_index;
+    }
+    else if (child_data->type == ASTNodeTypeStep)
+    {
+      proto.steps[step_index] = extract_step(state, child, &env);
+      ++step_index;
+    }
+  }
+  proto.parameters[args_n] = NULL;
+  proto.assumptions[assumptions_n] = NULL;
+  proto.inferences[inferences_n] = NULL;
+
+  free_theorem_environment(&env);
+
+  LogicError err = add_theorem(state->logic, proto);
+  if (err != LogicErrorNone)
+  {
+    add_error(state->unit, data->location,
+      "cannot add theorem to logic state.");
+    state->valid = FALSE;
+  }
+
+  free_symbol_path(proto.theorem_path);
+  for (size_t i = 0; i < args_n; ++i)
+  {
+    free(proto.parameters[i]->name);
+    free_symbol_path(proto.parameters[i]->type);
+    free(proto.parameters[i]);
+  }
+  for (size_t i = 0; i < assumptions_n; ++i)
+  {
+    free_value(proto.assumptions[i]);
+  }
+  for (size_t i = 0; i < inferences_n; ++i)
+  {
+    free_value(proto.inferences[i]);
+  }
+  free(proto.parameters);
+  free(proto.assumptions);
+  free(proto.inferences);
 
   return 0;
 }
@@ -1854,12 +1598,12 @@ validate_namespace(struct ValidationState *state,
         PROPAGATE_ERROR(err);
         break;
       case ASTNodeTypeAxiom:
-        //err = validate_axiom(state, child);
-        //PROPAGATE_ERROR(err);
+        err = validate_axiom(state, child);
+        PROPAGATE_ERROR(err);
         break;
       case ASTNodeTypeTheorem:
-        //err = validate_theorem(state, child);
-        //PROPAGATE_ERROR(err);
+        err = validate_theorem(state, child);
+        PROPAGATE_ERROR(err);
         break;
       default:
         add_error(state->unit, child_data->location,
@@ -1880,7 +1624,7 @@ validate_namespace(struct ValidationState *state,
 static int
 validate(struct ValidationState *state)
 {
-  state->logic = new_logic_state();
+  state->logic = new_logic_state(state->out);
   state->prefix_path = init_symbol_path();
 
   /* The root node should have a child that is the root namespace. */

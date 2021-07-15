@@ -2,6 +2,7 @@
 #define LOGIC_H
 
 #include <common.h>
+#include <stdio.h>
 
 /* Methods to manipulate paths. */
 struct SymbolPath;
@@ -40,10 +41,13 @@ struct LogicState;
 typedef struct LogicState LogicState;
 
 LogicState *
-new_logic_state();
+new_logic_state(FILE *log_out);
 
 void
 free_logic_state(LogicState *state);
+
+bool
+logic_state_path_occupied(const LogicState *state, const SymbolPath *path);
 
 enum LogicError
 {
@@ -52,20 +56,22 @@ enum LogicError
 };
 typedef enum LogicError LogicError;
 
+/* Types. */
 LogicError
 add_type(LogicState *state, const SymbolPath *type);
 
+/* Expressions. */
 struct PrototypeParameter
 {
-  const char *name;
-  const SymbolPath *type;
+  char *name;
+  SymbolPath *type;
 };
 
 struct PrototypeExpression
 {
-  const SymbolPath *expression_path;
-  const SymbolPath *expression_type;
-  const struct PrototypeParameter *parameters; /* NULL-terminated list. */
+  SymbolPath *expression_path;
+  SymbolPath *expression_type;
+  struct PrototypeParameter **parameters; /* NULL-terminated list. */
 };
 
 /* TODO: The return value should be a struct, or modify the PrototypeExpression,
@@ -73,52 +79,15 @@ struct PrototypeExpression
 LogicError
 add_expression(LogicState *state, struct PrototypeExpression expression);
 
-
-
-#if 0
-/* There is no reason to differentiate between axioms and theorems that have
-   been proven, so the verifier refers to these both as "theorems". */
-enum SymbolType
-{
-  SymbolTypeNone = 0,
-  SymbolTypeType,
-  SymbolTypeExpression,
-  SymbolTypeTheorem
-};
-
-struct ObjectType;
-typedef struct ObjectType ObjectType;
-
-bool
-types_equal(const ObjectType *a, const ObjectType *b);
-
-void
-free_type(ObjectType *type);
-
-struct Parameter;
-typedef struct Parameter Parameter;
-
-Parameter *
-copy_parameter(const Parameter *src);
-
-void
-free_parameter(Parameter *param);
-
-struct ObjectExpression;
-typedef struct ObjectExpression ObjectExpression;
-
-void
-free_expression(ObjectExpression *expr);
-
-enum ValueType
-{
-  ValueTypeComposition,
-  ValueTypeConstant,
-  ValueTypeVariable
-};
-
+/* Methods to manipulate values. */
 struct Value;
 typedef struct Value Value;
+
+void
+free_value(Value *value);
+
+Value *
+copy_value(const Value *value);
 
 bool
 values_equal(const Value *a, const Value *b);
@@ -127,22 +96,38 @@ char *
 string_from_value(const Value *value);
 
 Value *
-copy_value(const Value *src);
+new_variable_value(LogicState *state, const char *name, const SymbolPath *type);
 
-void
-free_value(Value *value);
+Value *
+new_constant_value(LogicState *state, const char *name, const SymbolPath *type); /* TODO: implement. */
 
-struct ObjectTheorem;
-typedef struct ObjectTheorem ObjectTheorem;
+Value *
+new_composition_value(LogicState *state, const SymbolPath *expr_path,
+  Value * const *args); /* `args` is a NULL-terminated list. */
 
-void
-free_theorem(ObjectTheorem *theorem);
+struct PrototypeProofStep
+{
+  SymbolPath *theorem_path;
+  Value **arguments; /* NULL-terminated list. */
+};
 
-struct Symbol;
-typedef struct Symbol Symbol;
+struct PrototypeTheorem
+{
+  SymbolPath *theorem_path;
+  struct PrototypeParameter **parameters; /* NULL-terminated list. */
+  Value **assumptions; /* NULL-terminated list. */
+  Value **inferences; /* NULL-terminated list. */
+  struct PrototypeProofStep **steps; /* NULL-terminated list, disregarded for axioms. */
+};
 
-void
-free_symbol(Symbol *sym);
-#endif
+/* TODO: The return value should be a struct, or modify the PrototypeTheorem,
+   in order to propagate errors with full detail. */
+LogicError
+add_axiom(LogicState *state, struct PrototypeTheorem axiom);
+
+/* TODO: The return value should be a struct, or modify the PrototypeTheorem,
+   in order to propagate errors with full detail. */
+LogicError
+add_theorem(LogicState *state, struct PrototypeTheorem theorem);
 
 #endif
