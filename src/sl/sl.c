@@ -23,6 +23,7 @@ const char *sl_keywords[] = {
   "namespace",
 
   "type",
+  "const",
   "expr",
   "axiom",
   "theorem",
@@ -52,6 +53,7 @@ enum ASTNodeType
   ASTNodeTypeNamespace,
 
   ASTNodeTypeType,
+  ASTNodeTypeConstantDeclaration,
   ASTNodeTypeExpression,
   ASTNodeTypeAxiom,
   ASTNodeTypeTheorem,
@@ -161,6 +163,58 @@ parse_type(struct ParserState *state)
   {
     add_error(state->unit, get_current_token(state),
       "missing semicolon ';' after type declaration");
+  }
+
+  ascend(state);
+  return 0;
+}
+
+static int
+parse_constant_declaration(struct ParserState *state)
+{
+  add_child_and_descend(state);
+  init_ast_node(state->ast_current);
+  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeConstantDeclaration;
+  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+
+  if (!consume_keyword(state, "const"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing keyword 'const' in constant declaration");
+  }
+
+  const char *const_name;
+  if (!consume_identifier(state, &const_name))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing constant name in constant declaration");
+  }
+  else
+  {
+    AST_NODE_DATA(state->ast_current)->name = strdup(const_name);
+  }
+
+  if (!consume_symbol(state, ":"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing colon ':' separating constant name and type in constant declaration");
+  }
+
+  const char *const_type;
+  if (!consume_identifier(state, &const_type))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing constant type in constant declaration");
+  }
+  else
+  {
+    AST_NODE_DATA(state->ast_current)->typename = strdup(const_type);
+  }
+
+  if (!consume_symbol(state, ";"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing semicolon ';' after constant declaration");
   }
 
   ascend(state);
@@ -732,6 +786,11 @@ parse_namespace_item(struct ParserState *state)
     int err = parse_type(state);
     PROPAGATE_ERROR(err);
   }
+  else if (next_is_keyword(state, "const"))
+  {
+    int err = parse_constant_declaration(state);
+    PROPAGATE_ERROR(err);
+  }
   else if (next_is_keyword(state, "expr"))
   {
     int err = parse_expression(state);
@@ -939,6 +998,36 @@ validate_type(struct ValidationState *state,
 }
 
 static int
+validate_constant(struct ValidationState *state, const struct ASTNode *constant)
+{
+  const struct ASTNodeData *data = AST_NODE_DATA(constant);
+  if (data->type != ASTNodeTypeConstantDeclaration)
+  {
+    add_error(state->unit, data->location,
+      "expected a constant declaration but found the wrong type of node.");
+    state->valid = FALSE;
+  }
+
+  struct PrototypeConstant proto;
+
+  proto.constant_path = copy_symbol_path(state->prefix_path);
+  push_symbol_path(proto.constant_path, data->name);
+
+  proto.type_path = copy_symbol_path(state->prefix_path);
+  push_symbol_path(proto.type_path, data->typename);
+
+  LogicError err = add_constant(state->logic, proto);
+  if (err != LogicErrorNone)
+  {
+    add_error(state->unit, data->location,
+      "cannot add constant.");
+    state->valid = FALSE;
+  }
+
+  return 0;
+}
+
+static int
 extract_parameter(struct ValidationState *state,
   const struct ASTNode *parameter, struct PrototypeParameter *dst)
 {
@@ -1091,7 +1180,14 @@ extract_value(struct ValidationState *state,
   }
   else if (data->type == ASTNodeTypeConstant)
   {
-    /* TODO: implement constants. */
+    SymbolPath *const_path = copy_symbol_path(state->prefix_path);
+    push_symbol_path(const_path, data->name);
+
+    Value *v = new_constant_value(state->logic, const_path);
+
+    free_symbol_path(const_path);
+
+    return v;
   }
   else if (data->type == ASTNodeTypeVariable)
   {
@@ -1593,6 +1689,10 @@ validate_namespace(struct ValidationState *state,
         break;
       case ASTNodeTypeType:
         err = validate_type(state, child);
+        PROPAGATE_ERROR(err);
+        break;
+      case ASTNodeTypeConstantDeclaration:
+        err = validate_constant(state, child);
         PROPAGATE_ERROR(err);
         break;
       case ASTNodeTypeExpression:

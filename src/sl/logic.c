@@ -34,6 +34,13 @@ struct Type
   //bool atomic;
 };
 
+struct Constant
+{
+  uint32_t id;
+  const SymbolPath *path;
+  const struct Type *type;
+};
+
 struct Expression
 {
   uint32_t id;
@@ -55,7 +62,9 @@ struct Value
   enum ValueType value_type;
   const struct Type *type;
 
+  /* TODO: use a union? */
   char *variable_name;
+  const struct Constant *constant;
   const struct Expression *expression;
   Array arguments;
 };
@@ -73,6 +82,7 @@ struct Theorem
 enum SymbolType
 {
   SymbolTypeType,
+  SymbolTypeConstant,
   SymbolTypeExpression,
   SymbolTypeTheorem
 };
@@ -472,6 +482,53 @@ types_equal(const struct Type *a, const struct Type *b)
 }
 
 LogicError
+add_constant(LogicState *state, struct PrototypeConstant proto)
+{
+  if (locate_symbol(state, proto.constant_path) != NULL)
+  {
+    char *const_str = string_from_symbol_path(proto.constant_path);
+    LOG_NORMAL(state->log_out,
+      "Cannot add type '%s' because the path is in use.\n", const_str);
+    free(const_str);
+    return LogicErrorSymbolAlreadyExists;
+  }
+
+  struct Symbol *type_symbol = locate_symbol_with_type(state,
+    proto.type_path, SymbolTypeType);
+  if (type_symbol == NULL)
+  {
+    char *const_str = string_from_symbol_path(proto.constant_path);
+    char *type_str = string_from_symbol_path(proto.type_path);
+    LOG_NORMAL(state->log_out,
+      "Cannot add expression '%s' because there is no such type '%s'.\n",
+      const_str, type_str);
+    free(const_str);
+    free(type_str);
+    return LogicErrorSymbolAlreadyExists;
+  }
+
+  struct Constant *c = malloc(sizeof(struct Constant));
+  c->id = state->next_id;
+  ++state->next_id;
+  c->type = (struct Type *)type_symbol->object;
+
+  struct Symbol sym;
+  sym.path = copy_symbol_path(proto.constant_path);
+  sym.type = SymbolTypeConstant;
+  sym.object = c;
+
+  c->path = sym.path;
+
+  add_symbol(state, sym);
+
+  char *const_str = string_from_symbol_path(sym.path);
+  LOG_NORMAL(state->log_out, "Successfully added constant '%s'.\n", const_str);
+  free(const_str);
+
+  return LogicErrorNone;
+}
+
+LogicError
 add_expression(LogicState *state, struct PrototypeExpression proto)
 {
   if (locate_symbol(state, proto.expression_path) != NULL)
@@ -559,6 +616,10 @@ free_value(Value *value)
   {
     free(value->variable_name);
   }
+  else if (value->value_type == ValueTypeConstant)
+  {
+
+  }
   else if (value->value_type == ValueTypeComposition)
   {
     for (size_t i = 0; i < ARRAY_LENGTH(value->arguments); ++i)
@@ -575,16 +636,18 @@ Value *
 copy_value(const Value *value)
 {
   Value *v = malloc(sizeof(Value));
+  v->value_type = value->value_type;
+  v->type = value->type;
   if (value->value_type == ValueTypeVariable)
   {
     v->variable_name = strdup(value->variable_name);
-    v->value_type = ValueTypeVariable;
-    v->type = value->type;
+  }
+  else if (value->value_type == ValueTypeConstant)
+  {
+    v->constant = value->constant;
   }
   else if (value->value_type == ValueTypeComposition)
   {
-    v->value_type = ValueTypeComposition;
-    v->type = value->type;
     v->expression = value->expression;
     ARRAY_INIT(v->arguments, Value *);
     for (size_t i = 0; i < ARRAY_LENGTH(value->arguments); ++i)
@@ -699,12 +762,14 @@ string_from_value(const Value *value)
       break;
     case ValueTypeConstant:
       {
-        size_t len = 1 + strlen(value->variable_name);
+        char *const_str = string_from_symbol_path(value->constant->path);
+        size_t len = 1 + strlen(const_str);
         char *str = malloc(len);
         char *c = str;
-        strcpy(c, value->variable_name);
-        c += strlen(value->variable_name);
+        strcpy(c, const_str);
+        c += strlen(const_str);
         *c = '\0';
+        free(const_str);
         return str;
       }
       break;
@@ -744,6 +809,29 @@ new_variable_value(LogicState *state, const char *name, const SymbolPath *type)
     return NULL;
   }
   value->type = (struct Type *)type_symbol->object;
+
+  return value;
+}
+
+Value *
+new_constant_value(LogicState *state, const SymbolPath *constant)
+{
+  Value *value = malloc(sizeof(Value));
+
+  value->value_type = ValueTypeConstant;
+  struct Symbol *constant_symbol = locate_symbol_with_type(state,
+    constant, SymbolTypeConstant);
+  if (constant_symbol == NULL)
+  {
+    char *const_str = string_from_symbol_path(constant);
+    LOG_NORMAL(state->log_out,
+      "Cannot create value because there is no such constant '%s'.\n", const_str);
+    free(const_str);
+    free(value);
+    return NULL;
+  }
+  value->constant = (struct Constant *)constant_symbol->object;
+  value->type = value->constant->type;
 
   return value;
 }

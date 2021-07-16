@@ -60,6 +60,15 @@ typedef enum LogicError LogicError;
 LogicError
 add_type(LogicState *state, const SymbolPath *type);
 
+struct PrototypeConstant
+{
+  SymbolPath *constant_path;
+  SymbolPath *type_path;
+};
+
+LogicError
+add_constant(LogicState *, struct PrototypeConstant proto);
+
 /* Expressions. */
 struct PrototypeParameter
 {
@@ -99,7 +108,7 @@ Value *
 new_variable_value(LogicState *state, const char *name, const SymbolPath *type);
 
 Value *
-new_constant_value(LogicState *state, const char *name, const SymbolPath *type); /* TODO: implement. */
+new_constant_value(LogicState *state, const SymbolPath *constant);
 
 Value *
 new_composition_value(LogicState *state, const SymbolPath *expr_path,

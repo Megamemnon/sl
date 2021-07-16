@@ -48,6 +48,22 @@ namespace propositional_calculus
     infer implies(implies(not($psi), not($phi)), implies($phi, $psi));
   }
 
+  const T : Formula;
+
+  axiom
+  true()
+  {
+    infer T;
+  }
+
+  const F : Formula;
+
+  axiom
+  false()
+  {
+    infer not(F);
+  }
+
   /*
 
   Common theorems of propositional calculus, based on the list given in
@@ -136,20 +152,18 @@ namespace propositional_calculus
   {
     infer implies(not(not($phi)), $phi);
 
-    /* %phi0 can be any formula that is axiomatically true. */
-    def phi0 implies($phi, implies($phi, $phi));
-
+    step true();
     step simplification($phi, $phi); /* Prove %phi0. */
-    step transposition(not($phi), not(%phi0));
-    step transposition(%phi0, $phi);
-    step hypothetical_syllogism_meta(implies(not(not(%phi0)), not(not($phi))),
-      implies(not($phi), not(%phi0)), implies(%phi0, $phi));
-    step simplification(not(not($phi)), not(not(%phi0)));
+    step transposition(not($phi), not(T));
+    step transposition(T, $phi);
+    step hypothetical_syllogism_meta(implies(not(not(T)), not(not($phi))),
+      implies(not($phi), not(T)), implies(T, $phi));
+    step simplification(not(not($phi)), not(not(T)));
     step hypothetical_syllogism_meta(not(not($phi)),
-      implies(not(not(%phi0)), not(not($phi))), implies(%phi0, $phi));
-    step double_simplification(%phi0, $phi);
-    step modus_ponens(%phi0, implies(implies(%phi0, $phi), $phi));
-    step hypothetical_syllogism_meta(not(not($phi)), implies(%phi0, $phi),
+      implies(not(not(T)), not(not($phi))), implies(T, $phi));
+    step double_simplification(T, $phi);
+    step modus_ponens(T, implies(implies(T, $phi), $phi));
+    step hypothetical_syllogism_meta(not(not($phi)), implies(T, $phi),
       $phi);
   }
 
