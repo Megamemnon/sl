@@ -153,7 +153,7 @@ namespace propositional_calculus
     infer implies(not(not($phi)), $phi);
 
     step true();
-    step simplification($phi, $phi); /* Prove %phi0. */
+    step simplification($phi, $phi);
     step transposition(not($phi), not(T));
     step transposition(T, $phi);
     step hypothetical_syllogism_meta(implies(not(not(T)), not(not($phi))),
@@ -524,23 +524,42 @@ namespace propositional_calculus
     step biconditional_elimination_left_meta($phi, $psi);
     step biconditional_elimination_right_meta($phi, $psi);
   }
+}
+/* alias propositional_calculus prop; */
+
+namespace predicate_calculus
+{
+  use propositional_calculus;
 
   type Term;
-  /* atomic */ type Variable;
-  /* atomic */ type Function;
-  /* atomic */ type Predicate;
+  type Variable atomic;
+  type Function atomic;
+  type Predicate2 atomic;
+
+  namespace vars
+  {
+    const x : Variable;
+    const y : Variable;
+    const z : Variable;
+
+    const a : Variable;
+    const b : Variable;
+    const c : Variable;
+
+    const n : Variable;
+  }
 
   expr Term
   t(x : Variable);
 
   expr Term
-  eval_function(f : Function, t : Term);
+  eval_f(f : Function, t : Term);
 
   expr Formula
-  eval_predicate(p : Predicate, t : Term);
+  eval_p(p : Predicate2, s : Term, t : Term);
 
   expr Formula
-  any(x : Variable, phi : Formula) /* binds $x */;
+  any(x : Variable, phi : Formula) binds ($x);
 
   axiom
   instantiation(x : Variable, phi : Formula, t : Term, phi0 : Formula)
@@ -585,5 +604,22 @@ namespace propositional_calculus
     /* require substitution(t($x), $phi, t($y), $phi0); */
 
     infer implies(eq(t($x), t($y)), implies($phi, $phi0));
+  }
+}
+/* alias predicate_calculus pred; */
+
+namespace zfc
+{
+  use propositional_calculus;
+  use predicate_calculus;
+
+  const in : Predicate2;
+
+  axiom
+  extensionality()
+  {
+    infer any(vars.x, any(vars.y, implies(
+      any(vars.z, iff(eval_p(in, t(vars.z), t(vars.x)),
+      eval_p(in, t(vars.z), t(vars.y)))), eq(t(vars.x), t(vars.y)))));
   }
 }

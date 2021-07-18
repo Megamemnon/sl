@@ -49,6 +49,9 @@ free_logic_state(LogicState *state);
 bool
 logic_state_path_occupied(const LogicState *state, const SymbolPath *path);
 
+SymbolPath *
+find_first_occupied_path(const LogicState *state, SymbolPath **paths); /* NULL-terminated list. */
+
 enum LogicError
 {
   LogicErrorNone = 0,
@@ -57,8 +60,14 @@ enum LogicError
 typedef enum LogicError LogicError;
 
 /* Types. */
+struct PrototypeType
+{
+  SymbolPath *type_path;
+  bool atomic;
+};
+
 LogicError
-add_type(LogicState *state, const SymbolPath *type);
+add_type(LogicState *state, struct PrototypeType proto);
 
 struct PrototypeConstant
 {

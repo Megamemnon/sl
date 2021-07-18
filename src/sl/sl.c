@@ -22,6 +22,10 @@ while (0);
 const char *sl_keywords[] = {
   "namespace",
 
+  "atomic",
+  "binds",
+
+  "use",
   "type",
   "const",
   "expr",
@@ -52,13 +56,19 @@ enum ASTNodeType
   ASTNodeTypeNone = 0,
   ASTNodeTypeNamespace,
 
+  ASTNodeTypeUse,
   ASTNodeTypeType,
   ASTNodeTypeConstantDeclaration,
   ASTNodeTypeExpression,
   ASTNodeTypeAxiom,
   ASTNodeTypeTheorem,
 
+  ASTNodeTypeParameterList,
   ASTNodeTypeParameter,
+
+  ASTNodeTypeBindingList,
+  ASTNodeTypeBinding,
+
   ASTNodeTypeDef,
   ASTNodeTypeAssume,
   ASTNodeTypeRequire,
@@ -71,6 +81,7 @@ enum ASTNodeType
   ASTNodeTypePlaceholder,
   ASTNodeTypeTheoremReference,
 
+  ASTNodeTypeCompositionArgumentList,
   ASTNodeTypePath,
 
   ASTNodeTypePathSegment
@@ -82,6 +93,7 @@ struct ASTNodeData
   const struct Token *location;
   char *name;
   char *typename;
+  bool atomic;
 };
 
 #define AST_NODE_DATA(node) ((struct ASTNodeData *)node->data)
@@ -126,6 +138,7 @@ init_ast_node(struct ASTNode *node)
   data->location = NULL;
   data->name = NULL;
   data->typename = NULL;
+  data->atomic = FALSE;
 
   node->free_callback = &free_ast_node;
   node->copy_callback = &copy_ast_node;
@@ -133,6 +146,80 @@ init_ast_node(struct ASTNode *node)
 
 static int
 parse_namespace(struct ParserState *state);
+
+static int
+parse_path(struct ParserState *state)
+{
+  add_child_and_descend(state);
+  init_ast_node(state->ast_current);
+  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypePath;
+  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+
+  const char *first_segment;
+  if (!consume_identifier(state, &first_segment))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing first path segment in path to axiom/theorem.");
+  }
+  else
+  {
+    add_child_and_descend(state);
+    init_ast_node(state->ast_current);
+    AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+    AST_NODE_DATA(state->ast_current)->type = ASTNodeTypePathSegment;
+    AST_NODE_DATA(state->ast_current)->name = strdup(first_segment);
+    ascend(state);
+  }
+
+  while (consume_symbol(state, "."))
+  {
+    const char *segment;
+    if (!consume_identifier(state, &segment))
+    {
+      add_error(state->unit, get_current_token(state),
+        "missing path segment following dot '.' in path to axiom/theorem.");
+    }
+    else
+    {
+      add_child_and_descend(state);
+      init_ast_node(state->ast_current);
+      AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+      AST_NODE_DATA(state->ast_current)->type = ASTNodeTypePathSegment;
+      AST_NODE_DATA(state->ast_current)->name = strdup(segment);
+      ascend(state);
+    }
+  }
+
+  ascend(state);
+  return 0;
+}
+
+static int
+parse_use(struct ParserState *state)
+{
+  add_child_and_descend(state);
+  init_ast_node(state->ast_current);
+  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeUse;
+  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+
+  if (!consume_keyword(state, "use"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing keyword 'use' in use statement");
+  }
+
+  int err = parse_path(state);
+  PROPAGATE_ERROR(err);
+
+  if (!consume_symbol(state, ";"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing semicolon ';' after use statement");
+  }
+
+  ascend(state);
+  return 0;
+}
 
 static int
 parse_type(struct ParserState *state)
@@ -157,6 +244,15 @@ parse_type(struct ParserState *state)
   else
   {
     AST_NODE_DATA(state->ast_current)->typename = strdup(typename);
+  }
+
+  if (consume_keyword(state, "atomic"))
+  {
+    AST_NODE_DATA(state->ast_current)->atomic = TRUE;
+  }
+  else
+  {
+    AST_NODE_DATA(state->ast_current)->atomic = FALSE;
   }
 
   if (!consume_symbol(state, ";"))
@@ -200,16 +296,8 @@ parse_constant_declaration(struct ParserState *state)
       "missing colon ':' separating constant name and type in constant declaration");
   }
 
-  const char *const_type;
-  if (!consume_identifier(state, &const_type))
-  {
-    add_error(state->unit, get_current_token(state),
-      "missing constant type in constant declaration");
-  }
-  else
-  {
-    AST_NODE_DATA(state->ast_current)->typename = strdup(const_type);
-  }
+  int err = parse_path(state);
+  PROPAGATE_ERROR(err);
 
   if (!consume_symbol(state, ";"))
   {
@@ -224,6 +312,11 @@ parse_constant_declaration(struct ParserState *state)
 static int
 parse_parameter_list(struct ParserState *state)
 {
+  add_child_and_descend(state);
+  init_ast_node(state->ast_current);
+  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeParameterList;
+  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+
   if (!consume_symbol(state, "("))
   {
     add_error(state->unit, get_current_token(state),
@@ -266,69 +359,14 @@ parse_parameter_list(struct ParserState *state)
         "missing colon ':' separating parameter name and type.");
     }
 
-    const char *parameter_type;
-    if (!consume_identifier(state, &parameter_type))
-    {
-      add_error(state->unit, get_current_token(state),
-        "missing parameter type.");
-    }
-    else
-    {
-      AST_NODE_DATA(state->ast_current)->typename = strdup(parameter_type);
-    }
+    int err = parse_path(state);
+    PROPAGATE_ERROR(err);
 
     ascend(state);
   }
 
-  return 0;
-}
-
-static int
-parse_expression(struct ParserState *state)
-{
-  add_child_and_descend(state);
-  init_ast_node(state->ast_current);
-  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeExpression;
-  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
-
-  if (!consume_keyword(state, "expr"))
-  {
-    add_error(state->unit, get_current_token(state),
-      "missing keyword 'expr' in type declaration.");
-  }
-
-  const char *expression_type;
-  if (!consume_identifier(state, &expression_type))
-  {
-    add_error(state->unit, get_current_token(state),
-      "missing resulting expression type in expression declaration.");
-  }
-  else
-  {
-    AST_NODE_DATA(state->ast_current)->typename = strdup(expression_type);
-  }
-
-  const char *expression_name;
-  if (!consume_identifier(state, &expression_name))
-  {
-    add_error(state->unit, get_current_token(state),
-      "missing expression name in expression declaration.");
-  }
-  else
-  {
-    AST_NODE_DATA(state->ast_current)->name = strdup(expression_name);
-  }
-
-  int err = parse_parameter_list(state);
-  PROPAGATE_ERROR(err);
-
-  if (!consume_symbol(state, ";"))
-  {
-    add_error(state->unit, get_current_token(state),
-      "missing semicolon ';' after expression declaration.");
-  }
-
   ascend(state);
+
   return 0;
 }
 
@@ -371,24 +409,19 @@ parse_value(struct ParserState *state)
   }
   else
   {
-    /* This is either a constant or a composition. */
-    const char *constant_name;
-    if (!consume_identifier(state, &constant_name))
-    {
-      /* TODO: change error message to depend on whether this is a
-         constant or a composition. */
-      add_error(state->unit, get_current_token(state),
-        "missing constant name in value.");
-    }
-    else
-    {
-      AST_NODE_DATA(state->ast_current)->name = strdup(constant_name);
-    }
+    /* Parse the name of the constant. */
+    int err = parse_path(state);
+    PROPAGATE_ERROR(err);
 
     if (consume_symbol(state, "("))
     {
       /* We have a composition. Parse the arguments. */
       AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeComposition;
+
+      add_child_and_descend(state);
+      init_ast_node(state->ast_current);
+      AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+      AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeCompositionArgumentList;
 
       bool first_token = TRUE;
       while (!consume_symbol(state, ")"))
@@ -407,12 +440,98 @@ parse_value(struct ParserState *state)
         int err = parse_value(state);
         PROPAGATE_ERROR(err);
       }
+
+      ascend(state);
     }
     else
     {
       /* Just a constant. */
       AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeConstant;
     }
+  }
+
+  ascend(state);
+  return 0;
+}
+
+static int
+parse_binding_list(struct ParserState *state)
+{
+  add_child_and_descend(state);
+  init_ast_node(state->ast_current);
+  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeBindingList;
+  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+
+  if (!consume_symbol(state, "("))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing symbol '(' in binding list.");
+  }
+
+  bool first_token = TRUE;
+  while (!consume_symbol(state, ")"))
+  {
+    if (!first_token)
+    {
+      if (!consume_symbol(state, ","))
+      {
+        add_error(state->unit, get_current_token(state),
+          "missing comma ',' separating expressions in binding list.");
+      }
+    }
+    if (first_token)
+      first_token = FALSE;
+
+    int err = parse_value(state);
+    PROPAGATE_ERROR(err);
+  }
+
+  ascend(state);
+
+  return 0;
+}
+
+static int
+parse_expression(struct ParserState *state)
+{
+  add_child_and_descend(state);
+  init_ast_node(state->ast_current);
+  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeExpression;
+  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+
+  if (!consume_keyword(state, "expr"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing keyword 'expr' in type declaration.");
+  }
+
+  int err = parse_path(state);
+  PROPAGATE_ERROR(err);
+
+  const char *expression_name;
+  if (!consume_identifier(state, &expression_name))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing expression name in expression declaration.");
+  }
+  else
+  {
+    AST_NODE_DATA(state->ast_current)->name = strdup(expression_name);
+  }
+
+  err = parse_parameter_list(state);
+  PROPAGATE_ERROR(err);
+
+  if (consume_keyword(state, "binds"))
+  {
+    err = parse_binding_list(state);
+    PROPAGATE_ERROR(err);
+  }
+
+  if (!consume_symbol(state, ";"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing semicolon ';' after expression declaration.");
   }
 
   ascend(state);
@@ -584,53 +703,6 @@ parse_axiom(struct ParserState *state)
 }
 
 static int
-parse_path(struct ParserState *state)
-{
-  add_child_and_descend(state);
-  init_ast_node(state->ast_current);
-  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypePath;
-  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
-
-  const char *first_segment;
-  if (!consume_identifier(state, &first_segment))
-  {
-    add_error(state->unit, get_current_token(state),
-      "missing first path segment in path to axiom/theorem.");
-  }
-  else
-  {
-    add_child_and_descend(state);
-    init_ast_node(state->ast_current);
-    AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
-    AST_NODE_DATA(state->ast_current)->type = ASTNodeTypePathSegment;
-    AST_NODE_DATA(state->ast_current)->name = strdup(first_segment);
-    ascend(state);
-  }
-
-  while (consume_symbol(state, "."))
-  {
-    const char *segment;
-    if (!consume_identifier(state, &segment))
-    {
-      add_error(state->unit, get_current_token(state),
-        "missing path segment following dot '.' in path to axiom/theorem.");
-    }
-    else
-    {
-      add_child_and_descend(state);
-      init_ast_node(state->ast_current);
-      AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
-      AST_NODE_DATA(state->ast_current)->type = ASTNodeTypePathSegment;
-      AST_NODE_DATA(state->ast_current)->name = strdup(segment);
-      ascend(state);
-    }
-  }
-
-  ascend(state);
-  return 0;
-}
-
-static int
 parse_theorem_reference(struct ParserState *state)
 {
   add_child_and_descend(state);
@@ -779,6 +851,11 @@ parse_namespace_item(struct ParserState *state)
   if (next_is_keyword(state, "namespace"))
   {
     int err = parse_namespace(state);
+    PROPAGATE_ERROR(err);
+  }
+  else if (next_is_keyword(state, "use"))
+  {
+    int err = parse_use(state);
     PROPAGATE_ERROR(err);
   }
   else if (next_is_keyword(state, "type"))
@@ -967,7 +1044,90 @@ struct ValidationState
 
   LogicState *logic;
   SymbolPath *prefix_path;
+  Array search_paths;
 };
+
+static SymbolPath *
+lookup_symbol(struct ValidationState *state, const SymbolPath *path)
+{
+  /* Build a list of candidate absolute paths. */
+  SymbolPath **paths = malloc(sizeof(SymbolPath *) *
+    (ARRAY_LENGTH(state->search_paths) + 1));
+  for (size_t i = 0; i < ARRAY_LENGTH(state->search_paths); ++i)
+  {
+    const SymbolPath *search_in =
+      *ARRAY_GET(state->search_paths, SymbolPath *, i);
+    paths[i] = copy_symbol_path(search_in);
+    append_symbol_path(paths[i], path);
+  }
+  paths[ARRAY_LENGTH(state->search_paths)] = NULL;
+
+  SymbolPath *result = find_first_occupied_path(state->logic, paths);
+
+  for (size_t i = 0; i < ARRAY_LENGTH(state->search_paths); ++i)
+    free_symbol_path(paths[i]);
+  free(paths);
+
+  return result;
+}
+
+static SymbolPath *
+extract_path(struct ValidationState *state, const struct ASTNode *path)
+{
+  const struct ASTNodeData *data = AST_NODE_DATA(path);
+  if (data->type != ASTNodeTypePath)
+  {
+    add_error(state->unit, data->location,
+      "expected a path but found the wrong type of node.");
+    state->valid = FALSE;
+    return NULL;
+  }
+
+  SymbolPath *dst = init_symbol_path();
+  for (size_t i = 0; i < ARRAY_LENGTH(path->children); ++i)
+  {
+    const struct ASTNode *seg =
+      ARRAY_GET(path->children, struct ASTNode, i);
+    const struct ASTNodeData *seg_data = AST_NODE_DATA(seg);
+    if (seg_data->type != ASTNodeTypePathSegment)
+    {
+      add_error(state->unit, data->location,
+        "expected a path segment but found the wrong type of node.");
+      state->valid = FALSE;
+      return NULL;
+    }
+    else
+    {
+      push_symbol_path(dst, seg_data->name);
+    }
+  }
+
+  return dst;
+}
+
+static SymbolPath *
+extract_use(struct ValidationState *state, const struct ASTNode *use)
+{
+  const struct ASTNodeData *data = AST_NODE_DATA(use);
+  if (data->type != ASTNodeTypeUse)
+  {
+    add_error(state->unit, data->location,
+      "expected a use but found the wrong type of node.");
+    state->valid = FALSE;
+    return NULL;
+  }
+
+  if (ARRAY_LENGTH(use->children) != 1)
+  {
+    add_error(state->unit, data->location,
+      "a use node must have a single child, containing a path");
+    state->valid = FALSE;
+  }
+
+  const struct ASTNode *path = ARRAY_GET(use->children, struct ASTNode, 0);
+
+  return extract_path(state, path);
+}
 
 static int
 validate_type(struct ValidationState *state,
@@ -981,10 +1141,14 @@ validate_type(struct ValidationState *state,
     state->valid = FALSE;
   }
 
-  SymbolPath *path = copy_symbol_path(state->prefix_path);
-  push_symbol_path(path, data->typename);
+  struct PrototypeType proto;
 
-  LogicError err = add_type(state->logic, path);
+  proto.type_path = copy_symbol_path(state->prefix_path);
+  push_symbol_path(proto.type_path, data->typename);
+
+  proto.atomic = data->atomic;
+
+  LogicError err = add_type(state->logic, proto);
   if (err == LogicErrorSymbolAlreadyExists)
   {
     add_error(state->unit, data->location,
@@ -992,7 +1156,7 @@ validate_type(struct ValidationState *state,
     state->valid = FALSE;
   }
 
-  free_symbol_path(path);
+  free_symbol_path(proto.type_path);
 
   return 0;
 }
@@ -1013,8 +1177,18 @@ validate_constant(struct ValidationState *state, const struct ASTNode *constant)
   proto.constant_path = copy_symbol_path(state->prefix_path);
   push_symbol_path(proto.constant_path, data->name);
 
-  proto.type_path = copy_symbol_path(state->prefix_path);
-  push_symbol_path(proto.type_path, data->typename);
+  if (ARRAY_LENGTH(constant->children) != 1)
+  {
+    add_error(state->unit, data->location,
+      "a constant node must have a single child, containing the path to the constant's type");
+    state->valid = FALSE;
+  }
+  const struct ASTNode *type = ARRAY_GET(constant->children, struct ASTNode, 0);
+
+  SymbolPath *local_path = extract_path(state, type);
+
+  proto.type_path = lookup_symbol(state, local_path);
+  free_symbol_path(local_path);
 
   LogicError err = add_constant(state->logic, proto);
   if (err != LogicErrorNone)
@@ -1023,6 +1197,9 @@ validate_constant(struct ValidationState *state, const struct ASTNode *constant)
       "cannot add constant.");
     state->valid = FALSE;
   }
+
+  free_symbol_path(proto.constant_path);
+  free_symbol_path(proto.type_path);
 
   return 0;
 }
@@ -1040,9 +1217,18 @@ extract_parameter(struct ValidationState *state,
   }
   dst->name = strdup(data->name);
 
-  /* TODO: Search globally for an occupied path. */
-  dst->type = copy_symbol_path(state->prefix_path);
-  push_symbol_path(dst->type, data->typename);
+  if (ARRAY_LENGTH(parameter->children) != 1)
+  {
+    add_error(state->unit, data->location,
+      "a parameter node must have a single child, containing the path to the parameter's type");
+    state->valid = FALSE;
+  }
+  const struct ASTNode *type = ARRAY_GET(parameter->children, struct ASTNode, 0);
+
+  SymbolPath *local_path = extract_path(state, type);
+
+  dst->type = lookup_symbol(state, local_path);
+  free_symbol_path(local_path);
 
   return 0;
 }
@@ -1065,15 +1251,36 @@ validate_expression(struct ValidationState *state,
   proto.expression_path = copy_symbol_path(state->prefix_path);
   push_symbol_path(proto.expression_path, data->name);
 
-  proto.expression_type = copy_symbol_path(state->prefix_path);
-  push_symbol_path(proto.expression_type, data->typename);
+  if (ARRAY_LENGTH(expression->children) < 2)
+  {
+    add_error(state->unit, data->location,
+      "an expression node must have at least two children, the path to the expression's type and the list of parameters.");
+    state->valid = FALSE;
+  }
+  const struct ASTNode *type =
+    ARRAY_GET(expression->children, struct ASTNode, 0);
 
-  size_t args_n = ARRAY_LENGTH(expression->children);
+  SymbolPath *local_path = extract_path(state, type);
+  proto.expression_type = lookup_symbol(state, local_path);
+  free_symbol_path(local_path);
+
+  /* TODO: This should be its own function. */
+  const struct ASTNode *param_list =
+    ARRAY_GET(expression->children, struct ASTNode, 1);
+  const struct ASTNodeData *param_list_data = AST_NODE_DATA(param_list);
+  if (param_list_data->type != ASTNodeTypeParameterList)
+  {
+    add_error(state->unit, data->location,
+      "expected a parameter list but found the wrong type of node.");
+    state->valid = FALSE;
+  }
+
+  size_t args_n = ARRAY_LENGTH(param_list->children);
   proto.parameters = malloc(sizeof(struct PrototypeParameter *) * (args_n + 1));
   for (size_t i = 0; i < args_n; ++i)
   {
     const struct ASTNode *param =
-      ARRAY_GET(expression->children, struct ASTNode, i);
+      ARRAY_GET(param_list->children, struct ASTNode, i);
     proto.parameters[i] = malloc(sizeof(struct PrototypeParameter));
     int err = extract_parameter(state, param, proto.parameters[i]);
     PROPAGATE_ERROR(err);
@@ -1149,15 +1356,35 @@ extract_value(struct ValidationState *state,
   {
     /* Locate the corresponding expression, and verify that the types of
        the arguments match. */
-    SymbolPath *expr_path = copy_symbol_path(state->prefix_path);
-    push_symbol_path(expr_path, data->name);
+    if (ARRAY_LENGTH(value->children) != 2)
+    {
+      add_error(state->unit, data->location,
+        "a composition node must have two children, the path to the expression and a list of arguments.");
+      state->valid = FALSE;
+    }
 
+    const struct ASTNode *expr =
+      ARRAY_GET(value->children, struct ASTNode, 0);
+    const struct ASTNode *args_node =
+      ARRAY_GET(value->children, struct ASTNode, 1);
+
+    SymbolPath *local_path = extract_path(state, expr);
+    SymbolPath *expr_path = lookup_symbol(state, local_path);
+    free_symbol_path(local_path);
+
+    const struct ASTNodeData *args_data = AST_NODE_DATA(args_node);
+    if (args_data->type != ASTNodeTypeCompositionArgumentList)
+    {
+      add_error(state->unit, data->location,
+        "expected a composition arguments node, but found the wrong type of node.");
+      state->valid = FALSE;
+    }
     Value **args =
-      malloc(sizeof(Value *) * (ARRAY_LENGTH(value->children) + 1));
-    for (size_t i = 0; i < ARRAY_LENGTH(value->children); ++i)
+      malloc(sizeof(Value *) * (ARRAY_LENGTH(args_node->children) + 1));
+    for (size_t i = 0; i < ARRAY_LENGTH(args_node->children); ++i)
     {
       const struct ASTNode *child =
-        ARRAY_GET(value->children, struct ASTNode, i);
+        ARRAY_GET(args_node->children, struct ASTNode, i);
       args[i] = extract_value(state, child, env);
       if (args[i] == NULL)
       {
@@ -1165,11 +1392,11 @@ extract_value(struct ValidationState *state,
         return NULL;
       }
     }
-    args[ARRAY_LENGTH(value->children)] = NULL;
+    args[ARRAY_LENGTH(args_node->children)] = NULL;
 
     Value *v = new_composition_value(state->logic, expr_path, args);
 
-    for (size_t i = 0; i < ARRAY_LENGTH(value->children); ++i)
+    for (size_t i = 0; i < ARRAY_LENGTH(args_node->children); ++i)
     {
       free_value(args[i]);
     }
@@ -1180,8 +1407,19 @@ extract_value(struct ValidationState *state,
   }
   else if (data->type == ASTNodeTypeConstant)
   {
-    SymbolPath *const_path = copy_symbol_path(state->prefix_path);
-    push_symbol_path(const_path, data->name);
+    if (ARRAY_LENGTH(value->children) != 1)
+    {
+      add_error(state->unit, data->location,
+        "a constant node must have a single child, the path to the constant.");
+      state->valid = FALSE;
+    }
+
+    const struct ASTNode *path =
+      ARRAY_GET(value->children, struct ASTNode, 0);
+
+    SymbolPath *local_path = extract_path(state, path);
+    SymbolPath *const_path = lookup_symbol(state, local_path);
+    free_symbol_path(local_path);
 
     Value *v = new_constant_value(state->logic, const_path);
 
@@ -1349,7 +1587,6 @@ validate_axiom(struct ValidationState *state,
   proto.theorem_path = copy_symbol_path(state->prefix_path);
   push_symbol_path(proto.theorem_path, data->name);
 
-  size_t args_n = 0;
   size_t assumptions_n = 0;
   size_t inferences_n = 0;
   for (size_t i = 0; i < ARRAY_LENGTH(axiom->children); ++i)
@@ -1357,14 +1594,11 @@ validate_axiom(struct ValidationState *state,
     const struct ASTNode *child =
       ARRAY_GET(axiom->children, struct ASTNode, i);
     const struct ASTNodeData *child_data = AST_NODE_DATA(child);
-    if (child_data->type == ASTNodeTypeParameter)
-      ++args_n;
-    else if (child_data->type == ASTNodeTypeAssume)
+    if (child_data->type == ASTNodeTypeAssume)
       ++assumptions_n;
     else if (child_data->type == ASTNodeTypeInfer)
       ++inferences_n;
   }
-  proto.parameters = malloc(sizeof(struct PrototypeParameter *) * (args_n + 1));
   proto.assumptions =
     malloc(sizeof(Value *) * (assumptions_n + 1));
   proto.inferences =
@@ -1372,6 +1606,30 @@ validate_axiom(struct ValidationState *state,
 
   struct TheoremEnvironment env;
   init_theorem_environment(&env);
+
+  const struct ASTNode *param_list =
+    ARRAY_GET(axiom->children, struct ASTNode, 0);
+  const struct ASTNodeData *param_list_data = AST_NODE_DATA(param_list);
+  if (param_list_data->type != ASTNodeTypeParameterList)
+  {
+    add_error(state->unit, data->location,
+      "expected a parameter list but found the wrong type of node.");
+    state->valid = FALSE;
+  }
+
+  size_t args_n = ARRAY_LENGTH(param_list->children);
+  proto.parameters = malloc(sizeof(struct PrototypeParameter *) * (args_n + 1));
+  for (size_t i = 0; i < args_n; ++i)
+  {
+    const struct ASTNode *param =
+      ARRAY_GET(param_list->children, struct ASTNode, i);
+    proto.parameters[i] = malloc(sizeof(struct PrototypeParameter));
+    int err = extract_parameter(state, param, proto.parameters[i]);
+    ARRAY_APPEND(env.parameters, struct PrototypeParameter,
+      *proto.parameters[i]);
+    PROPAGATE_ERROR(err);
+  }
+  proto.parameters[args_n] = NULL;
 
   size_t param_index = 0;
   size_t assume_index = 0;
@@ -1381,16 +1639,7 @@ validate_axiom(struct ValidationState *state,
     const struct ASTNode *child =
       ARRAY_GET(axiom->children, struct ASTNode, i);
     const struct ASTNodeData *child_data = AST_NODE_DATA(child);
-    if (child_data->type == ASTNodeTypeParameter)
-    {
-      proto.parameters[param_index] = malloc(sizeof(struct PrototypeParameter));
-      int err = extract_parameter(state, child, proto.parameters[param_index]);
-      ARRAY_APPEND(env.parameters, struct PrototypeParameter,
-        *proto.parameters[param_index]);
-      PROPAGATE_ERROR(err);
-      ++param_index;
-    }
-    else if (child_data->type == ASTNodeTypeDef)
+    if (child_data->type == ASTNodeTypeDef)
     {
       int err = extract_definition(state, child, &env);
       PROPAGATE_ERROR(err);
@@ -1398,8 +1647,6 @@ validate_axiom(struct ValidationState *state,
     else if (child_data->type == ASTNodeTypeAssume)
     {
       proto.assumptions[assume_index] = extract_assumption(state, child, &env);
-      char *str = string_from_value(proto.assumptions[assume_index]);
-      free(str);
       ++assume_index;
     }
     else if (child_data->type == ASTNodeTypeInfer)
@@ -1444,40 +1691,6 @@ validate_axiom(struct ValidationState *state,
   return 0;
 }
 
-static SymbolPath *
-extract_path(struct ValidationState *state, const struct ASTNode *path)
-{
-  const struct ASTNodeData *data = AST_NODE_DATA(path);
-  if (data->type != ASTNodeTypePath)
-  {
-    add_error(state->unit, data->location,
-      "expected a path but found the wrong type of node.");
-    state->valid = FALSE;
-    return NULL;
-  }
-
-  SymbolPath *dst = copy_symbol_path(state->prefix_path);
-  for (size_t i = 0; i < ARRAY_LENGTH(path->children); ++i)
-  {
-    const struct ASTNode *seg =
-      ARRAY_GET(path->children, struct ASTNode, i);
-    const struct ASTNodeData *seg_data = AST_NODE_DATA(seg);
-    if (seg_data->type != ASTNodeTypePathSegment)
-    {
-      add_error(state->unit, data->location,
-        "expected a path segment but found the wrong type of node.");
-      state->valid = FALSE;
-      return NULL;
-    }
-    else
-    {
-      push_symbol_path(dst, seg_data->name);
-    }
-  }
-
-  return dst;
-}
-
 static struct PrototypeProofStep *
 extract_step(struct ValidationState *state, const struct ASTNode *step,
   struct TheoremEnvironment *env)
@@ -1515,9 +1728,11 @@ extract_step(struct ValidationState *state, const struct ASTNode *step,
     state->valid = FALSE;
   }
 
-  const struct ASTNode *thm_path =
+  const struct ASTNode *thm_path_node =
     ARRAY_GET(thm_ref->children, struct ASTNode, 0);
-  dst->theorem_path = extract_path(state, thm_path);
+  SymbolPath *local_path = extract_path(state, thm_path_node);
+  dst->theorem_path = lookup_symbol(state, local_path);
+  free_symbol_path(local_path);
   dst->arguments = malloc(sizeof(Value *) * (ARRAY_LENGTH(thm_ref->children)));
 
   /* Next, extract all the arguments being passed to the theorem. */
@@ -1550,7 +1765,6 @@ validate_theorem(struct ValidationState *state,
   proto.theorem_path = copy_symbol_path(state->prefix_path);
   push_symbol_path(proto.theorem_path, data->name);
 
-  size_t args_n = 0;
   size_t assumptions_n = 0;
   size_t inferences_n = 0;
   size_t steps_n = 0;
@@ -1559,16 +1773,13 @@ validate_theorem(struct ValidationState *state,
     const struct ASTNode *child =
       ARRAY_GET(theorem->children, struct ASTNode, i);
     const struct ASTNodeData *child_data = AST_NODE_DATA(child);
-    if (child_data->type == ASTNodeTypeParameter)
-      ++args_n;
-    else if (child_data->type == ASTNodeTypeAssume)
+    if (child_data->type == ASTNodeTypeAssume)
       ++assumptions_n;
     else if (child_data->type == ASTNodeTypeInfer)
       ++inferences_n;
     else if (child_data->type == ASTNodeTypeStep)
       ++steps_n;
   }
-  proto.parameters = malloc(sizeof(struct PrototypeParameter *) * (args_n + 1));
   proto.assumptions =
     malloc(sizeof(Value *) * (assumptions_n + 1));
   proto.inferences =
@@ -1579,7 +1790,30 @@ validate_theorem(struct ValidationState *state,
   struct TheoremEnvironment env;
   init_theorem_environment(&env);
 
-  size_t param_index = 0;
+  const struct ASTNode *param_list =
+    ARRAY_GET(theorem->children, struct ASTNode, 0);
+  const struct ASTNodeData *param_list_data = AST_NODE_DATA(param_list);
+  if (param_list_data->type != ASTNodeTypeParameterList)
+  {
+    add_error(state->unit, data->location,
+      "expected a parameter list but found the wrong type of node.");
+    state->valid = FALSE;
+  }
+
+  size_t args_n = ARRAY_LENGTH(param_list->children);
+  proto.parameters = malloc(sizeof(struct PrototypeParameter *) * (args_n + 1));
+  for (size_t i = 0; i < args_n; ++i)
+  {
+    const struct ASTNode *param =
+      ARRAY_GET(param_list->children, struct ASTNode, i);
+    proto.parameters[i] = malloc(sizeof(struct PrototypeParameter));
+    int err = extract_parameter(state, param, proto.parameters[i]);
+    ARRAY_APPEND(env.parameters, struct PrototypeParameter,
+      *proto.parameters[i]);
+    PROPAGATE_ERROR(err);
+  }
+  proto.parameters[args_n] = NULL;
+
   size_t assume_index = 0;
   size_t infer_index = 0;
   size_t step_index = 0;
@@ -1588,16 +1822,7 @@ validate_theorem(struct ValidationState *state,
     const struct ASTNode *child =
       ARRAY_GET(theorem->children, struct ASTNode, i);
     const struct ASTNodeData *child_data = AST_NODE_DATA(child);
-    if (child_data->type == ASTNodeTypeParameter)
-    {
-      proto.parameters[param_index] = malloc(sizeof(struct PrototypeParameter));
-      int err = extract_parameter(state, child, proto.parameters[param_index]);
-      ARRAY_APPEND(env.parameters, struct PrototypeParameter,
-        *proto.parameters[param_index]);
-      PROPAGATE_ERROR(err);
-      ++param_index;
-    }
-    else if (child_data->type == ASTNodeTypeDef)
+    if (child_data->type == ASTNodeTypeDef)
     {
       int err = extract_definition(state, child, &env);
       PROPAGATE_ERROR(err);
@@ -1650,9 +1875,18 @@ validate_theorem(struct ValidationState *state,
   {
     free_value(proto.inferences[i]);
   }
+  for (size_t i = 0; i < steps_n; ++i)
+  {
+    free_symbol_path(proto.steps[i]->theorem_path);
+    for (Value **v = proto.steps[i]->arguments; *v != NULL; ++v)
+      free_value(*v);
+    free(proto.steps[i]->arguments);
+    free(proto.steps[i]);
+  }
   free(proto.parameters);
   free(proto.assumptions);
   free(proto.inferences);
+  free(proto.steps);
 
   return 0;
 }
@@ -1674,7 +1908,12 @@ validate_namespace(struct ValidationState *state,
     push_symbol_path(state->prefix_path, data->name);
   }
 
+  SymbolPath *search_path = copy_symbol_path(state->prefix_path);
+  ARRAY_APPEND(state->search_paths, SymbolPath *, search_path);
+
   /* Validate all the objects contained in this namespace. */
+  Array using_paths;
+  ARRAY_INIT(using_paths, SymbolPath *);
   for (size_t i = 0; i < ARRAY_LENGTH(namespace->children); ++i)
   {
     const struct ASTNode *child =
@@ -1686,6 +1925,11 @@ validate_namespace(struct ValidationState *state,
       case ASTNodeTypeNamespace:
         err = validate_namespace(state, child);
         PROPAGATE_ERROR(err);
+        break;
+      case ASTNodeTypeUse:
+        SymbolPath *use_path = extract_use(state, child);
+        ARRAY_APPEND(using_paths, SymbolPath *, use_path);
+        ARRAY_APPEND(state->search_paths, SymbolPath *, use_path);
         break;
       case ASTNodeTypeType:
         err = validate_type(state, child);
@@ -1709,11 +1953,22 @@ validate_namespace(struct ValidationState *state,
         break;
       default:
         add_error(state->unit, child_data->location,
-          "expected a namespace, type, expression, axiom, or theorem, but found the wrong type of node.");
+          "expected a namespace, use, type, constant, expression, axiom, or theorem, but found the wrong type of node.");
         state->valid = FALSE;
         break;
     }
   }
+
+  for (size_t i = 0; i < ARRAY_LENGTH(using_paths); ++i)
+  {
+    SymbolPath *path = *ARRAY_GET(using_paths, SymbolPath *, i);
+    free_symbol_path(path);
+    ARRAY_POP(state->search_paths);
+  }
+  ARRAY_FREE(using_paths);
+
+  ARRAY_POP(state->search_paths);
+  free_symbol_path(search_path);
 
   if (data->name != NULL)
   {
@@ -1728,6 +1983,7 @@ validate(struct ValidationState *state)
 {
   state->logic = new_logic_state(state->out);
   state->prefix_path = init_symbol_path();
+  ARRAY_INIT(state->search_paths, SymbolPath *);
 
   /* The root node should have a child that is the root namespace. */
   const struct ASTNode *root_node = &state->input->ast_root;
@@ -1746,6 +2002,7 @@ validate(struct ValidationState *state)
 
   free_logic_state(state->logic);
   free_symbol_path(state->prefix_path);
+  ARRAY_FREE(state->search_paths);
   return 0;
 }
 

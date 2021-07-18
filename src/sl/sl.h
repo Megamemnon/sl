@@ -1,8 +1,6 @@
 /*
 
 TODO:
-- Allow constant definitions:
-  `const [CONSTANT_NAME] [CONSTANT_TYPE];`
 - Allow importing namespaces:
   `use [PATH_TO_NAMESPACE];`
 

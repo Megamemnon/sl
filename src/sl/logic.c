@@ -31,7 +31,7 @@ struct Type
   uint32_t id;
   const SymbolPath *path;
 
-  //bool atomic;
+  bool atomic;
 };
 
 struct Constant
@@ -411,6 +411,17 @@ logic_state_path_occupied(const LogicState *state, const SymbolPath *path)
   return FALSE;
 }
 
+SymbolPath *
+find_first_occupied_path(const LogicState *state, SymbolPath **paths)
+{
+  for (SymbolPath **path = paths; *path != NULL; ++path)
+  {
+    if (logic_state_path_occupied(state, *path))
+      return copy_symbol_path(*path);
+  }
+  return NULL;
+}
+
 static struct Symbol *
 locate_symbol(LogicState *state, const SymbolPath *path)
 {
@@ -443,11 +454,11 @@ add_symbol(LogicState *state, struct Symbol sym)
 }
 
 LogicError
-add_type(LogicState *state, const SymbolPath *type)
+add_type(LogicState *state, struct PrototypeType proto)
 {
-  if (locate_symbol(state, type) != NULL)
+  if (locate_symbol(state, proto.type_path) != NULL)
   {
-    char *type_str = string_from_symbol_path(type);
+    char *type_str = string_from_symbol_path(proto.type_path);
     LOG_NORMAL(state->log_out,
       "Cannot add type '%s' because the path is in use.\n", type_str);
     free(type_str);
@@ -457,10 +468,10 @@ add_type(LogicState *state, const SymbolPath *type)
   struct Type *t = malloc(sizeof(struct Type));
   t->id = state->next_id;
   ++state->next_id;
-  //t->atomic = atomic;
+  t->atomic = proto.atomic;
 
   struct Symbol sym;
-  sym.path = copy_symbol_path(type);
+  sym.path = copy_symbol_path(proto.type_path);
   sym.type = SymbolTypeType;
   sym.object = t;
 
@@ -468,7 +479,7 @@ add_type(LogicState *state, const SymbolPath *type)
 
   add_symbol(state, sym);
 
-  char *type_str = string_from_symbol_path(type);
+  char *type_str = string_from_symbol_path(proto.type_path);
   LOG_NORMAL(state->log_out, "Successfully added type '%s'.\n", type_str);
   free(type_str);
 
@@ -559,6 +570,20 @@ add_expression(LogicState *state, struct PrototypeExpression proto)
     return LogicErrorSymbolAlreadyExists;
   }
   e->type = (struct Type *)type_symbol->object;
+
+  /* The type of the expression must not be atomic. */
+  if (e->type->atomic)
+  {
+    char *expr_str = string_from_symbol_path(proto.expression_path);
+    char *type_str = string_from_symbol_path(proto.expression_type);
+    LOG_NORMAL(state->log_out,
+      "Cannot add expression '%s' because the type '%s' is atomic.\n",
+      expr_str, type_str);
+    free(expr_str);
+    free(type_str);
+    free(e);
+    return LogicErrorSymbolAlreadyExists;
+  }
 
   ARRAY_INIT(e->parameters, struct Parameter);
   for (struct PrototypeParameter **param = proto.parameters;
@@ -1254,6 +1279,14 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
       list_proven(state, proven);
       return LogicErrorSymbolAlreadyExists;
     }
+
+    for (size_t i = 0; i < args_n; ++i)
+    {
+      struct Argument *arg = ARRAY_GET(args, struct Argument, i);
+      free(arg->name);
+      free_value(arg->value);
+    }
+    ARRAY_FREE(args);
   }
 
   /* Check that all the inferences have been proven. */
@@ -1267,6 +1300,14 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
       return LogicErrorSymbolAlreadyExists;
     }
   }
+
+  /* Free all the statements that we've proven. */
+  for (size_t i = 0; i < ARRAY_LENGTH(proven); ++i)
+  {
+    Value *v = *ARRAY_GET(proven, Value *, i);
+    free_value(v);
+  }
+  ARRAY_FREE(proven);
 
   struct Symbol sym;
   sym.path = copy_symbol_path(proto.theorem_path);
