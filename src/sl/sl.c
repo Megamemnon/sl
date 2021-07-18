@@ -539,6 +539,65 @@ parse_expression(struct ParserState *state)
 }
 
 static int
+parse_require(struct ParserState *state)
+{
+  add_child_and_descend(state);
+  init_ast_node(state->ast_current);
+  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeRequire;
+  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+
+  if (!consume_keyword(state, "require"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing keyword 'require' in require statement.");
+  }
+
+  const char *require_name;
+  if (!consume_identifier(state, &require_name))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing requirement name in require statement.");
+  }
+  else
+  {
+    AST_NODE_DATA(state->ast_current)->name = strdup(require_name);
+  }
+
+  if (!consume_symbol(state, "("))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing symbol '(' in require statement.");
+  }
+
+  bool first_token = TRUE;
+  while (!consume_symbol(state, ")"))
+  {
+    if (!first_token)
+    {
+      if (!consume_symbol(state, ","))
+      {
+        add_error(state->unit, get_current_token(state),
+          "missing comma ',' separating arguments in require statement.");
+      }
+    }
+    if (first_token)
+      first_token = FALSE;
+
+    int err = parse_value(state);
+    PROPAGATE_ERROR(err);
+  }
+
+  if (!consume_symbol(state, ";"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing semicolon ';' after require statement.");
+  }
+
+  ascend(state);
+  return 0;
+}
+
+static int
 parse_definition(struct ParserState *state)
 {
   add_child_and_descend(state);
@@ -633,7 +692,12 @@ parse_infer(struct ParserState *state)
 static int
 parse_axiom_item(struct ParserState *state)
 {
-  if (next_is_keyword(state, "def"))
+  if (next_is_keyword(state, "require"))
+  {
+    int err = parse_require(state);
+    PROPAGATE_ERROR(err);
+  }
+  else if (next_is_keyword(state, "def"))
   {
     int err = parse_definition(state);
     PROPAGATE_ERROR(err);
@@ -771,7 +835,12 @@ parse_step(struct ParserState *state)
 static int
 parse_theorem_item(struct ParserState *state)
 {
-  if (next_is_keyword(state, "def"))
+  if (next_is_keyword(state, "require"))
+  {
+    int err = parse_require(state);
+    PROPAGATE_ERROR(err);
+  }
+  else if (next_is_keyword(state, "def"))
   {
     int err = parse_definition(state);
     PROPAGATE_ERROR(err);
@@ -1233,81 +1302,6 @@ extract_parameter(struct ValidationState *state,
   return 0;
 }
 
-static int
-validate_expression(struct ValidationState *state,
-  const struct ASTNode *expression)
-{
-  const struct ASTNodeData *data = AST_NODE_DATA(expression);
-  if (data->type != ASTNodeTypeExpression)
-  {
-    add_error(state->unit, data->location,
-      "expected an expression declaration but found the wrong type of node.");
-    state->valid = FALSE;
-  }
-
-  /* Construct a prototype expression, then try adding it to the logical
-     state. */
-  struct PrototypeExpression proto;
-  proto.expression_path = copy_symbol_path(state->prefix_path);
-  push_symbol_path(proto.expression_path, data->name);
-
-  if (ARRAY_LENGTH(expression->children) < 2)
-  {
-    add_error(state->unit, data->location,
-      "an expression node must have at least two children, the path to the expression's type and the list of parameters.");
-    state->valid = FALSE;
-  }
-  const struct ASTNode *type =
-    ARRAY_GET(expression->children, struct ASTNode, 0);
-
-  SymbolPath *local_path = extract_path(state, type);
-  proto.expression_type = lookup_symbol(state, local_path);
-  free_symbol_path(local_path);
-
-  /* TODO: This should be its own function. */
-  const struct ASTNode *param_list =
-    ARRAY_GET(expression->children, struct ASTNode, 1);
-  const struct ASTNodeData *param_list_data = AST_NODE_DATA(param_list);
-  if (param_list_data->type != ASTNodeTypeParameterList)
-  {
-    add_error(state->unit, data->location,
-      "expected a parameter list but found the wrong type of node.");
-    state->valid = FALSE;
-  }
-
-  size_t args_n = ARRAY_LENGTH(param_list->children);
-  proto.parameters = malloc(sizeof(struct PrototypeParameter *) * (args_n + 1));
-  for (size_t i = 0; i < args_n; ++i)
-  {
-    const struct ASTNode *param =
-      ARRAY_GET(param_list->children, struct ASTNode, i);
-    proto.parameters[i] = malloc(sizeof(struct PrototypeParameter));
-    int err = extract_parameter(state, param, proto.parameters[i]);
-    PROPAGATE_ERROR(err);
-  }
-  proto.parameters[args_n] = NULL;
-
-  LogicError err = add_expression(state->logic, proto);
-  if (err != LogicErrorNone)
-  {
-    add_error(state->unit, data->location,
-      "cannot add expression to logic state.");
-    state->valid = FALSE;
-  }
-
-  free_symbol_path(proto.expression_path);
-  free_symbol_path(proto.expression_type);
-  for (size_t i = 0; i < args_n; ++i)
-  {
-    free(proto.parameters[i]->name);
-    free_symbol_path(proto.parameters[i]->type);
-    free(proto.parameters[i]);
-  }
-  free(proto.parameters);
-
-  return 0;
-}
-
 struct Definition
 {
   char *name;
@@ -1488,6 +1482,152 @@ extract_value(struct ValidationState *state,
 }
 
 static int
+validate_expression(struct ValidationState *state,
+  const struct ASTNode *expression)
+{
+  const struct ASTNodeData *data = AST_NODE_DATA(expression);
+  if (data->type != ASTNodeTypeExpression)
+  {
+    add_error(state->unit, data->location,
+      "expected an expression declaration but found the wrong type of node.");
+    state->valid = FALSE;
+  }
+
+  /* Construct a prototype expression, then try adding it to the logical
+     state. */
+  struct PrototypeExpression proto;
+  proto.expression_path = copy_symbol_path(state->prefix_path);
+  push_symbol_path(proto.expression_path, data->name);
+
+  if (ARRAY_LENGTH(expression->children) < 2)
+  {
+    add_error(state->unit, data->location,
+      "an expression node must have at least two children, the path to the expression's type and the list of parameters.");
+    state->valid = FALSE;
+  }
+  const struct ASTNode *type =
+    ARRAY_GET(expression->children, struct ASTNode, 0);
+
+  SymbolPath *local_path = extract_path(state, type);
+  proto.expression_type = lookup_symbol(state, local_path);
+  free_symbol_path(local_path);
+
+  /* TODO: This should be its own function. */
+  struct TheoremEnvironment env;
+  init_theorem_environment(&env);
+
+  const struct ASTNode *param_list =
+    ARRAY_GET(expression->children, struct ASTNode, 1);
+  const struct ASTNodeData *param_list_data = AST_NODE_DATA(param_list);
+  if (param_list_data->type != ASTNodeTypeParameterList)
+  {
+    add_error(state->unit, data->location,
+      "expected a parameter list but found the wrong type of node.");
+    state->valid = FALSE;
+  }
+
+  size_t args_n = ARRAY_LENGTH(param_list->children);
+  proto.parameters = malloc(sizeof(struct PrototypeParameter *) * (args_n + 1));
+  for (size_t i = 0; i < args_n; ++i)
+  {
+    const struct ASTNode *param =
+      ARRAY_GET(param_list->children, struct ASTNode, i);
+    proto.parameters[i] = malloc(sizeof(struct PrototypeParameter));
+    int err = extract_parameter(state, param, proto.parameters[i]);
+    ARRAY_APPEND(env.parameters, struct PrototypeParameter,
+      *proto.parameters[i]);
+    PROPAGATE_ERROR(err);
+  }
+  proto.parameters[args_n] = NULL;
+
+  /* If there are bindings, extract them. */
+  if (ARRAY_LENGTH(expression->children) == 3)
+  {
+    const struct ASTNode *binding_list =
+      ARRAY_GET(expression->children, struct ASTNode, 2);
+    const struct ASTNodeData *binding_list_data = AST_NODE_DATA(binding_list);
+    if (binding_list_data->type != ASTNodeTypeBindingList)
+    {
+      add_error(state->unit, data->location,
+        "expected a binding list but found the wrong type of node.");
+      state->valid = FALSE;
+    }
+
+    proto.bindings =
+      malloc(sizeof(Value *) * (ARRAY_LENGTH(binding_list->children) + 1));
+    for (size_t i = 0; i < ARRAY_LENGTH(binding_list->children); ++i)
+    {
+      const struct ASTNode *binding =
+        ARRAY_GET(binding_list->children, struct ASTNode, i);
+      proto.bindings[i] = extract_value(state, binding, &env);
+    }
+    proto.bindings[ARRAY_LENGTH(binding_list->children)] = NULL;
+  }
+  else
+  {
+    proto.bindings = NULL;
+  }
+
+  LogicError err = add_expression(state->logic, proto);
+  if (err != LogicErrorNone)
+  {
+    add_error(state->unit, data->location,
+      "cannot add expression to logic state.");
+    state->valid = FALSE;
+  }
+
+  free_theorem_environment(&env);
+  free_symbol_path(proto.expression_path);
+  free_symbol_path(proto.expression_type);
+  for (size_t i = 0; i < args_n; ++i)
+  {
+    free(proto.parameters[i]->name);
+    free_symbol_path(proto.parameters[i]->type);
+    free(proto.parameters[i]);
+  }
+  free(proto.parameters);
+  if (proto.bindings != NULL)
+  {
+    for (Value **binding = proto.bindings; *binding != NULL; ++binding)
+      free_value(*binding);
+    free(proto.bindings);
+  }
+
+  return 0;
+}
+
+static struct PrototypeRequirement *
+extract_require(struct ValidationState *state,
+  const struct ASTNode *require, struct TheoremEnvironment *env)
+{
+  struct PrototypeRequirement *dst =
+    malloc(sizeof(struct PrototypeRequirement));
+
+  const struct ASTNodeData *data = AST_NODE_DATA(require);
+  if (data->type != ASTNodeTypeRequire)
+  {
+    add_error(state->unit, data->location,
+      "expected a requirement but found the wrong type of node.");
+    state->valid = FALSE;
+  }
+
+  dst->require = strdup(data->name);
+  dst->arguments =
+    malloc(sizeof(Value *) * (ARRAY_LENGTH(require->children) + 1));
+
+  for (size_t i = 0; i < ARRAY_LENGTH(require->children); ++i)
+  {
+    const struct ASTNode *child =
+      ARRAY_GET(require->children, struct ASTNode, i);
+    dst->arguments[i] = extract_value(state, child, env);
+  }
+
+  dst->arguments[ARRAY_LENGTH(require->children)] = NULL;
+
+  return dst;
+}
+
+static int
 extract_definition(struct ValidationState *state,
   const struct ASTNode *definition, struct TheoremEnvironment *env)
 {
@@ -1587,6 +1727,7 @@ validate_axiom(struct ValidationState *state,
   proto.theorem_path = copy_symbol_path(state->prefix_path);
   push_symbol_path(proto.theorem_path, data->name);
 
+  size_t requirements_n = 0;
   size_t assumptions_n = 0;
   size_t inferences_n = 0;
   for (size_t i = 0; i < ARRAY_LENGTH(axiom->children); ++i)
@@ -1594,11 +1735,15 @@ validate_axiom(struct ValidationState *state,
     const struct ASTNode *child =
       ARRAY_GET(axiom->children, struct ASTNode, i);
     const struct ASTNodeData *child_data = AST_NODE_DATA(child);
-    if (child_data->type == ASTNodeTypeAssume)
+    if (child_data->type == ASTNodeTypeRequire)
+      ++requirements_n;
+    else if (child_data->type == ASTNodeTypeAssume)
       ++assumptions_n;
     else if (child_data->type == ASTNodeTypeInfer)
       ++inferences_n;
   }
+  proto.requirements =
+    malloc(sizeof(struct PrototypeRequirement *) * (requirements_n + 1));
   proto.assumptions =
     malloc(sizeof(Value *) * (assumptions_n + 1));
   proto.inferences =
@@ -1631,7 +1776,7 @@ validate_axiom(struct ValidationState *state,
   }
   proto.parameters[args_n] = NULL;
 
-  size_t param_index = 0;
+  size_t require_index = 0;
   size_t assume_index = 0;
   size_t infer_index = 0;
   for (size_t i = 0; i < ARRAY_LENGTH(axiom->children); ++i)
@@ -1639,7 +1784,12 @@ validate_axiom(struct ValidationState *state,
     const struct ASTNode *child =
       ARRAY_GET(axiom->children, struct ASTNode, i);
     const struct ASTNodeData *child_data = AST_NODE_DATA(child);
-    if (child_data->type == ASTNodeTypeDef)
+    if (child_data->type == ASTNodeTypeRequire)
+    {
+      proto.requirements[require_index] = extract_require(state, child, &env);
+      ++require_index;
+    }
+    else if (child_data->type == ASTNodeTypeDef)
     {
       int err = extract_definition(state, child, &env);
       PROPAGATE_ERROR(err);
@@ -1656,6 +1806,7 @@ validate_axiom(struct ValidationState *state,
     }
   }
   proto.parameters[args_n] = NULL;
+  proto.requirements[requirements_n] = NULL;
   proto.assumptions[assumptions_n] = NULL;
   proto.inferences[inferences_n] = NULL;
 
@@ -1676,6 +1827,16 @@ validate_axiom(struct ValidationState *state,
     free_symbol_path(proto.parameters[i]->type);
     free(proto.parameters[i]);
   }
+  for (size_t i = 0; i < requirements_n; ++i)
+  {
+    free(proto.requirements[i]->require);
+    for (Value **arg = proto.requirements[i]->arguments; *arg != NULL; ++arg)
+    {
+      free_value(*arg);
+    }
+    free(proto.requirements[i]->arguments);
+    free(proto.requirements[i]);
+  }
   for (size_t i = 0; i < assumptions_n; ++i)
   {
     free_value(proto.assumptions[i]);
@@ -1685,6 +1846,7 @@ validate_axiom(struct ValidationState *state,
     free_value(proto.inferences[i]);
   }
   free(proto.parameters);
+  free(proto.requirements);
   free(proto.assumptions);
   free(proto.inferences);
 

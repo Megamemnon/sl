@@ -78,6 +78,9 @@ struct PrototypeConstant
 LogicError
 add_constant(LogicState *, struct PrototypeConstant proto);
 
+struct Value;
+typedef struct Value Value;
+
 /* Expressions. */
 struct PrototypeParameter
 {
@@ -90,6 +93,7 @@ struct PrototypeExpression
   SymbolPath *expression_path;
   SymbolPath *expression_type;
   struct PrototypeParameter **parameters; /* NULL-terminated list. */
+  Value **bindings; /* NULL-terminated list. */
 };
 
 /* TODO: The return value should be a struct, or modify the PrototypeExpression,
@@ -98,9 +102,6 @@ LogicError
 add_expression(LogicState *state, struct PrototypeExpression expression);
 
 /* Methods to manipulate values. */
-struct Value;
-typedef struct Value Value;
-
 void
 free_value(Value *value);
 
@@ -129,10 +130,17 @@ struct PrototypeProofStep
   Value **arguments; /* NULL-terminated list. */
 };
 
+struct PrototypeRequirement
+{
+  char *require;
+  Value **arguments; /* NULL-terminated list. */
+};
+
 struct PrototypeTheorem
 {
   SymbolPath *theorem_path;
   struct PrototypeParameter **parameters; /* NULL-terminated list. */
+  struct PrototypeRequirement **requirements; /* NULL-terminated list. */
   Value **assumptions; /* NULL-terminated list. */
   Value **inferences; /* NULL-terminated list. */
   struct PrototypeProofStep **steps; /* NULL-terminated list, disregarded for axioms. */

@@ -48,6 +48,7 @@ struct Expression
 
   const struct Type *type;
   Array parameters;
+  Array bindings;
 };
 
 enum ValueType
@@ -69,12 +70,27 @@ struct Value
   Array arguments;
 };
 
+enum RequirementType
+{
+  RequirementTypeFreeFor,
+  RequirementTypeNotFree,
+  RequirementTypeSubstitution,
+  RequirementTypeFullSubstitution
+};
+
+struct Requirement
+{
+  enum RequirementType type;
+  Array arguments;
+};
+
 struct Theorem
 {
   uint32_t id;
   const SymbolPath *path;
 
   Array parameters;
+  Array requirements;
   Array assumptions;
   Array inferences;
 };
@@ -231,6 +247,12 @@ free_expression(struct Expression *expr)
     free_parameter(param);
   }
   ARRAY_FREE(expr->parameters);
+  for (size_t i = 0; i < ARRAY_LENGTH(expr->bindings); ++i)
+  {
+    Value *binding = *ARRAY_GET(expr->bindings, Value *, i);
+    free_value(binding);
+  }
+  ARRAY_FREE(expr->bindings);
 }
 
 static char *
@@ -610,6 +632,15 @@ add_expression(LogicState *state, struct PrototypeExpression proto)
     ARRAY_APPEND(e->parameters, struct Parameter, p);
   }
 
+  ARRAY_INIT(e->bindings, Value *);
+  if (proto.bindings != NULL)
+  {
+    for (Value **binding = proto.bindings; *binding != NULL; ++binding)
+    {
+      ARRAY_APPEND(e->bindings, Value *, copy_value(*binding));
+    }
+  }
+
   struct Symbol sym;
   sym.path = copy_symbol_path(proto.expression_path);
   sym.type = SymbolTypeExpression;
@@ -628,6 +659,14 @@ add_expression(LogicState *state, struct PrototypeExpression proto)
     expr_str = string_from_expression(e);
     LOG_VERBOSE(state->log_out, "Signature: '%s'.\n", expr_str);
     free(expr_str);
+
+    for (size_t i = 0; i < ARRAY_LENGTH(e->bindings); ++i)
+    {
+      Value *binding = *ARRAY_GET(e->bindings, Value *, i);
+      char *binding_str = string_from_value(binding);
+      LOG_VERBOSE(state->log_out, "Binds: '%s'.\n", binding_str);
+      free(binding_str);
+    }
   }
 
   return LogicErrorNone;
@@ -963,6 +1002,53 @@ add_axiom(LogicState *state, struct PrototypeTheorem proto)
     p.type = (struct Type *)type_symbol->object;
     p.name = strdup((*param)->name);
     ARRAY_APPEND(a->parameters, struct Parameter, p);
+  }
+
+  /* Requirements. */
+  ARRAY_INIT(a->requirements, struct Requirement);
+  for (struct PrototypeRequirement **req = proto.requirements;
+    *req != NULL; ++req)
+  {
+    struct Requirement requirement;
+
+    ARRAY_INIT(requirement.arguments, Value *);
+    for (Value **arg = (*req)->arguments; *arg != NULL; ++arg)
+    {
+      ARRAY_APPEND(requirement.arguments, Value *, copy_value(*arg));
+    }
+
+    /* Make sure that the number of arguments match the type. */
+    /* TODO: make validation of requirements its own function. */
+
+    if (strcmp((*req)->require, "free_for") == 0)
+    {
+      requirement.type = RequirementTypeFreeFor;
+      if (ARRAY_LENGTH(requirement.arguments) != 3)
+        return LogicErrorSymbolAlreadyExists;
+    }
+    else if (strcmp((*req)->require, "not_free") == 0)
+    {
+      requirement.type = RequirementTypeNotFree;
+      if (ARRAY_LENGTH(requirement.arguments) != 2)
+        return LogicErrorSymbolAlreadyExists;
+    }
+    else if (strcmp((*req)->require, "substitution") == 0)
+    {
+      requirement.type = RequirementTypeSubstitution;
+      if (ARRAY_LENGTH(requirement.arguments) != 4)
+        return LogicErrorSymbolAlreadyExists;
+    }
+    else if (strcmp((*req)->require, "full_substitution") == 0)
+    {
+      requirement.type = RequirementTypeFullSubstitution;
+      if (ARRAY_LENGTH(requirement.arguments) != 4)
+        return LogicErrorSymbolAlreadyExists;
+    }
+    else
+    {
+      /* TODO: just ignore this requirement? */
+      continue;
+    }
   }
 
   /* Assumptions & inferences. */

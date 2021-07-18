@@ -527,6 +527,15 @@ namespace propositional_calculus
 }
 /* alias propositional_calculus prop; */
 
+/*
+
+First Order Logic (with Equality):
+
+Define terms, variables, and quantification. After developing the rules
+for free and bound variables, add the axioms for first order logic with
+equality. The axioms are taken from Mendelson, pgs. 69-70 and 95.
+
+*/
 namespace predicate_calculus
 {
   use propositional_calculus;
@@ -564,8 +573,8 @@ namespace predicate_calculus
   axiom
   instantiation(x : Variable, phi : Formula, t : Term, phi0 : Formula)
   {
-    /* require free_for($t, t($x), $phi); */
-    /* require full_substitution(t($x), $phi, $t, $phi0); */
+    require free_for($t, t($x), $phi);
+    require full_substitution(t($x), $phi, $t, $phi0);
 
     infer implies(any($x, $phi), $phi0);
   }
@@ -573,7 +582,7 @@ namespace predicate_calculus
   axiom
   universal_elimination(x : Variable, phi : Formula, psi : Formula)
   {
-    /* require not_free($x, $phi); */
+    require not_free($x, $phi);
 
     infer implies(any($x, implies($phi, $psi)),
       implies($phi, any($x, $psi)));
@@ -587,11 +596,19 @@ namespace predicate_calculus
     infer any($x, $phi);
   }
 
+  theorem
+  instantiation_elimination(x : Variable, phi : Formula)
+  {
+    infer implies(any($x, $phi), $phi);
+
+    step instantiation($x, $phi, t($x), $phi);
+  }
+
   expr Formula
   eq(s : Term, y : Term);
 
   axiom
-  equality_reflexive(x : Variable)
+  equality_reflexive_v(x : Variable)
   {
     infer any($x, eq(t($x), t($x)));
   }
@@ -600,11 +617,20 @@ namespace predicate_calculus
   equality_substitution(x : Variable, phi : Formula, y : Variable,
     phi0 : Formula)
   {
-    /* require free_for(t($y), t($x), $phi); */
-    /* require substitution(t($x), $phi, t($y), $phi0); */
+    require free_for(t($y), t($x), $phi);
+    require substitution(t($x), $phi, t($y), $phi0);
 
     infer implies(eq(t($x), t($y)), implies($phi, $phi0));
   }
+
+  /*theorem
+  equality_symmetric(x : Variable, y : Variable)
+  {
+    infer any($x, any($y, iff(eq(t($x), t($y)), eq(t($y), t($x)))));
+
+    step equality_substitution($x, eq(t($x), t($x)),
+      $y, eq(t($y), t($x)));
+  }*/
 }
 /* alias predicate_calculus pred; */
 
