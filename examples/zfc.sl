@@ -623,13 +623,22 @@ namespace predicate_calculus
     infer implies(eq(t($x), t($y)), implies($phi, $phi0));
   }
 
-  /*theorem
-  equality_symmetric(x : Variable, y : Variable)
-  {
-    infer any($x, any($y, iff(eq(t($x), t($y)), eq(t($y), t($x)))));
+  expr Formula
+  exists(x : Variable, phi : Formula) binds ($x);
 
-    step equality_substitution($x, eq(t($x), t($x)),
-      $y, eq(t($y), t($x)));
+  axiom
+  existential_quantification(x : Variable, phi : Formula)
+  {
+    infer iff(exists($x, $phi), not(any($x, not($phi))));
+  }
+
+  /*expr Formula
+  exists_unique(x : Variable, phi : Formula) binds ($x);
+
+  axiom
+  existential_uniqueness(x : Variable, phi : Formula)
+  {
+    infer iff(exists_unique($x, $phi), and(exists($x, $phi), ))
   }*/
 }
 /* alias predicate_calculus pred; */
@@ -647,5 +656,32 @@ namespace zfc
     infer any(vars.x, any(vars.y, implies(
       any(vars.z, iff(eval_p(in, t(vars.z), t(vars.x)),
       eval_p(in, t(vars.z), t(vars.y)))), eq(t(vars.x), t(vars.y)))));
+  }
+
+  axiom
+  regularity()
+  {
+    def nonempty exists(vars.a, eval_p(in, t(vars.a), t(vars.x)));
+
+    infer any(vars.x, implies(%nonempty,
+      exists(vars.y, and(eval_p(in, t(vars.y), t(vars.x)),
+      not(exists(vars.z, and(eval_p(in, t(vars.z), t(vars.y)),
+      eval_p(in, t(vars.z), t(vars.y)))))))));
+  }
+
+  axiom
+  pairing()
+  {
+    infer any(vars.x, any(vars.y, exists(vars.z, and(
+      eval_p(in, t(vars.x), t(vars.z)),
+      eval_p(in, t(vars.y), t(vars.z))))));
+  }
+
+  const empty : Term;
+
+  axiom
+  empty_set()
+  {
+    infer any(vars.x, not(eval_p(in, t(vars.x), empty)));
   }
 }

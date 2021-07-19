@@ -66,6 +66,7 @@ struct Value
   /* TODO: use a union? */
   char *variable_name;
   const struct Constant *constant;
+  bool bound;
   const struct Expression *expression;
   Array arguments;
 };
@@ -702,6 +703,7 @@ copy_value(const Value *value)
   Value *v = malloc(sizeof(Value));
   v->value_type = value->value_type;
   v->type = value->type;
+  v->bound = value->bound;
   if (value->value_type == ValueTypeVariable)
   {
     v->variable_name = strdup(value->variable_name);
@@ -728,12 +730,14 @@ copy_value(const Value *value)
 bool
 values_equal(const Value *a, const Value *b)
 {
+  /* DO NOT compare `bound`. */
   if (a->value_type != b->value_type)
     return FALSE;
   switch (a->value_type)
   {
     case ValueTypeConstant:
-      /* TODO */
+      if (a->constant != b->constant) /* TODO: test for equivalence of constants, not for pointer equality. */
+        return FALSE;
       break;
     case ValueTypeVariable:
       if (!types_equal(a->type, b->type))
@@ -760,6 +764,29 @@ values_equal(const Value *a, const Value *b)
   return TRUE;
 }
 
+bool
+value_terminal(const Value *v)
+{
+  switch (v->value_type)
+  {
+    case ValueTypeConstant:
+      return TRUE;
+      break;
+    case ValueTypeVariable:
+      return v->type->atomic;
+      break;
+    case ValueTypeComposition:
+      for (size_t i = 0; i < ARRAY_LENGTH(v->arguments); ++i)
+      {
+        Value *arg = *ARRAY_GET(v->arguments, Value *, i);
+        if (!value_terminal(arg))
+          return FALSE;
+      }
+      return TRUE;
+      break;
+  }
+}
+
 char *
 string_from_value(const Value *value)
 {
@@ -772,8 +799,15 @@ string_from_value(const Value *value)
         if (ARRAY_LENGTH(value->arguments) == 0)
         {
           size_t len = 3 + strlen(expr_str);
+          if (value->bound)
+            len += 1;
           str = malloc(len);
           char *c = str;
+          if (value->bound)
+          {
+            *c = '!';
+            ++c;
+          }
           strcpy(c, expr_str);
           c += strlen(expr_str);
           strcpy(c, "()");
@@ -784,6 +818,8 @@ string_from_value(const Value *value)
         else
         {
           size_t len = 3 + strlen(expr_str);
+          if (value->bound)
+            len += 1;
           char **args = malloc(sizeof(char *) * ARRAY_LENGTH(value->arguments));
           for (size_t i = 0; i < ARRAY_LENGTH(value->arguments); ++i)
           {
@@ -796,6 +832,11 @@ string_from_value(const Value *value)
 
           str = malloc(len);
           char *c = str;
+          if (value->bound)
+          {
+            *c = '!';
+            ++c;
+          }
           strcpy(c, expr_str);
           c += strlen(expr_str);
           *c = '(';
@@ -828,8 +869,15 @@ string_from_value(const Value *value)
       {
         char *const_str = string_from_symbol_path(value->constant->path);
         size_t len = 1 + strlen(const_str);
+        if (value->bound)
+          len += 1;
         char *str = malloc(len);
         char *c = str;
+        if (value->bound)
+        {
+          *c = '!';
+          ++c;
+        }
         strcpy(c, const_str);
         c += strlen(const_str);
         *c = '\0';
@@ -840,8 +888,15 @@ string_from_value(const Value *value)
     case ValueTypeVariable:
       {
         size_t len = 2 + strlen(value->variable_name);
+        if (value->bound)
+          len += 1;
         char *str = malloc(len);
         char *c = str;
+        if (value->bound)
+        {
+          *c = '!';
+          ++c;
+        }
         *c = '$';
         ++c;
         strcpy(c, value->variable_name);
@@ -853,6 +908,96 @@ string_from_value(const Value *value)
   }
 }
 
+static void
+enumerate_value_occurrences(const Value *target, const Value *search_in,
+  Array *occurrences)
+{
+  if (values_equal(target, search_in))
+  {
+    ARRAY_APPEND(*occurrences, const Value *, search_in);
+  }
+  else if (search_in->value_type == ValueTypeComposition)
+  {
+    for (size_t i = 0; i < ARRAY_LENGTH(search_in->arguments); ++i)
+    {
+      const Value *arg = *ARRAY_GET(search_in->arguments, Value *, i);
+      enumerate_value_occurrences(target, arg, occurrences);
+    }
+  }
+}
+
+struct Argument
+{
+  char *name;
+  Value *value;
+};
+
+static Value *
+instantiate_value(struct LogicState *state, const Value *src, Array args)
+{
+  switch (src->value_type)
+  {
+    case ValueTypeConstant:
+      return copy_value(src);
+      break;
+    case ValueTypeVariable:
+      /* Find the corresponding argument. */
+      {
+        const struct Argument *arg = NULL;
+        for (size_t i = 0; i < ARRAY_LENGTH(args); ++i)
+        {
+          const struct Argument *a = ARRAY_GET(args, struct Argument, i);
+          if (strcmp(a->name, src->variable_name) == 0)
+          {
+            arg = a;
+            break;
+          }
+        }
+        if (arg == NULL)
+        {
+          char *value_str = string_from_value(src);
+          LOG_NORMAL(state->log_out,
+            "Cannot instantiate value '%s' because there is no matching argument.\n",
+            value_str);
+          free(value_str);
+          return NULL;
+        }
+        if (!types_equal(arg->value->type, src->type))
+        {
+          char *value_str = string_from_value(src);
+          char *src_type = string_from_symbol_path(src->type->path);
+          char *arg_type = string_from_symbol_path(arg->value->type->path);
+          LOG_NORMAL(state->log_out,
+            "Cannot instantiate value '%s' of type '%s' because the variable has type '%s'.\n",
+            value_str, src_type, arg_type);
+          free(value_str);
+          free(src_type);
+          free(arg_type);
+          return NULL;
+        }
+        return copy_value(arg->value);
+      }
+      break;
+    case ValueTypeComposition:
+      {
+        Value *dst = malloc(sizeof(Value));
+        dst->type = src->type;
+        dst->value_type = ValueTypeComposition;
+        dst->expression = src->expression;
+        ARRAY_INIT(dst->arguments, struct Value);
+        for (size_t i = 0; i < ARRAY_LENGTH(src->arguments); ++i)
+        {
+          const Value *arg = *ARRAY_GET(src->arguments, struct Value *, i);
+          ARRAY_APPEND(dst->arguments, Value *,
+            instantiate_value(state, arg, args));
+        }
+        return dst;
+      }
+      break;
+  }
+  return 0;
+}
+
 Value *
 new_variable_value(LogicState *state, const char *name, const SymbolPath *type)
 {
@@ -860,6 +1005,7 @@ new_variable_value(LogicState *state, const char *name, const SymbolPath *type)
 
   value->variable_name = strdup(name);
   value->value_type = ValueTypeVariable;
+  value->bound = FALSE;
   struct Symbol *type_symbol = locate_symbol_with_type(state,
     type, SymbolTypeType);
   if (type_symbol == NULL)
@@ -883,6 +1029,7 @@ new_constant_value(LogicState *state, const SymbolPath *constant)
   Value *value = malloc(sizeof(Value));
 
   value->value_type = ValueTypeConstant;
+  value->bound = FALSE;
   struct Symbol *constant_symbol = locate_symbol_with_type(state,
     constant, SymbolTypeConstant);
   if (constant_symbol == NULL)
@@ -907,6 +1054,7 @@ new_composition_value(LogicState *state, const SymbolPath *expr_path,
   Value *value = malloc(sizeof(Value));
 
   value->value_type = ValueTypeComposition;
+  value->bound = FALSE;
   struct Symbol *expr_symbol = locate_symbol_with_type(state,
     expr_path, SymbolTypeExpression);
   if (expr_symbol == NULL)
@@ -942,11 +1090,17 @@ new_composition_value(LogicState *state, const SymbolPath *expr_path,
     free_value(value);
     return NULL;
   }
+  Array args_array;
+  ARRAY_INIT(args_array, struct Argument);
   for (size_t i = 0; i < ARRAY_LENGTH(value->arguments); ++i)
   {
     Value *arg = *ARRAY_GET(value->arguments, Value *, i);
     const struct Parameter *param =
       ARRAY_GET(value->expression->parameters, struct Parameter, i);
+    struct Argument argument;
+    argument.name = strdup(param->name);
+    argument.value = copy_value(arg);
+    ARRAY_APPEND(args_array, struct Argument, argument);
     if (!types_equal(arg->type, param->type))
     {
       char *expr_str = string_from_symbol_path(expr_path);
@@ -957,6 +1111,26 @@ new_composition_value(LogicState *state, const SymbolPath *expr_path,
       free_value(value);
       return NULL;
     }
+  }
+
+  /* Look for things to bind. */
+  /* TODO: things are getting bound that should be free, like constants. */
+  for (size_t i = 0; i < ARRAY_LENGTH(value->expression->bindings); ++i)
+  {
+    const Value *binding = *ARRAY_GET(value->expression->bindings, Value *, i);
+    Value *instantiated = instantiate_value(state, binding, args_array);
+
+    Array occurrences;
+    ARRAY_INIT(occurrences, Value *);
+    enumerate_value_occurrences(instantiated, value, &occurrences);
+    for (size_t j = 0; j < ARRAY_LENGTH(occurrences); ++j)
+    {
+      Value *occurrence = *ARRAY_GET(occurrences, Value *, j);
+      occurrence->bound = TRUE;
+    }
+    ARRAY_FREE(occurrences);
+
+    free_value(instantiated);
   }
 
   return value;
@@ -1049,6 +1223,8 @@ add_axiom(LogicState *state, struct PrototypeTheorem proto)
       /* TODO: just ignore this requirement? */
       continue;
     }
+
+    ARRAY_APPEND(a->requirements, struct Requirement, requirement);
   }
 
   /* Assumptions & inferences. */
@@ -1103,78 +1279,6 @@ add_axiom(LogicState *state, struct PrototypeTheorem proto)
   return LogicErrorNone;
 }
 
-struct Argument
-{
-  char *name;
-  Value *value;
-};
-
-static Value *
-instantiate_value(struct LogicState *state, const Value *src, Array args)
-{
-  switch (src->value_type)
-  {
-    case ValueTypeConstant:
-      return copy_value(src);
-      break;
-    case ValueTypeVariable:
-      /* Find the corresponding argument. */
-      {
-        const struct Argument *arg = NULL;
-        for (size_t i = 0; i < ARRAY_LENGTH(args); ++i)
-        {
-          const struct Argument *a = ARRAY_GET(args, struct Argument, i);
-          if (strcmp(a->name, src->variable_name) == 0)
-          {
-            arg = a;
-            break;
-          }
-        }
-        if (arg == NULL)
-        {
-          char *value_str = string_from_value(src);
-          LOG_NORMAL(state->log_out,
-            "Cannot instantiate value '%s' because there is no matching argument.\n",
-            value_str);
-          free(value_str);
-          return NULL;
-        }
-        if (!types_equal(arg->value->type, src->type))
-        {
-          char *value_str = string_from_value(src);
-          char *src_type = string_from_symbol_path(src->type->path);
-          char *arg_type = string_from_symbol_path(arg->value->type->path);
-          LOG_NORMAL(state->log_out,
-            "Cannot instantiate value '%s' of type '%s' because the variable has type '%s'.\n",
-            value_str, src_type, arg_type);
-          free(value_str);
-          free(src_type);
-          free(arg_type);
-          return NULL;
-        }
-        return copy_value(arg->value);
-      }
-      break;
-    case ValueTypeComposition:
-      {
-        Value *dst = malloc(sizeof(Value));
-        dst->type = src->type;
-        dst->value_type = ValueTypeComposition;
-        dst->expression = src->expression;
-        ARRAY_INIT(dst->arguments, struct Value);
-        for (size_t i = 0; i < ARRAY_LENGTH(src->arguments); ++i)
-        {
-          const Value *arg = *ARRAY_GET(src->arguments, struct Value *, i);
-          ARRAY_APPEND(dst->arguments, Value *,
-            instantiate_value(state, arg, args));
-        }
-        return dst;
-      }
-      break;
-  }
-  return 0;
-}
-
 static bool
 statement_proven(const Value *statement, Array proven)
 {
@@ -1187,10 +1291,185 @@ statement_proven(const Value *statement, Array proven)
   return FALSE;
 }
 
+static bool
+substitution_is_binding(const Value *source, const Value *target,
+  const Value *context)
+{
+  return FALSE;
+}
+
+static bool
+evaluate_free_for(struct LogicState *state,
+  const Value *source, const Value *target, const Value *context)
+{
+  /* Special case: anything is always free for itself. */
+  if (values_equal(source, target))
+    return TRUE;
+
+  /* TODO: Instead of requiring everything to be terminal, in cases that
+     we have non-terminals, figure out what must be required in order to
+     make it work and check for that requirement in the environment. */
+  if (!value_terminal(source) || !value_terminal(target)
+    || !value_terminal(context))
+    return FALSE;
+
+  return FALSE;
+}
+
+static bool
+evaluate_not_free(struct LogicState *state,
+  const Value *target, const Value *context)
+{
+  /* TODO: Instead of requiring everything to be terminal, in cases that
+     we have non-terminals, figure out what must be required in order to
+     make it work and check for that requirement in the environment. */
+  if (!value_terminal(target) || !value_terminal(context))
+    return FALSE;
+
+  bool not_free = TRUE;
+  Array occurrences;
+  ARRAY_INIT(occurrences, const Value *);
+  enumerate_value_occurrences(target, context, &occurrences);
+  for (size_t i = 0; i < ARRAY_LENGTH(occurrences); ++i)
+  {
+    const Value *occurrence = *ARRAY_GET(occurrences, const Value *, i);
+    if (!occurrence->bound)
+      not_free = FALSE;
+  }
+  ARRAY_FREE(occurrences);
+
+  return not_free;
+}
+
+static bool
+evaluate_substitution(struct LogicState *state,
+  const Value *target, const Value *context,
+  const Value *source, const Value *new_context)
+{
+  /* As a special case that doesn't (and cannot) require evaluation,
+     always return true when performing the identity substitution. */
+  if (values_equal(target, source) && values_equal(context, new_context))
+    return TRUE;
+
+  /* TODO: Instead of requiring everything to be terminal, in cases that
+     we have non-terminals, figure out what must be required in order to
+     make it work and check for that requirement in the environment. */
+  if (!value_terminal(target) || !value_terminal(context)
+    || !value_terminal(source) || !value_terminal(new_context))
+    return FALSE;
+
+  return FALSE;
+}
+
+static bool
+evaluate_full_substitution(struct LogicState *state,
+  const Value *target, const Value *context,
+  const Value *source, const Value *new_context)
+{
+  /* As a special case that doesn't (and cannot) require evaluation,
+     always return true when performing the identity substitution. */
+  if (values_equal(target, source) && values_equal(context, new_context))
+    return TRUE;
+
+  /* TODO: Instead of requiring everything to be terminal, in cases that
+     we have non-terminals, figure out what must be required in order to
+     make it work and check for that requirement in the environment. */
+  if (!value_terminal(target) || !value_terminal(context)
+    || !value_terminal(source) || !value_terminal(new_context))
+    return FALSE;
+
+  /* We can actually just generate the substitution and compare for equality. */
+
+  return FALSE;
+}
+
 static int
 instantiate_theorem(struct LogicState *state,
   const struct Theorem *src, Array args, Array *proven)
 {
+  /* Check the requirements. */
+  for (size_t i = 0; i < ARRAY_LENGTH(src->requirements); ++i)
+  {
+    bool satisfied = FALSE;
+    const struct Requirement *req =
+      ARRAY_GET(src->requirements, struct Requirement, i);
+
+    Array instantiated_args;
+    ARRAY_INIT(instantiated_args, Value *);
+    for (size_t j = 0; j < ARRAY_LENGTH(req->arguments); ++j)
+    {
+      const Value *arg = *ARRAY_GET(req->arguments, Value *, j);
+      Value *instantiated = instantiate_value(state, arg, args);
+      ARRAY_APPEND(instantiated_args, Value *, instantiated);
+    }
+
+    switch (req->type)
+    {
+      case RequirementTypeFreeFor:
+        {
+          if (ARRAY_LENGTH(instantiated_args) != 3)
+          {
+            LOG_NORMAL(state->log_out,
+              "Requirement has wrong number of arguments");
+            return 1;
+          }
+          const Value *source = *ARRAY_GET(instantiated_args, Value *, 0);
+          const Value *target = *ARRAY_GET(instantiated_args, Value *, 1);
+          const Value *context = *ARRAY_GET(instantiated_args, Value *, 2);
+          satisfied = evaluate_free_for(state, source, target, context);
+        }
+        break;
+      case RequirementTypeNotFree:
+        {
+          if (ARRAY_LENGTH(instantiated_args) != 2)
+          {
+            LOG_NORMAL(state->log_out,
+              "Requirement has wrong number of arguments");
+            return 1;
+          }
+          const Value *target = *ARRAY_GET(instantiated_args, Value *, 0);
+          const Value *context = *ARRAY_GET(instantiated_args, Value *, 1);
+          satisfied = evaluate_not_free(state, target, context);
+        }
+        break;
+      case RequirementTypeSubstitution:
+        {
+          if (ARRAY_LENGTH(instantiated_args) != 4)
+          {
+            LOG_NORMAL(state->log_out,
+              "Requirement has wrong number of arguments");
+            return 1;
+          }
+          const Value *target = *ARRAY_GET(instantiated_args, Value *, 0);
+          const Value *context = *ARRAY_GET(instantiated_args, Value *, 1);
+          const Value *source = *ARRAY_GET(instantiated_args, Value *, 2);
+          const Value *new_context = *ARRAY_GET(instantiated_args, Value *, 3);
+          satisfied = evaluate_substitution(state, target, context,
+            source, new_context);
+        }
+        break;
+      case RequirementTypeFullSubstitution:
+        {
+          if (ARRAY_LENGTH(instantiated_args) != 4)
+          {
+            LOG_NORMAL(state->log_out,
+              "Requirement has wrong number of arguments");
+            return 1;
+          }
+          const Value *target = *ARRAY_GET(instantiated_args, Value *, 0);
+          const Value *context = *ARRAY_GET(instantiated_args, Value *, 1);
+          const Value *source = *ARRAY_GET(instantiated_args, Value *, 2);
+          const Value *new_context = *ARRAY_GET(instantiated_args, Value *, 3);
+          satisfied = evaluate_full_substitution(state, target, context,
+            source, new_context);
+        }
+        break;
+    }
+
+    if (!satisfied)
+      return 1;
+  }
+
   /* First, instantiate the assumptions. */
   Array instantiated_assumptions;
   ARRAY_INIT(instantiated_assumptions, Value *);
@@ -1291,6 +1570,8 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
     p.name = strdup((*param)->name);
     ARRAY_APPEND(a->parameters, struct Parameter, p);
   }
+
+  ARRAY_INIT(a->requirements, struct Requirement);
 
   /* Assumptions & inferences. */
   ARRAY_INIT(a->assumptions, struct Value *);

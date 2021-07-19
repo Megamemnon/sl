@@ -111,6 +111,10 @@ copy_value(const Value *value);
 bool
 values_equal(const Value *a, const Value *b);
 
+/* True iff all the variables in the expression have atomic types. */
+bool
+value_terminal(const Value *v);
+
 char *
 string_from_value(const Value *value);
 

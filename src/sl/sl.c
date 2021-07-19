@@ -2089,9 +2089,11 @@ validate_namespace(struct ValidationState *state,
         PROPAGATE_ERROR(err);
         break;
       case ASTNodeTypeUse:
-        SymbolPath *use_path = extract_use(state, child);
-        ARRAY_APPEND(using_paths, SymbolPath *, use_path);
-        ARRAY_APPEND(state->search_paths, SymbolPath *, use_path);
+        {
+          SymbolPath *use_path = extract_use(state, child);
+          ARRAY_APPEND(using_paths, SymbolPath *, use_path);
+          ARRAY_APPEND(state->search_paths, SymbolPath *, use_path);
+        }
         break;
       case ASTNodeTypeType:
         err = validate_type(state, child);
