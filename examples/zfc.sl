@@ -547,15 +547,59 @@ namespace predicate_calculus
 
   namespace vars
   {
+    const a : Variable;
+    const b : Variable;
+    const c : Variable;
+    const d : Variable;
+    const e : Variable;
+    const f : Variable;
+    const g : Variable;
+    const h : Variable;
+    const i : Variable;
+    const j : Variable;
+    const k : Variable;
+    const l : Variable;
+    const m : Variable;
+    const n : Variable;
+    const o : Variable;
+    const p : Variable;
+    const q : Variable;
+    const r : Variable;
+    const s : Variable;
+    const t : Variable;
+    const u : Variable;
+    const v : Variable;
+    const w : Variable;
     const x : Variable;
     const y : Variable;
     const z : Variable;
 
-    const a : Variable;
-    const b : Variable;
-    const c : Variable;
-
-    const n : Variable;
+    const A : Variable;
+    const B : Variable;
+    const C : Variable;
+    const D : Variable;
+    const E : Variable;
+    const F : Variable;
+    const G : Variable;
+    const H : Variable;
+    const I : Variable;
+    const J : Variable;
+    const K : Variable;
+    const L : Variable;
+    const M : Variable;
+    const N : Variable;
+    const O : Variable;
+    const P : Variable;
+    const Q : Variable;
+    const R : Variable;
+    const S : Variable;
+    const T : Variable;
+    const U : Variable;
+    const V : Variable;
+    const W : Variable;
+    const X : Variable;
+    const Y : Variable;
+    const Z : Variable;
   }
 
   expr Term
@@ -623,6 +667,68 @@ namespace predicate_calculus
     infer implies(eq(t($x), t($y)), implies($phi, $phi0));
   }
 
+  theorem
+  _equality_symmetric(x : Variable, y : Variable)
+  {
+    infer implies(eq(t($x), t($y)), eq(t($y), t($x)));
+
+    step equality_reflexive_v($x);
+    step instantiation_elimination($x, eq(t($x), t($x)));
+    step modus_ponens(any($x, eq(t($x), t($x))), eq(t($x), t($x)));
+    step equality_substitution($x, eq(t($x), t($x)), $y, eq(t($y), t($x)));
+    step intermediate_elimination(eq(t($x), t($y)),
+      eq(t($x), t($x)), eq(t($y), t($x)));
+  }
+
+  theorem
+  equality_symmetric()
+  {
+    infer any(vars.x, any(vars.y,
+      iff(eq(t(vars.x), t(vars.y)), eq(t(vars.y), t(vars.x)))));
+
+    step _equality_symmetric(vars.x, vars.y);
+    step _equality_symmetric(vars.y, vars.x);
+    step biconditional_introduction_meta(eq(t(vars.x), t(vars.y)),
+      eq(t(vars.y), t(vars.x)));
+    step generalization(vars.y,
+      iff(eq(t(vars.x), t(vars.y)), eq(t(vars.y), t(vars.x))));
+    step generalization(vars.x, any(vars.y,
+      iff(eq(t(vars.x), t(vars.y)), eq(t(vars.y), t(vars.x)))));
+  }
+
+  theorem
+  equality_transitive()
+  {
+    def transitive implies(eq(t(vars.x), t(vars.y)), implies(eq(t(vars.y), t(vars.z)),
+    eq(t(vars.x), t(vars.z))));
+
+    infer any(vars.x, any(vars.y, any(vars.z,
+      implies(eq(t(vars.x), t(vars.y)), implies(eq(t(vars.y), t(vars.z)),
+      eq(t(vars.x), t(vars.z)))))));
+
+    step equality_symmetric();
+    step instantiation_elimination(vars.x, any(vars.y,
+      iff(eq(t(vars.x), t(vars.y)), eq(t(vars.y), t(vars.x)))));
+    step modus_ponens(any(vars.x, any(vars.y,
+      iff(eq(t(vars.x), t(vars.y)), eq(t(vars.y), t(vars.x))))),
+      any(vars.y, iff(eq(t(vars.x), t(vars.y)), eq(t(vars.y), t(vars.x)))));
+    step instantiation_elimination(vars.y,
+      iff(eq(t(vars.x), t(vars.y)), eq(t(vars.y), t(vars.x))));
+    step modus_ponens(any(vars.y, iff(eq(t(vars.x), t(vars.y)),
+      eq(t(vars.y), t(vars.x)))),
+      iff(eq(t(vars.x), t(vars.y)), eq(t(vars.y), t(vars.x))));
+    step equality_substitution(vars.y, eq(t(vars.y), t(vars.z)),
+      vars.x, eq(t(vars.x), t(vars.z)));
+    step biconditional_elimination_right_meta(eq(t(vars.x), t(vars.y)),
+      eq(t(vars.y), t(vars.x)));
+    step hypothetical_syllogism_meta(eq(t(vars.x), t(vars.y)),
+      eq(t(vars.y), t(vars.x)),
+      implies(eq(t(vars.y), t(vars.z)), eq(t(vars.x), t(vars.z))));
+    step generalization(vars.z, %transitive);
+    step generalization(vars.y, any(vars.z, %transitive));
+    step generalization(vars.x, any(vars.y, any(vars.z, %transitive)));
+  }
+
   expr Formula
   exists(x : Variable, phi : Formula) binds ($x);
 
@@ -670,11 +776,51 @@ namespace zfc
   }
 
   axiom
+  specification(phi : Formula)
+  {
+    require free(vars.x, $phi);
+
+    infer any(vars.z, exists(vars.y, any(vars.x,
+      iff(eval_p(in, t(vars.x), t(vars.y)),
+      and(eval_p(in, t(vars.x), t(vars.z)), $phi)))));
+  }
+
+  axiom
   pairing()
   {
     infer any(vars.x, any(vars.y, exists(vars.z, and(
       eval_p(in, t(vars.x), t(vars.z)),
       eval_p(in, t(vars.y), t(vars.z))))));
+  }
+
+  const union : Function;
+
+  axiom
+  union_of()
+  {
+    infer any(vars.x, any(vars.y, iff(
+      eval_p(in, t(vars.y), eval_f(union, t(vars.x))),
+      exists(vars.z, and(eval_p(in, t(vars.y), t(vars.z)),
+      eval_p(in, t(vars.z), t(vars.x)))))));
+  }
+
+  const subset : Predicate2;
+
+  axiom
+  subset_of()
+  {
+    infer any(vars.x, any(vars.y,
+      iff(eval_p(subset, t(vars.x), t(vars.y)),
+      any(vars.z, implies(eval_p(in, t(vars.z), t(vars.x)),
+      eval_p(in, t(vars.z), t(vars.y)))))));
+  }
+
+  axiom
+  power_set()
+  {
+    infer any(vars.x, exists(vars.y, any(vars.z,
+      implies(eval_p(subset, t(vars.z), t(vars.x)),
+      eval_p(in, t(vars.z), t(vars.y))))));
   }
 
   const empty : Term;

@@ -697,33 +697,39 @@ free_value(Value *value)
   free(value);
 }
 
+static void
+copy_value_to(Value *dst, const Value *src)
+{
+  dst->value_type = src->value_type;
+  dst->type = src->type;
+  dst->bound = src->bound;
+  if (src->value_type == ValueTypeVariable)
+  {
+    dst->variable_name = strdup(src->variable_name);
+  }
+  else if (src->value_type == ValueTypeConstant)
+  {
+    dst->constant = src->constant;
+  }
+  else if (src->value_type == ValueTypeComposition)
+  {
+    dst->expression = src->expression;
+    ARRAY_INIT(dst->arguments, Value *);
+    for (size_t i = 0; i < ARRAY_LENGTH(src->arguments); ++i)
+    {
+      const struct Value *arg =
+        *ARRAY_GET(src->arguments, Value *, i);
+      struct Value *arg_copy = copy_value(arg);
+      ARRAY_APPEND(dst->arguments, Value *, arg_copy);
+    }
+  }
+}
+
 Value *
 copy_value(const Value *value)
 {
   Value *v = malloc(sizeof(Value));
-  v->value_type = value->value_type;
-  v->type = value->type;
-  v->bound = value->bound;
-  if (value->value_type == ValueTypeVariable)
-  {
-    v->variable_name = strdup(value->variable_name);
-  }
-  else if (value->value_type == ValueTypeConstant)
-  {
-    v->constant = value->constant;
-  }
-  else if (value->value_type == ValueTypeComposition)
-  {
-    v->expression = value->expression;
-    ARRAY_INIT(v->arguments, Value *);
-    for (size_t i = 0; i < ARRAY_LENGTH(value->arguments); ++i)
-    {
-      const struct Value *arg =
-        *ARRAY_GET(value->arguments, Value *, i);
-      struct Value *arg_copy = copy_value(arg);
-      ARRAY_APPEND(v->arguments, Value *, arg_copy);
-    }
-  }
+  copy_value_to(v, value);
   return v;
 }
 
@@ -1291,11 +1297,81 @@ statement_proven(const Value *statement, Array proven)
   return FALSE;
 }
 
-static bool
-substitution_is_binding(const Value *source, const Value *target,
-  const Value *context)
+static void
+make_substitution_in_place(const Value *source, const Value *target,
+  Value *context)
 {
+  if (values_equal(target, context))
+  {
+    copy_value_to(context, source);
+  }
+  else if (context->value_type == ValueTypeComposition)
+  {
+    for (size_t i = 0; i < ARRAY_LENGTH(context->arguments); ++i)
+    {
+      Value *arg = *ARRAY_GET(context->arguments, Value *, i);
+        make_substitution_in_place(source, target, arg);
+    }
+  }
+}
+
+static bool
+new_bindings_exist(LogicState *state, const Value *context)
+{
+  if (context->value_type == ValueTypeComposition)
+  {
+    Array args_array;
+    ARRAY_INIT(args_array, struct Argument);
+    for (size_t i = 0; i < ARRAY_LENGTH(context->arguments); ++i)
+    {
+      Value *arg = *ARRAY_GET(context->arguments, Value *, i);
+      bool child_binds = new_bindings_exist(state, arg);
+      if (child_binds)
+        return TRUE;
+
+      const struct Parameter *param =
+        ARRAY_GET(context->expression->parameters, struct Parameter, i);
+      struct Argument argument;
+      argument.name = strdup(param->name);
+      argument.value = copy_value(arg);
+      ARRAY_APPEND(args_array, struct Argument, argument);
+    }
+
+    /* Look for things to bind. */
+    for (size_t i = 0; i < ARRAY_LENGTH(context->expression->bindings); ++i)
+    {
+      const Value *binding =
+        *ARRAY_GET(context->expression->bindings, Value *, i);
+      Value *instantiated = instantiate_value(state, binding, args_array);
+
+      Array occurrences;
+      ARRAY_INIT(occurrences, Value *);
+      enumerate_value_occurrences(instantiated, context, &occurrences);
+      for (size_t j = 0; j < ARRAY_LENGTH(occurrences); ++j)
+      {
+        Value *occurrence = *ARRAY_GET(occurrences, Value *, j);
+        if (occurrence->bound == FALSE)
+          return TRUE;
+      }
+      ARRAY_FREE(occurrences);
+
+      free_value(instantiated);
+    }
+  }
   return FALSE;
+}
+
+static bool
+substitution_is_binding(LogicState *state, const Value *source,
+  const Value *target, const Value *context)
+{
+  Value *ctx = copy_value(context);
+
+  /* Make the substitution in place. Then traverse the tree, and at each
+     composition node, try to make new bindings. */
+  make_substitution_in_place(source, target, ctx);
+
+  return new_bindings_exist(state, ctx);
 }
 
 static bool
@@ -1313,7 +1389,7 @@ evaluate_free_for(struct LogicState *state,
     || !value_terminal(context))
     return FALSE;
 
-  return FALSE;
+  return !substitution_is_binding(state, source, target, context);
 }
 
 static bool
@@ -1342,6 +1418,45 @@ evaluate_not_free(struct LogicState *state,
 }
 
 static bool
+is_substitution(const Value *target, const Value *context,
+  const Value *source, const Value *new_context)
+{
+  if (values_equal(target, context))
+  {
+    if (values_equal(source, new_context))
+      return TRUE;
+    else if (values_equal(target, new_context))
+      return TRUE;
+    else
+      return FALSE;
+  }
+  else if (context->value_type == ValueTypeComposition)
+  {
+    if (new_context->value_type != ValueTypeComposition)
+      return FALSE;
+    if (ARRAY_LENGTH(context->arguments) !=
+      ARRAY_LENGTH(new_context->arguments))
+      return FALSE;
+    for (size_t i = 0; i < ARRAY_LENGTH(context->arguments); ++i)
+    {
+      const Value *ctx_arg = *ARRAY_GET(context->arguments, Value *, i);
+      const Value *new_ctx_arg =
+        *ARRAY_GET(new_context->arguments, Value *, i);
+      if (!is_substitution(target, ctx_arg, source, new_ctx_arg))
+        return FALSE;
+    }
+    return TRUE;
+  }
+  else
+  {
+    if (values_equal(context, new_context))
+      return TRUE;
+    else
+      return FALSE;
+  }
+}
+
+static bool
 evaluate_substitution(struct LogicState *state,
   const Value *target, const Value *context,
   const Value *source, const Value *new_context)
@@ -1358,7 +1473,44 @@ evaluate_substitution(struct LogicState *state,
     || !value_terminal(source) || !value_terminal(new_context))
     return FALSE;
 
-  return FALSE;
+  return is_substitution(target, context, source, new_context);
+}
+
+static bool
+is_full_substitution(const Value *target, const Value *context,
+  const Value *source, const Value *new_context)
+{
+  if (values_equal(target, context))
+  {
+    if (values_equal(source, new_context))
+      return TRUE;
+    else
+      return FALSE;
+  }
+  else if (context->value_type == ValueTypeComposition)
+  {
+    if (new_context->value_type != ValueTypeComposition)
+      return FALSE;
+    if (ARRAY_LENGTH(context->arguments) !=
+      ARRAY_LENGTH(new_context->arguments))
+      return FALSE;
+    for (size_t i = 0; i < ARRAY_LENGTH(context->arguments); ++i)
+    {
+      const Value *ctx_arg = *ARRAY_GET(context->arguments, Value *, i);
+      const Value *new_ctx_arg =
+        *ARRAY_GET(new_context->arguments, Value *, i);
+      if (!is_full_substitution(target, ctx_arg, source, new_ctx_arg))
+        return FALSE;
+    }
+    return TRUE;
+  }
+  else
+  {
+    if (values_equal(context, new_context))
+      return TRUE;
+    else
+      return FALSE;
+  }
 }
 
 static bool
@@ -1378,9 +1530,7 @@ evaluate_full_substitution(struct LogicState *state,
     || !value_terminal(source) || !value_terminal(new_context))
     return FALSE;
 
-  /* We can actually just generate the substitution and compare for equality. */
-
-  return FALSE;
+  return is_substitution(target, context, source, new_context);
 }
 
 static int
