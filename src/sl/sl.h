@@ -11,9 +11,11 @@ TODO:
 #include <lex.h>
 #include <parse.h>
 
+#include "logic.h"
+
 extern int verbose;
 
 int
-sl_verify(const char *input_path, FILE *out);
+sl_verify(LogicState *logic_state, const char *input_path, FILE *out);
 
 #endif

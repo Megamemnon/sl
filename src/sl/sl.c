@@ -2145,7 +2145,7 @@ validate_namespace(struct ValidationState *state,
 static int
 validate(struct ValidationState *state)
 {
-  state->logic = new_logic_state(state->out);
+  //state->logic = new_logic_state(state->out);
   state->prefix_path = init_symbol_path();
   ARRAY_INIT(state->search_paths, SymbolPath *);
 
@@ -2164,14 +2164,14 @@ validate(struct ValidationState *state)
   int err = validate_namespace(state, root_namespace);
   PROPAGATE_ERROR(err);
 
-  free_logic_state(state->logic);
+  //free_logic_state(state->logic);
   free_symbol_path(state->prefix_path);
   ARRAY_FREE(state->search_paths);
   return 0;
 }
 
 int
-sl_verify(const char *input_path, FILE *out)
+sl_verify(LogicState *logic_state, const char *input_path, FILE *out)
 {
   /* Open the file. */
   LOG_NORMAL(out, "Validating sl file '%s'.\n", input_path);
@@ -2216,6 +2216,7 @@ sl_verify(const char *input_path, FILE *out)
   validation_out.out = out;
   validation_out.unit = &unit;
   validation_out.input = &parse_out;
+  validation_out.logic = logic_state;
 
   err = validate(&validation_out);
   if (err || !validation_out.valid)

@@ -2,6 +2,7 @@
 #define COMMON_H
 
 #include <stdint.h>
+#include <stdarg.h>
 
 /* Booleans */
 typedef int bool;
@@ -91,5 +92,11 @@ while(0)
 
 uint32_t
 hash(char *str);
+
+char *
+magma_vasprintf(const char *format, va_list vlist);
+
+char *
+magma_asprintf(const char *format, ...);
 
 #endif

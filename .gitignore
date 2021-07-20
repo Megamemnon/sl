@@ -1,10 +1,20 @@
 CMakeFiles/
 cmake_install.cmake
 CMakeCache.txt
+CTestTestfile.cmake
 Makefile
 
 libmagma.a
 /asm
 /gm
 /sol
-/sl
+/src/sl/sl
+/src/sl/test_sl
+/src/sl/html_out/
+/src/sl/zfc.aux
+/src/sl/zfc.log
+/src/sl/zfc.out
+/src/sl/zfc.toc
+/src/sl/zfc.pdf
+/src/sl/math/zfc.tex
+/Testing/

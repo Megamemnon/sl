@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 project(magma)
+enable_testing()
 
 set(CMAKE_BUILD_TYPE Debug)
 
@@ -39,15 +40,7 @@ target_link_libraries(gm
 )
 
 ## sl
-add_executable(sl
-  src/sl/main.c
-
-  src/sl/logic.c
-  src/sl/sl.c
-)
-target_link_libraries(sl
-  magma
-)
+add_subdirectory(src/sl)
 
 ## Sol
 add_executable(sol
