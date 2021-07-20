@@ -1,6 +1,6 @@
 #include "sl.h"
-#include <parse.h>
-#include <common.h>
+#include "parse.h"
+#include "common.h"
 
 #include <string.h>
 

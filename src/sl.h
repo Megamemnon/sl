@@ -8,8 +8,8 @@ TODO:
 #ifndef SL_H
 #define SL_H
 
-#include <lex.h>
-#include <parse.h>
+#include "lex.h"
+#include "parse.h"
 
 #include "logic.h"
 

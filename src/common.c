@@ -15,7 +15,7 @@ hash(char *str)
 }
 
 char *
-magma_vasprintf(const char *format, va_list vlist)
+sl_vasprintf(const char *format, va_list vlist)
 {
   va_list vlist_copy;
   va_copy(vlist_copy, vlist);
@@ -28,11 +28,11 @@ magma_vasprintf(const char *format, va_list vlist)
 }
 
 char *
-magma_asprintf(const char *format, ...)
+sl_asprintf(const char *format, ...)
 {
   va_list vlist;
   va_start(vlist, format);
-  char *str = magma_vasprintf(format, vlist);
+  char *str = sl_vasprintf(format, vlist);
   va_end(vlist);
   return str;
 }

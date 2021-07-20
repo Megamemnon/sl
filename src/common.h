@@ -94,9 +94,9 @@ uint32_t
 hash(char *str);
 
 char *
-magma_vasprintf(const char *format, va_list vlist);
+sl_vasprintf(const char *format, va_list vlist);
 
 char *
-magma_asprintf(const char *format, ...);
+sl_asprintf(const char *format, ...);
 
 #endif

@@ -1,6 +1,6 @@
-#include "sol.h"
-
-#include <arg.h>
+#include "sl.h"
+#include "render.h"
+#include "arg.h"
 #include <stdio.h>
 
 struct CommandLineOption version_opt = {
@@ -23,11 +23,19 @@ struct CommandLineOption out_opt = {
   .long_name = "out",
   .takes_argument = TRUE
 };
+struct CommandLineOption latex_opt = {
+  .long_name = "latex",
+  .takes_argument = TRUE
+};
+struct CommandLineOption html_opt = {
+  .long_name = "html",
+  .takes_argument = TRUE
+};
 
 static void
 print_version()
 {
-  printf("version\n");
+  printf("version 0.0.1\n");
 }
 
 static void
@@ -46,6 +54,8 @@ main(int argc, char **argv)
   add_command_line_option(&cl, &help_opt);
   add_command_line_option(&cl, &verbose_opt);
   add_command_line_option(&cl, &out_opt);
+  add_command_line_option(&cl, &latex_opt);
+  add_command_line_option(&cl, &html_opt);
 
   parse_command_line(&cl);
 
@@ -80,11 +90,22 @@ main(int argc, char **argv)
     }
   }
 
+  LogicState *state = new_logic_state(output);
   for (size_t i = 0; i < ARRAY_LENGTH(cl.arguments); ++i)
   {
     const char *path = *ARRAY_GET(cl.arguments, char *, i);
-    sol_verify(path, output);
+    sl_verify(state, path, output);
   }
+
+  if (latex_opt.argument != NULL)
+  {
+    render_latex(state, latex_opt.argument);
+  }
+  if (html_opt.argument != NULL)
+  {
+    render_html(state, html_opt.argument);
+  }
+  free_logic_state(state);
 
   if (out_opt.argument != NULL)
   {

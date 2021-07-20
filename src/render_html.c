@@ -17,7 +17,7 @@
 char *
 html_head(const char *title)
 {
-  return magma_asprintf(HTML_HEAD_FORMAT, title);
+  return sl_asprintf(HTML_HEAD_FORMAT, title);
 }
 
 int

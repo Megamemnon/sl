@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
-
-./src/sl/verify
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+cd $SCRIPT_DIR
+./sl -V --html=./html_out math/zfc.sl

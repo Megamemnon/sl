@@ -1,53 +1,27 @@
 cmake_minimum_required(VERSION 3.10)
-project(magma)
+project(sl)
 enable_testing()
 
 set(CMAKE_BUILD_TYPE Debug)
 
 # Library
-add_library(magma
-  src/lib/arg.c
-  src/lib/code.c
-  src/lib/common.c
-  src/lib/lex.c
-  src/lib/parse.c
+add_library(sl
+  src/arg.c
+  src/common.c
+  src/lex.c
+  src/logic.c
+  src/parse.c
+  src/render_html.c
+  src/render_latex.c
+  src/sl.c
 )
 
-include_directories(
-  src/lib
-)
+# Main executable
+add_executable(sl_bin src/main.c)
+target_link_libraries(sl_bin sl)
+set_target_properties(sl_bin PROPERTIES OUTPUT_NAME sl)
 
-
-# Languages
-## Asm
-add_executable(asm
-  src/asm/main.c
-
-  src/asm/asm.c
-)
-target_link_libraries(asm
-  magma
-)
-
-## gm
-add_executable(gm
-  src/gm/main.c
-
-  src/gm/gm.c
-)
-target_link_libraries(gm
-  magma
-)
-
-## sl
-add_subdirectory(src/sl)
-
-## Sol
-add_executable(sol
-  src/sol/main.c
-
-  src/sol/sol.c
-)
-target_link_libraries(sol
-  magma
-)
+# Tests
+add_executable(test_sl tests/test.c)
+target_link_libraries(test_sl sl)
+add_test(sl test_sl)

@@ -1,7 +1,7 @@
 #ifndef LOGIC_H
 #define LOGIC_H
 
-#include <common.h>
+#include "common.h"
 #include <stdio.h>
 
 /* Methods to manipulate paths. */
