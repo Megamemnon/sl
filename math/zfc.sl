@@ -16,10 +16,16 @@ namespace propositional_calculus
   type Formula;
 
   expr Formula
-  implies(phi : Formula, psi : Formula);
+  implies(phi : Formula, psi : Formula)
+  {
+    latex "\\left( $phi \\implies $psi \\right)";
+  }
 
   expr Formula
-  not(phi : Formula);
+  not(phi : Formula)
+  {
+    latex "\\neg $phi";
+  }
 
   axiom
   modus_ponens(phi : Formula, psi : Formula)
@@ -48,7 +54,10 @@ namespace propositional_calculus
     infer implies(implies(not($psi), not($phi)), implies($phi, $psi));
   }
 
-  const T : Formula;
+  const T : Formula
+  {
+    latex "\\top";
+  }
 
   axiom
   true()
@@ -56,7 +65,10 @@ namespace propositional_calculus
     infer T;
   }
 
-  const F : Formula;
+  const F : Formula
+  {
+    latex "\\bot";
+  }
 
   axiom
   false()
@@ -325,7 +337,10 @@ namespace propositional_calculus
      as axioms, add them as extension by definition and prove these properties
      as theorems. */
   expr Formula
-  and(phi : Formula, psi : Formula);
+  and(phi : Formula, psi : Formula)
+  {
+    latex "\\left( $phi \\land $psi \\right)";
+  }
 
   axiom
   conjunction_introduction(phi : Formula, psi : Formula)
@@ -393,7 +408,10 @@ namespace propositional_calculus
   }
 
   expr Formula
-  or(phi : Formula, psi : Formula);
+  or(phi : Formula, psi : Formula)
+  {
+    latex "\\left( $phi \\lor $psi \\right)";
+  }
 
   axiom
   disjunction_introduction_left(phi : Formula, psi : Formula)
@@ -455,7 +473,10 @@ namespace propositional_calculus
   }
 
   expr Formula
-  iff(phi : Formula, psi : Formula);
+  iff(phi : Formula, psi : Formula)
+  {
+    latex "\\left( $phi \\iff $psi \\right)";
+  }
 
   axiom
   biconditional_introduction(phi : Formula, psi : Formula)
@@ -603,16 +624,29 @@ namespace predicate_calculus
   }
 
   expr Term
-  t(x : Variable);
+  t(x : Variable)
+  {
+    latex "$x";
+  }
 
   expr Term
-  eval_f(f : Function, t : Term);
+  eval_f(f : Function, t : Term)
+  {
+    latex "$f($t)";
+  }
 
   expr Formula
-  eval_p(p : Predicate2, s : Term, t : Term);
+  eval_p(p : Predicate2, s : Term, t : Term)
+  {
+    latex "$p($s, $t)";
+  }
 
   expr Formula
-  any(x : Variable, phi : Formula) binds ($x);
+  any(x : Variable, phi : Formula)
+  {
+    latex "\\forall $x $phi";
+    bind $x;
+  }
 
   axiom
   instantiation(x : Variable, phi : Formula, t : Term, phi0 : Formula)
@@ -649,7 +683,10 @@ namespace predicate_calculus
   }
 
   expr Formula
-  eq(s : Term, y : Term);
+  eq(s : Term, t : Term)
+  {
+    latex "$s = $t";
+  }
 
   axiom
   equality_reflexive_v(x : Variable)
@@ -730,7 +767,11 @@ namespace predicate_calculus
   }
 
   expr Formula
-  exists(x : Variable, phi : Formula) binds ($x);
+  exists(x : Variable, phi : Formula)
+  {
+    latex "\\exists $x $phi";
+    bind $x;
+  }
 
   axiom
   existential_quantification(x : Variable, phi : Formula)
@@ -823,7 +864,10 @@ namespace zfc
       eval_p(in, t(vars.z), t(vars.y))))));
   }
 
-  const empty : Term;
+  const empty : Term
+  {
+    latex "\\emptyset";
+  }
 
   axiom
   empty_set()

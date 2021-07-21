@@ -253,14 +253,14 @@ tokenize_strings(struct LexState *state, char string_delimiter)
               (tok_start - src_tok->value);
             ARRAY_APPEND(*lex_state_back_buffer(state), struct Token, tok);
           }
-          tok_start = c;
+          tok_start = c + 1;
         }
         else if (in_str && *c == string_delimiter && !escape_next)
         {
           in_str = FALSE;
           tok.type = TokenTypeStringLiteral;
-          tok.value = malloc((c - tok_start) + 2);
-          strncpy(tok.value, tok_start, (c - tok_start) + 1);
+          tok.value = malloc((c - tok_start) + 1);
+          strncpy(tok.value, tok_start, c - tok_start);
           tok.value[(c - tok_start) + 1] = '\0';
           tok.char_offset = src_tok->char_offset +
             (tok_start - src_tok->value);

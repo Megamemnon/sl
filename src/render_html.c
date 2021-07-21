@@ -19,7 +19,9 @@
 char *
 html_head(const char *title)
 {
-  return sl_asprintf(HTML_HEAD_FORMAT, title);
+  char *dst;
+  asprintf(&dst, HTML_HEAD_FORMAT, title);
+  return dst;
 }
 
 char *
@@ -29,17 +31,17 @@ html_render_value(const Value *v)
   switch (v->value_type)
   {
     case ValueTypeConstant:
-      str = sl_asprintf("<a href=\"#sym-%zu\">%s</a>",
+      asprintf(&str, "<a href=\"#sym-%zu\">%s</a>",
         v->constant->id,
         get_symbol_path_last_segment(v->constant->path));
       break;
     case ValueTypeVariable:
-      str = sl_asprintf("$%s", v->variable_name);
+      asprintf(&str, "$%s", v->variable_name);
       break;
     case ValueTypeComposition:
       if (ARRAY_LENGTH(v->arguments) == 0)
       {
-        str = sl_asprintf("<a href=\"#sym-%zu\">%s</a>()",
+        asprintf(&str, "<a href=\"#sym-%zu\">%s</a>()",
           v->expression->id,
           get_symbol_path_last_segment(v->expression->path));
       }
@@ -74,7 +76,7 @@ html_render_value(const Value *v)
         free(args);
         *c = '\0';
 
-        str = sl_asprintf("<a href=\"#sym-%zu\">%s</a>(%s)",
+        asprintf(&str, "<a href=\"#sym-%zu\">%s</a>(%s)",
           v->expression->id,
           get_symbol_path_last_segment(v->expression->path),
           args_str);
@@ -90,23 +92,24 @@ html_render_type(const struct Type *type, FILE *f)
 {
   fputs("<div class=\"symbol\">\n", f);
   {
-    char *div_begin =
-      sl_asprintf("<div class=\"symbol\" id=\"sym-%zu\">\n", type->id);
+    char *div_begin;
+    asprintf(&div_begin, "<div class=\"symbol\" id=\"sym-%zu\">\n", type->id);
     fputs(div_begin, f);
     free(div_begin);
   }
   {
     char *id_label;
     if (type->atomic)
-      id_label = sl_asprintf("<h3><code>%zu:</code> Atomic Type</h3>\n", type->id);
+      asprintf(&id_label, "<h3><code>%zu:</code> Atomic Type</h3>\n", type->id);
     else
-      id_label = sl_asprintf("<h3><code>%zu:</code> Type</h3>\n", type->id);
+      asprintf(&id_label, "<h3><code>%zu:</code> Type</h3>\n", type->id);
     fputs(id_label, f);
     free(id_label);
   }
   {
     char *path = string_from_symbol_path(type->path);
-    char *type_label = sl_asprintf("<h4>Path: <code>%s</code></h4>\n", path);
+    char *type_label;
+    asprintf(&type_label, "<h4>Path: <code>%s</code></h4>\n", path);
     fputs(type_label, f);
     free(path);
     free(type_label);
@@ -120,24 +123,43 @@ html_render_constant(const struct Constant *constant, FILE *f)
 {
   fputs("<div class=\"symbol\">\n", f);
   {
-    char *div_begin =
-      sl_asprintf("<div class=\"symbol\" id=\"sym-%zu\">\n", constant->id);
+    char *div_begin;
+    asprintf(&div_begin, "<div class=\"symbol\" id=\"sym-%zu\">\n", constant->id);
     fputs(div_begin, f);
     free(div_begin);
   }
   {
     char *id_label;
-    id_label =
-      sl_asprintf("<h3><code>%zu:</code> Constant</h3>\n", constant->id);
+    asprintf(&id_label, "<h3><code>%zu:</code> Constant</h3>\n", constant->id);
     fputs(id_label, f);
     free(id_label);
   }
   {
     char *path = string_from_symbol_path(constant->path);
-    char *type_label = sl_asprintf("<h4>Path: <code>%s</code></h4>\n", path);
+    char *type_label;
+    asprintf(&type_label, "<h4>Path: <code>%s</code></h4>\n", path);
     fputs(type_label, f);
     free(path);
     free(type_label);
+  }
+  {
+    char *const_type = string_from_symbol_path(constant->type->path);
+    char *type_label;
+    asprintf(&type_label,
+      "<h4>Type: <code><a href=\"#sym-%zu\">%s</a></code></h4>\n",
+      constant->type->id, const_type);
+    fputs(type_label, f);
+    free(const_type);
+    free(type_label);
+  }
+  if (constant->latex != NULL)
+  {
+    char *latex = latex_render_constant(constant->latex);
+    char *latex_label;
+    asprintf(&latex_label, "<h4>LaTeX: \\(%s\\)</h4>\n", latex);
+    fputs(latex_label, f);
+    free(latex);
+    free(latex_label);
   }
   fputs("</div>\n", f);
   return 0;
@@ -147,30 +169,33 @@ int
 html_render_expression(const struct Expression *expression, FILE *f)
 {
   {
-    char *div_begin =
-      sl_asprintf("<div class=\"symbol\" id=\"sym-%zu\">\n", expression->id);
+    char *div_begin;
+    asprintf(&div_begin, "<div class=\"symbol\" id=\"sym-%zu\">\n",
+      expression->id);
     fputs(div_begin, f);
     free(div_begin);
   }
   {
     char *id_label;
-    id_label = sl_asprintf("<h3><code>%zu:</code> Expression</h3>\n",
+    asprintf(&id_label, "<h3><code>%zu:</code> Expression</h3>\n",
       expression->id);
     fputs(id_label, f);
     free(id_label);
   }
   {
     char *path = string_from_symbol_path(expression->path);
-    char *path_label = sl_asprintf("<h4>Path: <code>%s</code></h4>\n", path);
+    char *path_label;
+    asprintf(&path_label, "<h4>Path: <code>%s</code></h4>\n", path);
     fputs(path_label, f);
     free(path);
     free(path_label);
   }
   {
     char *expr_type = string_from_symbol_path(expression->type->path);
-    char *type_label =
-      sl_asprintf("<h4>Type: <code><a href=\"#sym-%zu\">%s</a></code></h4>\n",
-        expression->type->id, expr_type);
+    char *type_label;
+    asprintf(&type_label,
+      "<h4>Type: <code><a href=\"#sym-%zu\">%s</a></code></h4>\n",
+      expression->type->id, expr_type);
     fputs(type_label, f);
     free(expr_type);
     free(type_label);
@@ -182,12 +207,22 @@ html_render_expression(const struct Expression *expression, FILE *f)
     const struct Parameter *param =
       ARRAY_GET(expression->parameters, struct Parameter, i);
     char *param_type = string_from_symbol_path(param->type->path);
-    char *param_label =
-      sl_asprintf("<li><code>%s</code> : <code><a href=\"#sym-%zu\">%s</a></code></li>\n",
-        param->name, param->type->id, param_type);
+    char *param_label;
+    asprintf(&param_label,
+      "<li><code>%s</code> : <code><a href=\"#sym-%zu\">%s</a></code></li>\n",
+      param->name, param->type->id, param_type);
     fputs(param_label, f);
     free(param_type);
     free(param_label);
+  }
+  if (expression->latex != NULL)
+  {
+    char *latex = latex_render_constant(expression->latex);
+    char *latex_label;
+    asprintf(&latex_label, "<h4>LaTeX: \\(%s\\)</h4>\n", latex);
+    fputs(latex_label, f);
+    free(latex);
+    free(latex_label);
   }
   fputs("</ol>\n", f);
   fputs("</div>\n", f);
@@ -198,25 +233,24 @@ int
 html_render_theorem(const struct Theorem *theorem, FILE *f)
 {
   {
-    char *div_begin =
-      sl_asprintf("<div class=\"symbol\" id=\"sym-%zu\">\n", theorem->id);
+    char *div_begin;
+    asprintf(&div_begin, "<div class=\"symbol\" id=\"sym-%zu\">\n", theorem->id);
     fputs(div_begin, f);
     free(div_begin);
   }
   {
     char *id_label;
     if (theorem->is_axiom)
-      id_label = sl_asprintf("<h3><code>%zu:</code> Axiom</h3>\n",
-        theorem->id);
+      asprintf(&id_label, "<h3><code>%zu:</code> Axiom</h3>\n", theorem->id);
     else
-      id_label = sl_asprintf("<h3><code>%zu:</code> Theorem</h3>\n",
-        theorem->id);
+      asprintf(&id_label, "<h3><code>%zu:</code> Theorem</h3>\n", theorem->id);
     fputs(id_label, f);
     free(id_label);
   }
   {
     char *path = string_from_symbol_path(theorem->path);
-    char *path_label = sl_asprintf("<h4>Path: <code>%s</code></h4>\n", path);
+    char *path_label;
+    asprintf(&path_label, "<h4>Path: <code>%s</code></h4>\n", path);
     fputs(path_label, f);
     free(path);
     free(path_label);
@@ -228,9 +262,10 @@ html_render_theorem(const struct Theorem *theorem, FILE *f)
     const struct Parameter *param =
       ARRAY_GET(theorem->parameters, struct Parameter, i);
     char *param_type = string_from_symbol_path(param->type->path);
-    char *param_label =
-      sl_asprintf("<li><code>%s</code> : <code><a href=\"#sym-%zu\">%s</a></code></li>\n",
-        param->name, param->type->id, param_type);
+    char *param_label;
+    asprintf(&param_label,
+      "<li><code>%s</code> : <code><a href=\"#sym-%zu\">%s</a></code></li>\n",
+      param->name, param->type->id, param_type);
     fputs(param_label, f);
     free(param_type);
     free(param_label);
@@ -242,7 +277,8 @@ html_render_theorem(const struct Theorem *theorem, FILE *f)
   {
     const Value *assume = *ARRAY_GET(theorem->assumptions, Value *, i);
     char *assume_str = html_render_value(assume);
-    char *assume_label = sl_asprintf("<li><code>%s</code></li>\n", assume_str);
+    char *assume_label;
+    asprintf(&assume_label, "<li><code>%s</code></li>\n", assume_str);
     fputs(assume_label, f);
     free(assume_str);
     free(assume_label);
@@ -254,7 +290,8 @@ html_render_theorem(const struct Theorem *theorem, FILE *f)
   {
     const Value *infer = *ARRAY_GET(theorem->inferences, Value *, i);
     char *infer_str = html_render_value(infer);
-    char *infer_label = sl_asprintf("<li><code>%s</code></li>\n", infer_str);
+    char *infer_label;
+    asprintf(&infer_label, "<li><code>%s</code></li>\n", infer_str);
     fputs(infer_label, f);
     free(infer_str);
     free(infer_label);

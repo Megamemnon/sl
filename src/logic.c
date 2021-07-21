@@ -442,6 +442,10 @@ add_constant(LogicState *state, struct PrototypeConstant proto)
   c->id = state->next_id;
   ++state->next_id;
   c->type = (struct Type *)type_symbol->object;
+  if (proto.latex != NULL)
+    c->latex = strdup(proto.latex);
+  else
+    c->latex = NULL;
 
   struct Symbol sym;
   sym.path = copy_symbol_path(proto.constant_path);
@@ -490,6 +494,10 @@ add_expression(LogicState *state, struct PrototypeExpression proto)
     return LogicErrorSymbolAlreadyExists;
   }
   e->type = (struct Type *)type_symbol->object;
+  if (proto.latex != NULL)
+    e->latex = strdup(proto.latex);
+  else
+    e->latex = NULL;
 
   /* The type of the expression must not be atomic. */
   if (e->type->atomic)

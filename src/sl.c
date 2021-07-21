@@ -23,7 +23,6 @@ const char *sl_keywords[] = {
   "namespace",
 
   "atomic",
-  "binds",
 
   "use",
   "type",
@@ -32,6 +31,8 @@ const char *sl_keywords[] = {
   "axiom",
   "theorem",
 
+  "latex",
+  "bind",
   "assume",
   "require",
   "infer",
@@ -66,8 +67,8 @@ enum ASTNodeType
   ASTNodeTypeParameterList,
   ASTNodeTypeParameter,
 
-  ASTNodeTypeBindingList,
-  ASTNodeTypeBinding,
+  ASTNodeTypeLatex,
+  ASTNodeTypeBind,
 
   ASTNodeTypeDef,
   ASTNodeTypeAssume,
@@ -266,6 +267,56 @@ parse_type(struct ParserState *state)
 }
 
 static int
+parse_latex(struct ParserState *state)
+{
+  add_child_and_descend(state);
+  init_ast_node(state->ast_current);
+  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeLatex;
+  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+
+  if (!consume_keyword(state, "latex"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing keyword 'latex' in LaTeX formatting.");
+  }
+
+  const char *latex_str;
+  if (!consume_string(state, &latex_str))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing string literal in LaTeX formatting.");
+  }
+  AST_NODE_DATA(state->ast_current)->name = strdup(latex_str);
+
+  if (!consume_symbol(state, ";"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing semicolon ';' after LaTeX formatting.");
+  }
+
+  ascend(state);
+  return 0;
+}
+
+static int
+parse_constant_item(struct ParserState *state)
+{
+  if (next_is_keyword(state, "latex"))
+  {
+    int err = parse_latex(state);
+    PROPAGATE_ERROR(err);
+  }
+  else
+  {
+    add_error(state->unit, get_current_token(state),
+      "expected LaTeX formatting.");
+    return 1; /* TODO: This should not be fatal. */
+  }
+
+  return 0;
+}
+
+static int
 parse_constant_declaration(struct ParserState *state)
 {
   add_child_and_descend(state);
@@ -299,10 +350,18 @@ parse_constant_declaration(struct ParserState *state)
   int err = parse_path(state);
   PROPAGATE_ERROR(err);
 
-  if (!consume_symbol(state, ";"))
+  if (consume_symbol(state, "{"))
+  {
+    while (!consume_symbol(state, "}"))
+    {
+      err = parse_constant_item(state);
+      PROPAGATE_ERROR(err);
+    }
+  }
+  else if (!consume_symbol(state, ";"))
   {
     add_error(state->unit, get_current_token(state),
-      "missing semicolon ';' after constant declaration");
+      "missing semicolon ';' or block after constant declaration.");
   }
 
   ascend(state);
@@ -455,38 +514,51 @@ parse_value(struct ParserState *state)
 }
 
 static int
-parse_binding_list(struct ParserState *state)
+parse_bind(struct ParserState *state)
 {
   add_child_and_descend(state);
   init_ast_node(state->ast_current);
-  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeBindingList;
+  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeBind;
   AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
 
-  if (!consume_symbol(state, "("))
+  if (!consume_keyword(state, "bind"))
   {
     add_error(state->unit, get_current_token(state),
-      "missing symbol '(' in binding list.");
+      "missing keyword 'bind' in bind statement.");
   }
 
-  bool first_token = TRUE;
-  while (!consume_symbol(state, ")"))
-  {
-    if (!first_token)
-    {
-      if (!consume_symbol(state, ","))
-      {
-        add_error(state->unit, get_current_token(state),
-          "missing comma ',' separating expressions in binding list.");
-      }
-    }
-    if (first_token)
-      first_token = FALSE;
+  int err = parse_value(state);
+  PROPAGATE_ERROR(err);
 
-    int err = parse_value(state);
-    PROPAGATE_ERROR(err);
+  if (!consume_symbol(state, ";"))
+  {
+    add_error(state->unit, get_current_token(state),
+      "missing semicolon ';' after bind statement.");
   }
 
   ascend(state);
+  return 0;
+}
+
+static int
+parse_expression_item(struct ParserState *state)
+{
+  if (next_is_keyword(state, "latex"))
+  {
+    int err = parse_latex(state);
+    PROPAGATE_ERROR(err);
+  }
+  else if (next_is_keyword(state, "bind"))
+  {
+    int err = parse_bind(state);
+    PROPAGATE_ERROR(err);
+  }
+  else
+  {
+    add_error(state->unit, get_current_token(state),
+      "expected a bind, or LaTeX formatting.");
+    return 1; /* TODO: This should not be fatal. */
+  }
 
   return 0;
 }
@@ -522,16 +594,18 @@ parse_expression(struct ParserState *state)
   err = parse_parameter_list(state);
   PROPAGATE_ERROR(err);
 
-  if (consume_keyword(state, "binds"))
+  if (consume_symbol(state, "{"))
   {
-    err = parse_binding_list(state);
-    PROPAGATE_ERROR(err);
+    while (!consume_symbol(state, "}"))
+    {
+      err = parse_expression_item(state);
+      PROPAGATE_ERROR(err);
+    }
   }
-
-  if (!consume_symbol(state, ";"))
+  else if (!consume_symbol(state, ";"))
   {
     add_error(state->unit, get_current_token(state),
-      "missing semicolon ';' after expression declaration.");
+      "missing semicolon ';' or block after expression declaration.");
   }
 
   ascend(state);
@@ -1246,10 +1320,10 @@ validate_constant(struct ValidationState *state, const struct ASTNode *constant)
   proto.constant_path = copy_symbol_path(state->prefix_path);
   push_symbol_path(proto.constant_path, data->name);
 
-  if (ARRAY_LENGTH(constant->children) != 1)
+  if (ARRAY_LENGTH(constant->children) < 1)
   {
     add_error(state->unit, data->location,
-      "a constant node must have a single child, containing the path to the constant's type");
+      "a constant node must have at least a single child, containing the path to the constant's type");
     state->valid = FALSE;
   }
   const struct ASTNode *type = ARRAY_GET(constant->children, struct ASTNode, 0);
@@ -1258,6 +1332,19 @@ validate_constant(struct ValidationState *state, const struct ASTNode *constant)
 
   proto.type_path = lookup_symbol(state, local_path);
   free_symbol_path(local_path);
+
+  /* Look for latex. */
+  proto.latex = NULL;
+  for (size_t i = 0; i < ARRAY_LENGTH(constant->children); ++i)
+  {
+    const struct ASTNode *child =
+      ARRAY_GET(constant->children, struct ASTNode, i);
+    const struct ASTNodeData *child_data = AST_NODE_DATA(child);
+    if (child_data->type == ASTNodeTypeLatex)
+    {
+      proto.latex = strdup(child_data->name);
+    }
+  }
 
   LogicError err = add_constant(state->logic, proto);
   if (err != LogicErrorNone)
@@ -1541,31 +1628,50 @@ validate_expression(struct ValidationState *state,
   proto.parameters[args_n] = NULL;
 
   /* If there are bindings, extract them. */
-  if (ARRAY_LENGTH(expression->children) == 3)
+  size_t binds_n = 0;
+  for (size_t i = 0; i < ARRAY_LENGTH(expression->children); ++i)
   {
-    const struct ASTNode *binding_list =
-      ARRAY_GET(expression->children, struct ASTNode, 2);
-    const struct ASTNodeData *binding_list_data = AST_NODE_DATA(binding_list);
-    if (binding_list_data->type != ASTNodeTypeBindingList)
-    {
-      add_error(state->unit, data->location,
-        "expected a binding list but found the wrong type of node.");
-      state->valid = FALSE;
-    }
-
-    proto.bindings =
-      malloc(sizeof(Value *) * (ARRAY_LENGTH(binding_list->children) + 1));
-    for (size_t i = 0; i < ARRAY_LENGTH(binding_list->children); ++i)
-    {
-      const struct ASTNode *binding =
-        ARRAY_GET(binding_list->children, struct ASTNode, i);
-      proto.bindings[i] = extract_value(state, binding, &env);
-    }
-    proto.bindings[ARRAY_LENGTH(binding_list->children)] = NULL;
+    const struct ASTNode *child =
+      ARRAY_GET(expression->children, struct ASTNode, i);
+    const struct ASTNodeData *child_data = AST_NODE_DATA(child);
+    if (child_data->type == ASTNodeTypeBind)
+      ++binds_n;
+  }
+  if (binds_n == 0)
+  {
+    proto.bindings = NULL;
   }
   else
   {
-    proto.bindings = NULL;
+    proto.bindings = malloc(sizeof(Value *) * (binds_n + 1));
+    size_t binding_index = 0;
+    for (size_t i = 0; i < ARRAY_LENGTH(expression->children); ++i)
+    {
+      const struct ASTNode *child =
+        ARRAY_GET(expression->children, struct ASTNode, i);
+      const struct ASTNodeData *child_data = AST_NODE_DATA(child);
+      if (child_data->type == ASTNodeTypeBind)
+      {
+        const struct ASTNode *binding =
+          ARRAY_GET(child->children, struct ASTNode, 0);
+        proto.bindings[binding_index] = extract_value(state, binding, &env);
+        ++binding_index;
+      }
+    }
+    proto.bindings[binds_n] = NULL;
+  }
+
+  /* Look for latex. */
+  proto.latex = NULL;
+  for (size_t i = 0; i < ARRAY_LENGTH(expression->children); ++i)
+  {
+    const struct ASTNode *child =
+      ARRAY_GET(expression->children, struct ASTNode, i);
+    const struct ASTNodeData *child_data = AST_NODE_DATA(child);
+    if (child_data->type == ASTNodeTypeLatex)
+    {
+      proto.latex = strdup(child_data->name);
+    }
   }
 
   LogicError err = add_expression(state->logic, proto);
@@ -2184,6 +2290,7 @@ sl_verify(LogicState *logic_state, const char *input_path, FILE *out)
 
   init_lex_state(&lex_out);
   file_to_lines(&lex_out, &unit);
+  tokenize_strings(&lex_out, '"');
   remove_whitespace(&lex_out);
   separate_symbols(&lex_out);
   identify_symbols(&lex_out, sl_symbols);

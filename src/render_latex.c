@@ -1,4 +1,5 @@
 #include "render.h"
+#include <string.h>
 
 #define LATEX_BEGIN \
   "\\documentclass[10pt,letterpaper]{article}\n" \
@@ -42,4 +43,35 @@ render_latex(const LogicState *state, const char *output_filename)
   fputs(LATEX_END, f);
   fclose(f);
   return 0;
+}
+
+char *
+latex_render_constant(const char *src)
+{
+  char *dst = malloc(strlen(src) + 1);
+  char *dst_ptr = dst;
+  bool in_escape = FALSE;
+  for (const char *c = src; *c != '\0'; ++c)
+  {
+    if (in_escape)
+    {
+      *dst_ptr = *c;
+      ++dst_ptr;
+      in_escape = FALSE;
+    }
+    else
+    {
+      if (*c == '\\')
+      {
+        in_escape = TRUE;
+      }
+      else
+      {
+        *dst_ptr = *c;
+        ++dst_ptr;
+      }
+    }
+  }
+  *dst_ptr = '\0';
+  return dst;
 }

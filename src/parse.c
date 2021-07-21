@@ -207,6 +207,18 @@ consume_identifier(struct ParserState *state, const char **identifier)
   return 0;
 }
 
+int
+consume_string(struct ParserState *state, const char **string)
+{
+  if (get_current_token(state)->type == TokenTypeStringLiteral)
+  {
+    *string = get_current_token(state)->value;
+    ++state->token_index;
+    return 1;
+  }
+  return 0;
+}
+
 bool
 tokens_remain(struct ParserState *state)
 {

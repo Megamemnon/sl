@@ -38,6 +38,7 @@ struct Constant
   uint32_t id;
   const SymbolPath *path;
   const struct Type *type;
+  char *latex;
 };
 
 struct Expression
@@ -48,6 +49,8 @@ struct Expression
   const struct Type *type;
   Array parameters;
   Array bindings;
+
+  char *latex;
 };
 
 enum ValueType

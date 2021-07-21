@@ -79,6 +79,7 @@ struct PrototypeConstant
 {
   SymbolPath *constant_path;
   SymbolPath *type_path;
+  const char *latex;
 };
 
 LogicError
@@ -100,6 +101,7 @@ struct PrototypeExpression
   SymbolPath *expression_type;
   struct PrototypeParameter **parameters; /* NULL-terminated list. */
   Value **bindings; /* NULL-terminated list. */
+  const char *latex;
 };
 
 /* TODO: The return value should be a struct, or modify the PrototypeExpression,

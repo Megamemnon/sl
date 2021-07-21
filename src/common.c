@@ -14,25 +14,26 @@ hash(char *str)
   return hash;
 }
 
-char *
-sl_vasprintf(const char *format, va_list vlist)
+int
+asprintf(char **str, const char *fmt, ...)
+{
+  va_list args;
+  va_start(args, fmt);
+  int result = vasprintf(str, fmt, args);
+  va_end(args);
+  return result;
+}
+
+int
+vasprintf(char **str, const char *fmt, va_list vlist)
 {
   va_list vlist_copy;
   va_copy(vlist_copy, vlist);
-  int len = vsnprintf(NULL, 0, format, vlist_copy) + 1;
+  int result = vsnprintf(NULL, 0, fmt, vlist_copy);
   va_end(vlist_copy);
-  char *str = malloc(len);
-  vsnprintf(str, len, format, vlist);
-  str[len] = '\0';
-  return str;
-}
-
-char *
-sl_asprintf(const char *format, ...)
-{
-  va_list vlist;
-  va_start(vlist, format);
-  char *str = sl_vasprintf(format, vlist);
-  va_end(vlist);
-  return str;
+  if (result < 0)
+    return result;
+  *str = malloc(result + 1);
+  result = vsprintf(*str, fmt, vlist);
+  return result;
 }

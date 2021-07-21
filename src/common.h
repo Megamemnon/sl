@@ -93,10 +93,10 @@ while(0)
 uint32_t
 hash(char *str);
 
-char *
-sl_vasprintf(const char *format, va_list vlist);
+int
+asprintf(char **str, const char *fmt, ...);
 
-char *
-sl_asprintf(const char *format, ...);
+int
+vasprintf(char **str, const char *fmt, va_list vlist);
 
 #endif

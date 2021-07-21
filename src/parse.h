@@ -97,6 +97,9 @@ next_is_symbol(struct ParserState *state, const char *symbol);
 int
 consume_identifier(struct ParserState *state, const char **identifier);
 
+int
+consume_string(struct ParserState *state, const char **string);
+
 bool
 tokens_remain(struct ParserState *state);
 
