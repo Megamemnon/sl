@@ -20,6 +20,12 @@ free_symbol_path(SymbolPath *path);
 int
 length_of_symbol_path(const SymbolPath *path);
 
+const char *
+get_symbol_path_segment(const SymbolPath *path, size_t index);
+
+const char *
+get_symbol_path_last_segment(const SymbolPath *path);
+
 char *
 string_from_symbol_path(const SymbolPath *path);
 

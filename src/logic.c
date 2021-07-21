@@ -42,6 +42,18 @@ length_of_symbol_path(const SymbolPath *path)
   return ARRAY_LENGTH(path->segments);
 }
 
+const char *
+get_symbol_path_segment(const SymbolPath *path, size_t index)
+{
+  return *ARRAY_GET(path->segments, char *, index);
+}
+
+const char *
+get_symbol_path_last_segment(const SymbolPath *path)
+{
+  return get_symbol_path_segment(path, length_of_symbol_path(path) - 1);
+}
+
 char *
 string_from_symbol_path(const SymbolPath *path)
 {
@@ -1040,6 +1052,7 @@ add_axiom(LogicState *state, struct PrototypeTheorem proto)
   }
 
   struct Theorem *a = malloc(sizeof(struct Theorem));
+  a->is_axiom = TRUE;
   a->id = state->next_id;
   ++state->next_id;
 
@@ -1577,6 +1590,7 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
   }
 
   struct Theorem *a = malloc(sizeof(struct Theorem));
+  a->is_axiom = FALSE;
   a->id = state->next_id;
   ++state->next_id;
 

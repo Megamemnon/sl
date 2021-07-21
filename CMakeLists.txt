@@ -22,6 +22,11 @@ target_link_libraries(sl_bin sl)
 set_target_properties(sl_bin PROPERTIES OUTPUT_NAME sl)
 
 # Tests
-add_executable(test_sl tests/test.c)
+add_executable(test_sl
+  tests/test.c
+
+  tests/test_core.c
+)
+target_include_directories(test_sl PUBLIC src)
 target_link_libraries(test_sl sl)
 add_test(sl test_sl)

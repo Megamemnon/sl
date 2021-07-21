@@ -88,6 +88,7 @@ struct Theorem
 {
   uint32_t id;
   const SymbolPath *path;
+  bool is_axiom;
 
   Array parameters;
   Array requirements;
