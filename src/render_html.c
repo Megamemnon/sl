@@ -152,9 +152,9 @@ html_render_constant(const struct Constant *constant, FILE *f)
     free(const_type);
     free(type_label);
   }
-  if (constant->latex != NULL)
+  if (constant->has_latex)
   {
-    char *latex = latex_render_constant(constant->latex);
+    char *latex = latex_render_constant(constant);
     char *latex_label;
     asprintf(&latex_label, "<h4>LaTeX: \\(%s\\)</h4>\n", latex);
     fputs(latex_label, f);
@@ -200,31 +200,36 @@ html_render_expression(const struct Expression *expression, FILE *f)
     free(expr_type);
     free(type_label);
   }
-  fputs("<h4>Parameters:</h4>\n", f);
-  fputs("<ol>\n", f);
-  for (size_t i = 0; i < ARRAY_LENGTH(expression->parameters); ++i)
+  if (ARRAY_LENGTH(expression->parameters) > 0)
   {
-    const struct Parameter *param =
-      ARRAY_GET(expression->parameters, struct Parameter, i);
-    char *param_type = string_from_symbol_path(param->type->path);
-    char *param_label;
-    asprintf(&param_label,
-      "<li><code>%s</code> : <code><a href=\"#sym-%zu\">%s</a></code></li>\n",
-      param->name, param->type->id, param_type);
-    fputs(param_label, f);
-    free(param_type);
-    free(param_label);
+    fputs("<h4>Parameters:</h4>\n", f);
+    fputs("<ol>\n", f);
+    for (size_t i = 0; i < ARRAY_LENGTH(expression->parameters); ++i)
+    {
+      const struct Parameter *param =
+        ARRAY_GET(expression->parameters, struct Parameter, i);
+      char *param_type = string_from_symbol_path(param->type->path);
+      char *param_str = latex_render_string(param->name);
+      char *param_label;
+      asprintf(&param_label,
+        "<li><code>%s</code> : <code><a href=\"#sym-%zu\">%s</a></code><br />\\(%s\\)</li>\n",
+        param->name, param->type->id, param_type, param_str);
+      fputs(param_label, f);
+      free(param_type);
+      free(param_str);
+      free(param_label);
+    }
+    fputs("</ol>\n", f);
   }
-  if (expression->latex != NULL)
+  if (expression->has_latex)
   {
-    char *latex = latex_render_constant(expression->latex);
+    char *latex = latex_render_expression(expression);
     char *latex_label;
     asprintf(&latex_label, "<h4>LaTeX: \\(%s\\)</h4>\n", latex);
     fputs(latex_label, f);
     free(latex);
     free(latex_label);
   }
-  fputs("</ol>\n", f);
   fputs("</div>\n", f);
   return 0;
 }
@@ -255,48 +260,66 @@ html_render_theorem(const struct Theorem *theorem, FILE *f)
     free(path);
     free(path_label);
   }
-  fputs("<h4>Parameters:</h4>\n", f);
-  fputs("<ol>\n", f);
-  for (size_t i = 0; i < ARRAY_LENGTH(theorem->parameters); ++i)
+  if (ARRAY_LENGTH(theorem->parameters))
   {
-    const struct Parameter *param =
-      ARRAY_GET(theorem->parameters, struct Parameter, i);
-    char *param_type = string_from_symbol_path(param->type->path);
-    char *param_label;
-    asprintf(&param_label,
-      "<li><code>%s</code> : <code><a href=\"#sym-%zu\">%s</a></code></li>\n",
-      param->name, param->type->id, param_type);
-    fputs(param_label, f);
-    free(param_type);
-    free(param_label);
+    fputs("<h4>Parameters:</h4>\n", f);
+    fputs("<ol>\n", f);
+    for (size_t i = 0; i < ARRAY_LENGTH(theorem->parameters); ++i)
+    {
+      const struct Parameter *param =
+        ARRAY_GET(theorem->parameters, struct Parameter, i);
+      char *param_type = string_from_symbol_path(param->type->path);
+      char *param_str = latex_render_string(param->name);
+      char *param_label;
+      asprintf(&param_label,
+        "<li><code>%s</code> : <code><a href=\"#sym-%zu\">%s</a></code><br />\\(%s\\)</li>\n",
+        param->name, param->type->id, param_type, param_str);
+      fputs(param_label, f);
+      free(param_type);
+      free(param_str);
+      free(param_label);
+    }
+    fputs("</ol>\n", f);
   }
-  fputs("</ol>\n", f);
-  fputs("<h4>Assumptions:</h4>\n", f);
-  fputs("<ul>\n", f);
-  for (size_t i = 0; i < ARRAY_LENGTH(theorem->assumptions); ++i)
+  if (ARRAY_LENGTH(theorem->assumptions))
   {
-    const Value *assume = *ARRAY_GET(theorem->assumptions, Value *, i);
-    char *assume_str = html_render_value(assume);
-    char *assume_label;
-    asprintf(&assume_label, "<li><code>%s</code></li>\n", assume_str);
-    fputs(assume_label, f);
-    free(assume_str);
-    free(assume_label);
+    fputs("<h4>Assumptions:</h4>\n", f);
+    fputs("<ul>\n", f);
+    for (size_t i = 0; i < ARRAY_LENGTH(theorem->assumptions); ++i)
+    {
+      const Value *assume = *ARRAY_GET(theorem->assumptions, Value *, i);
+      char *assume_str = html_render_value(assume);
+      char *assume_latex = latex_render_value(assume);
+      char *assume_label;
+      asprintf(&assume_label, "<li><code>%s</code><br />\\(%s\\)</li>\n",
+        assume_str, assume_latex);
+      fputs(assume_label, f);
+      free(assume_str);
+      free(assume_latex);
+      free(assume_label);
+
+    }
+    fputs("</ul>\n", f);
   }
-  fputs("</ul>\n", f);
-  fputs("<h4>Inferences:</h4>\n", f);
-  fputs("<ul>\n", f);
-  for (size_t i = 0; i < ARRAY_LENGTH(theorem->inferences); ++i)
+  if (ARRAY_LENGTH(theorem->inferences))
   {
-    const Value *infer = *ARRAY_GET(theorem->inferences, Value *, i);
-    char *infer_str = html_render_value(infer);
-    char *infer_label;
-    asprintf(&infer_label, "<li><code>%s</code></li>\n", infer_str);
-    fputs(infer_label, f);
-    free(infer_str);
-    free(infer_label);
+    fputs("<h4>Inferences:</h4>\n", f);
+    fputs("<ul>\n", f);
+    for (size_t i = 0; i < ARRAY_LENGTH(theorem->inferences); ++i)
+    {
+      const Value *infer = *ARRAY_GET(theorem->inferences, Value *, i);
+      char *infer_str = html_render_value(infer);
+      char *infer_latex = latex_render_value(infer);
+      char *infer_label;
+      asprintf(&infer_label, "<li><code>%s</code><br />\\(%s\\)</li>\n",
+        infer_str, infer_latex);
+      fputs(infer_label, f);
+      free(infer_str);
+      free(infer_latex);
+      free(infer_label);
+    }
+    fputs("</ul>\n", f);
   }
-  fputs("</ul>\n", f);
   fputs("</div>\n", f);
   return 0;
 }

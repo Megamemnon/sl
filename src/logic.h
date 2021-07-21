@@ -75,18 +75,29 @@ struct PrototypeType
 LogicError
 add_type(LogicState *state, struct PrototypeType proto);
 
+struct Value;
+typedef struct Value Value;
+
+struct PrototypeLatexFormatSegment
+{
+  bool is_variable;
+  char *string;
+};
+
+struct PrototypeLatexFormat
+{
+  struct PrototypeLatexFormatSegment **segments; /* NULL-terminated list. */
+};
+
 struct PrototypeConstant
 {
   SymbolPath *constant_path;
   SymbolPath *type_path;
-  const char *latex;
+  struct PrototypeLatexFormat latex;
 };
 
 LogicError
 add_constant(LogicState *, struct PrototypeConstant proto);
-
-struct Value;
-typedef struct Value Value;
 
 /* Expressions. */
 struct PrototypeParameter
@@ -101,7 +112,7 @@ struct PrototypeExpression
   SymbolPath *expression_type;
   struct PrototypeParameter **parameters; /* NULL-terminated list. */
   Value **bindings; /* NULL-terminated list. */
-  const char *latex;
+  struct PrototypeLatexFormat latex;
 };
 
 /* TODO: The return value should be a struct, or modify the PrototypeExpression,

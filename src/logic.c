@@ -442,10 +442,23 @@ add_constant(LogicState *state, struct PrototypeConstant proto)
   c->id = state->next_id;
   ++state->next_id;
   c->type = (struct Type *)type_symbol->object;
-  if (proto.latex != NULL)
-    c->latex = strdup(proto.latex);
+  if (proto.latex.segments != NULL)
+  {
+    c->has_latex = TRUE;
+    ARRAY_INIT(c->latex.segments, struct LatexFormatSegment);
+    for (struct PrototypeLatexFormatSegment **seg = proto.latex.segments;
+      *seg != NULL; ++seg)
+    {
+      struct LatexFormatSegment new_seg;
+      new_seg.is_variable = (*seg)->is_variable;
+      new_seg.string = strdup((*seg)->string);
+      ARRAY_APPEND(c->latex.segments, struct LatexFormatSegment, new_seg);
+    }
+  }
   else
-    c->latex = NULL;
+  {
+    c->has_latex = FALSE;
+  }
 
   struct Symbol sym;
   sym.path = copy_symbol_path(proto.constant_path);
@@ -494,10 +507,23 @@ add_expression(LogicState *state, struct PrototypeExpression proto)
     return LogicErrorSymbolAlreadyExists;
   }
   e->type = (struct Type *)type_symbol->object;
-  if (proto.latex != NULL)
-    e->latex = strdup(proto.latex);
+  if (proto.latex.segments != NULL)
+  {
+    e->has_latex = TRUE;
+    ARRAY_INIT(e->latex.segments, struct LatexFormatSegment);
+    for (struct PrototypeLatexFormatSegment **seg = proto.latex.segments;
+      *seg != NULL; ++seg)
+    {
+      struct LatexFormatSegment new_seg;
+      new_seg.is_variable = (*seg)->is_variable;
+      new_seg.string = strdup((*seg)->string);
+      ARRAY_APPEND(e->latex.segments, struct LatexFormatSegment, new_seg);
+    }
+  }
   else
-    e->latex = NULL;
+  {
+    e->has_latex = FALSE;
+  }
 
   /* The type of the expression must not be atomic. */
   if (e->type->atomic)

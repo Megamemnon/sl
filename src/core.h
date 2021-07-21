@@ -33,12 +33,25 @@ struct Type
   bool atomic;
 };
 
+struct LatexFormatSegment
+{
+  bool is_variable;
+  char *string;
+};
+
+struct LatexFormat
+{
+  Array segments;
+};
+
 struct Constant
 {
   uint32_t id;
   const SymbolPath *path;
   const struct Type *type;
-  char *latex;
+
+  bool has_latex;
+  struct LatexFormat latex;
 };
 
 struct Expression
@@ -50,7 +63,8 @@ struct Expression
   Array parameters;
   Array bindings;
 
-  char *latex;
+  bool has_latex;
+  struct LatexFormat latex;
 };
 
 enum ValueType

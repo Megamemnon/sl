@@ -18,13 +18,13 @@ namespace propositional_calculus
   expr Formula
   implies(phi : Formula, psi : Formula)
   {
-    latex "\\left( $phi \\implies $psi \\right)";
+    latex "\\left( " + $phi + " \\implies " + $psi + " \\right)";
   }
 
   expr Formula
   not(phi : Formula)
   {
-    latex "\\neg $phi";
+    latex "\\neg " + $phi;
   }
 
   axiom
@@ -339,7 +339,7 @@ namespace propositional_calculus
   expr Formula
   and(phi : Formula, psi : Formula)
   {
-    latex "\\left( $phi \\land $psi \\right)";
+    latex "\\left( " + $phi + " \\land " + $psi + " \\right)";
   }
 
   axiom
@@ -410,7 +410,7 @@ namespace propositional_calculus
   expr Formula
   or(phi : Formula, psi : Formula)
   {
-    latex "\\left( $phi \\lor $psi \\right)";
+    latex "\\left( " + $phi + " \\lor " + $psi + " \\right)";
   }
 
   axiom
@@ -475,7 +475,7 @@ namespace propositional_calculus
   expr Formula
   iff(phi : Formula, psi : Formula)
   {
-    latex "\\left( $phi \\iff $psi \\right)";
+    latex "\\left( " + $phi + " \\iff " + $psi + " \\right)";
   }
 
   axiom
@@ -544,6 +544,16 @@ namespace propositional_calculus
 
     step biconditional_elimination_left_meta($phi, $psi);
     step biconditional_elimination_right_meta($phi, $psi);
+  }
+
+  theorem
+  double_negation(phi : Formula)
+  {
+    infer iff($phi, not(not($phi)));
+
+    step double_negation_left($phi);
+    step double_negation_right($phi);
+    step biconditional_introduction_meta($phi, not(not($phi)));
   }
 }
 /* alias propositional_calculus prop; */
@@ -626,35 +636,35 @@ namespace predicate_calculus
   expr Term
   t(x : Variable)
   {
-    latex "$x";
+    latex $x;
   }
 
   expr Term
   eval_f(f : Function, t : Term)
   {
-    latex "$f($t)";
+    latex "\\left( " + $f + " \\right)\\left( " + $t + " \\right) ";
   }
 
   expr Formula
   eval_p(p : Predicate2, s : Term, t : Term)
   {
-    latex "$p($s, $t)";
+    latex "\\left( " + $p + " \\right)\\left( " + $s + " , " + $t + " \\right) ";
   }
 
   expr Formula
   any(x : Variable, phi : Formula)
   {
-    latex "\\forall $x $phi";
+    latex "\\forall " + $x + " " + $phi;
     bind $x;
   }
 
   axiom
-  instantiation(x : Variable, phi : Formula, t : Term, phi0 : Formula)
+  instantiation(x : Variable, phi : Formula, t : Term, phi_0 : Formula)
   {
     require free_for($t, t($x), $phi);
-    require full_substitution(t($x), $phi, $t, $phi0);
+    require full_substitution(t($x), $phi, $t, $phi_0);
 
-    infer implies(any($x, $phi), $phi0);
+    infer implies(any($x, $phi), $phi_0);
   }
 
   axiom
@@ -685,7 +695,7 @@ namespace predicate_calculus
   expr Formula
   eq(s : Term, t : Term)
   {
-    latex "$s = $t";
+    latex $s + " = " + $t;
   }
 
   axiom
@@ -696,12 +706,12 @@ namespace predicate_calculus
 
   axiom
   equality_substitution(x : Variable, phi : Formula, y : Variable,
-    phi0 : Formula)
+    phi_0 : Formula)
   {
     require free_for(t($y), t($x), $phi);
-    require substitution(t($x), $phi, t($y), $phi0);
+    require substitution(t($x), $phi, t($y), $phi_0);
 
-    infer implies(eq(t($x), t($y)), implies($phi, $phi0));
+    infer implies(eq(t($x), t($y)), implies($phi, $phi_0));
   }
 
   theorem
@@ -769,7 +779,7 @@ namespace predicate_calculus
   expr Formula
   exists(x : Variable, phi : Formula)
   {
-    latex "\\exists $x $phi";
+    latex "\\exists " + $x + " " + $phi;
     bind $x;
   }
 
@@ -795,7 +805,10 @@ namespace zfc
   use propositional_calculus;
   use predicate_calculus;
 
-  const in : Predicate2;
+  const in : Predicate2
+  {
+    latex "\\in";
+  }
 
   axiom
   extensionality()
@@ -834,7 +847,10 @@ namespace zfc
       eval_p(in, t(vars.y), t(vars.z))))));
   }
 
-  const union : Function;
+  const union : Function
+  {
+    latex "\\cup";
+  }
 
   axiom
   union_of()
@@ -845,7 +861,10 @@ namespace zfc
       eval_p(in, t(vars.z), t(vars.x)))))));
   }
 
-  const subset : Predicate2;
+  const subset : Predicate2
+  {
+    latex "\\subset";
+  }
 
   axiom
   subset_of()

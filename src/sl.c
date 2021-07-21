@@ -45,6 +45,7 @@ const char *sl_symbols[] = {
   "(", ")",
   "[", "]",
   "{", "}",
+  "+",
   ".", ",", ";",
   "%", "$", "=",
   "/*", "*/",
@@ -75,6 +76,9 @@ enum ASTNodeType
   ASTNodeTypeRequire,
   ASTNodeTypeInfer,
   ASTNodeTypeStep,
+
+  ASTNodeTypeLatexString,
+  ASTNodeTypeLatexVariable,
 
   ASTNodeTypeComposition,
   ASTNodeTypeConstant,
@@ -267,6 +271,90 @@ parse_type(struct ParserState *state)
 }
 
 static int
+parse_value(struct ParserState *state)
+{
+  add_child_and_descend(state);
+  init_ast_node(state->ast_current);
+  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+
+  if (consume_symbol(state, "$"))
+  {
+    /* This is a variable. */
+    AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeVariable;
+    const char *variable_name;
+    if (!consume_identifier(state, &variable_name))
+    {
+      add_error(state->unit, get_current_token(state),
+        "missing variable name in value.");
+    }
+    else
+    {
+      AST_NODE_DATA(state->ast_current)->name = strdup(variable_name);
+    }
+  }
+  else if (consume_symbol(state, "%"))
+  {
+    /* This is a placeholder. */
+    AST_NODE_DATA(state->ast_current)->type = ASTNodeTypePlaceholder;
+    const char *placeholder_name;
+    if (!consume_identifier(state, &placeholder_name))
+    {
+      add_error(state->unit, get_current_token(state),
+        "missing placeholder name in value.");
+    }
+    else
+    {
+      AST_NODE_DATA(state->ast_current)->name = strdup(placeholder_name);
+    }
+  }
+  else
+  {
+    /* Parse the name of the constant. */
+    int err = parse_path(state);
+    PROPAGATE_ERROR(err);
+
+    if (consume_symbol(state, "("))
+    {
+      /* We have a composition. Parse the arguments. */
+      AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeComposition;
+
+      add_child_and_descend(state);
+      init_ast_node(state->ast_current);
+      AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+      AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeCompositionArgumentList;
+
+      bool first_token = TRUE;
+      while (!consume_symbol(state, ")"))
+      {
+        if (!first_token)
+        {
+          if (!consume_symbol(state, ","))
+          {
+            add_error(state->unit, get_current_token(state),
+              "missing comma ',' separating arguments in composition.");
+          }
+        }
+        if (first_token)
+          first_token = FALSE;
+
+        int err = parse_value(state);
+        PROPAGATE_ERROR(err);
+      }
+
+      ascend(state);
+    }
+    else
+    {
+      /* Just a constant. */
+      AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeConstant;
+    }
+  }
+
+  ascend(state);
+  return 0;
+}
+
+static int
 parse_latex(struct ParserState *state)
 {
   add_child_and_descend(state);
@@ -280,18 +368,61 @@ parse_latex(struct ParserState *state)
       "missing keyword 'latex' in LaTeX formatting.");
   }
 
-  const char *latex_str;
-  if (!consume_string(state, &latex_str))
+  bool first_token = TRUE;
+  while (!consume_symbol(state, ";"))
   {
-    add_error(state->unit, get_current_token(state),
-      "missing string literal in LaTeX formatting.");
-  }
-  AST_NODE_DATA(state->ast_current)->name = strdup(latex_str);
-
-  if (!consume_symbol(state, ";"))
-  {
-    add_error(state->unit, get_current_token(state),
-      "missing semicolon ';' after LaTeX formatting.");
+    if (!first_token)
+    {
+      if (!consume_symbol(state, "+"))
+      {
+        add_error(state->unit, get_current_token(state),
+          "missing separator '+' between strings of LaTeX formatting.");
+      }
+    }
+    if (first_token)
+      first_token = FALSE;
+    if (next_is_string(state))
+    {
+      add_child_and_descend(state);
+      init_ast_node(state->ast_current);
+      AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeLatexString;
+      AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+      const char *latex_str;
+      if (!consume_string(state, &latex_str))
+      {
+        add_error(state->unit, get_current_token(state),
+          "missing string literal in LaTeX formatting.");
+      }
+      else
+      {
+        AST_NODE_DATA(state->ast_current)->name = strdup(latex_str);
+      }
+      ascend(state);
+    }
+    else if (consume_symbol(state, "$"))
+    {
+      /* This is a variable. */
+      add_child_and_descend(state);
+      init_ast_node(state->ast_current);
+      AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeLatexVariable;
+      AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+      const char *variable_name;
+      if (!consume_identifier(state, &variable_name))
+      {
+        add_error(state->unit, get_current_token(state),
+          "missing variable name in latex variable.");
+      }
+      else
+      {
+        AST_NODE_DATA(state->ast_current)->name = strdup(variable_name);
+      }
+      ascend(state);
+    }
+    else
+    {
+      int err = parse_value(state);
+      PROPAGATE_ERROR(err);
+    }
   }
 
   ascend(state);
@@ -426,90 +557,6 @@ parse_parameter_list(struct ParserState *state)
 
   ascend(state);
 
-  return 0;
-}
-
-static int
-parse_value(struct ParserState *state)
-{
-  add_child_and_descend(state);
-  init_ast_node(state->ast_current);
-  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
-
-  if (consume_symbol(state, "$"))
-  {
-    /* This is a variable. */
-    AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeVariable;
-    const char *variable_name;
-    if (!consume_identifier(state, &variable_name))
-    {
-      add_error(state->unit, get_current_token(state),
-        "missing variable name in value.");
-    }
-    else
-    {
-      AST_NODE_DATA(state->ast_current)->name = strdup(variable_name);
-    }
-  }
-  else if (consume_symbol(state, "%"))
-  {
-    /* This is a placeholder. */
-    AST_NODE_DATA(state->ast_current)->type = ASTNodeTypePlaceholder;
-    const char *placeholder_name;
-    if (!consume_identifier(state, &placeholder_name))
-    {
-      add_error(state->unit, get_current_token(state),
-        "missing placeholder name in value.");
-    }
-    else
-    {
-      AST_NODE_DATA(state->ast_current)->name = strdup(placeholder_name);
-    }
-  }
-  else
-  {
-    /* Parse the name of the constant. */
-    int err = parse_path(state);
-    PROPAGATE_ERROR(err);
-
-    if (consume_symbol(state, "("))
-    {
-      /* We have a composition. Parse the arguments. */
-      AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeComposition;
-
-      add_child_and_descend(state);
-      init_ast_node(state->ast_current);
-      AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
-      AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeCompositionArgumentList;
-
-      bool first_token = TRUE;
-      while (!consume_symbol(state, ")"))
-      {
-        if (!first_token)
-        {
-          if (!consume_symbol(state, ","))
-          {
-            add_error(state->unit, get_current_token(state),
-              "missing comma ',' separating arguments in composition.");
-          }
-        }
-        if (first_token)
-          first_token = FALSE;
-
-        int err = parse_value(state);
-        PROPAGATE_ERROR(err);
-      }
-
-      ascend(state);
-    }
-    else
-    {
-      /* Just a constant. */
-      AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeConstant;
-    }
-  }
-
-  ascend(state);
   return 0;
 }
 
@@ -1304,91 +1351,6 @@ validate_type(struct ValidationState *state,
   return 0;
 }
 
-static int
-validate_constant(struct ValidationState *state, const struct ASTNode *constant)
-{
-  const struct ASTNodeData *data = AST_NODE_DATA(constant);
-  if (data->type != ASTNodeTypeConstantDeclaration)
-  {
-    add_error(state->unit, data->location,
-      "expected a constant declaration but found the wrong type of node.");
-    state->valid = FALSE;
-  }
-
-  struct PrototypeConstant proto;
-
-  proto.constant_path = copy_symbol_path(state->prefix_path);
-  push_symbol_path(proto.constant_path, data->name);
-
-  if (ARRAY_LENGTH(constant->children) < 1)
-  {
-    add_error(state->unit, data->location,
-      "a constant node must have at least a single child, containing the path to the constant's type");
-    state->valid = FALSE;
-  }
-  const struct ASTNode *type = ARRAY_GET(constant->children, struct ASTNode, 0);
-
-  SymbolPath *local_path = extract_path(state, type);
-
-  proto.type_path = lookup_symbol(state, local_path);
-  free_symbol_path(local_path);
-
-  /* Look for latex. */
-  proto.latex = NULL;
-  for (size_t i = 0; i < ARRAY_LENGTH(constant->children); ++i)
-  {
-    const struct ASTNode *child =
-      ARRAY_GET(constant->children, struct ASTNode, i);
-    const struct ASTNodeData *child_data = AST_NODE_DATA(child);
-    if (child_data->type == ASTNodeTypeLatex)
-    {
-      proto.latex = strdup(child_data->name);
-    }
-  }
-
-  LogicError err = add_constant(state->logic, proto);
-  if (err != LogicErrorNone)
-  {
-    add_error(state->unit, data->location,
-      "cannot add constant.");
-    state->valid = FALSE;
-  }
-
-  free_symbol_path(proto.constant_path);
-  free_symbol_path(proto.type_path);
-
-  return 0;
-}
-
-static int
-extract_parameter(struct ValidationState *state,
-  const struct ASTNode *parameter, struct PrototypeParameter *dst)
-{
-  const struct ASTNodeData *data = AST_NODE_DATA(parameter);
-  if (data->type != ASTNodeTypeParameter)
-  {
-    add_error(state->unit, data->location,
-      "expected a parameter but found the wrong type of node.");
-    state->valid = FALSE;
-  }
-  dst->name = strdup(data->name);
-
-  if (ARRAY_LENGTH(parameter->children) != 1)
-  {
-    add_error(state->unit, data->location,
-      "a parameter node must have a single child, containing the path to the parameter's type");
-    state->valid = FALSE;
-  }
-  const struct ASTNode *type = ARRAY_GET(parameter->children, struct ASTNode, 0);
-
-  SymbolPath *local_path = extract_path(state, type);
-
-  dst->type = lookup_symbol(state, local_path);
-  free_symbol_path(local_path);
-
-  return 0;
-}
-
 struct Definition
 {
   char *name;
@@ -1569,6 +1531,138 @@ extract_value(struct ValidationState *state,
 }
 
 static int
+extract_latex_format(struct ValidationState *state,
+  const struct ASTNode *latex, struct TheoremEnvironment *env,
+  struct PrototypeLatexFormat *dst)
+{
+  const struct ASTNodeData *data = AST_NODE_DATA(latex);
+  if (data->type != ASTNodeTypeLatex)
+  {
+    add_error(state->unit, data->location,
+      "expected a latex format but found the wrong type of node.");
+    state->valid = FALSE;
+  }
+
+  dst->segments = malloc(sizeof(struct PrototypeLatexFormatSegment *)
+    * (ARRAY_LENGTH(latex->children) + 1));
+  for (size_t i = 0; i < ARRAY_LENGTH(latex->children); ++i)
+  {
+    const struct ASTNode *child =
+      ARRAY_GET(latex->children, struct ASTNode, i);
+    const struct ASTNodeData *child_data = AST_NODE_DATA(child);
+    if (child_data->type == ASTNodeTypeLatexString)
+    {
+      struct PrototypeLatexFormatSegment *seg =
+        malloc(sizeof(struct PrototypeLatexFormatSegment));
+      seg->is_variable = FALSE;
+      seg->string = strdup(child_data->name);
+      dst->segments[i] = seg;
+    }
+    else if (child_data->type == ASTNodeTypeLatexVariable)
+    {
+      /* Attempt to extract a value from this. */
+      struct PrototypeLatexFormatSegment *seg =
+        malloc(sizeof(struct PrototypeLatexFormatSegment));
+      seg->is_variable = TRUE;
+      seg->string = strdup(child_data->name);
+      dst->segments[i] = seg;
+    }
+  }
+  dst->segments[ARRAY_LENGTH(latex->children)] = NULL;
+
+  return 0;
+}
+
+static int
+validate_constant(struct ValidationState *state, const struct ASTNode *constant)
+{
+  const struct ASTNodeData *data = AST_NODE_DATA(constant);
+  if (data->type != ASTNodeTypeConstantDeclaration)
+  {
+    add_error(state->unit, data->location,
+      "expected a constant declaration but found the wrong type of node.");
+    state->valid = FALSE;
+  }
+
+  struct PrototypeConstant proto;
+
+  proto.constant_path = copy_symbol_path(state->prefix_path);
+  push_symbol_path(proto.constant_path, data->name);
+
+  if (ARRAY_LENGTH(constant->children) < 1)
+  {
+    add_error(state->unit, data->location,
+      "a constant node must have at least a single child, containing the path to the constant's type");
+    state->valid = FALSE;
+  }
+  const struct ASTNode *type = ARRAY_GET(constant->children, struct ASTNode, 0);
+
+  SymbolPath *local_path = extract_path(state, type);
+
+  proto.type_path = lookup_symbol(state, local_path);
+  free_symbol_path(local_path);
+  proto.latex.segments = NULL;
+
+  /* Look for latex. */
+  struct TheoremEnvironment env;
+  init_theorem_environment(&env);
+  for (size_t i = 0; i < ARRAY_LENGTH(constant->children); ++i)
+  {
+    const struct ASTNode *child =
+      ARRAY_GET(constant->children, struct ASTNode, i);
+    const struct ASTNodeData *child_data = AST_NODE_DATA(child);
+    if (child_data->type == ASTNodeTypeLatex)
+    {
+      int err = extract_latex_format(state, child, &env, &proto.latex);
+      PROPAGATE_ERROR(err);
+    }
+  }
+  free_theorem_environment(&env);
+
+  LogicError err = add_constant(state->logic, proto);
+  if (err != LogicErrorNone)
+  {
+    add_error(state->unit, data->location,
+      "cannot add constant.");
+    state->valid = FALSE;
+  }
+
+  free_symbol_path(proto.constant_path);
+  free_symbol_path(proto.type_path);
+
+  return 0;
+}
+
+static int
+extract_parameter(struct ValidationState *state,
+  const struct ASTNode *parameter, struct PrototypeParameter *dst)
+{
+  const struct ASTNodeData *data = AST_NODE_DATA(parameter);
+  if (data->type != ASTNodeTypeParameter)
+  {
+    add_error(state->unit, data->location,
+      "expected a parameter but found the wrong type of node.");
+    state->valid = FALSE;
+  }
+  dst->name = strdup(data->name);
+
+  if (ARRAY_LENGTH(parameter->children) != 1)
+  {
+    add_error(state->unit, data->location,
+      "a parameter node must have a single child, containing the path to the parameter's type");
+    state->valid = FALSE;
+  }
+  const struct ASTNode *type = ARRAY_GET(parameter->children, struct ASTNode, 0);
+
+  SymbolPath *local_path = extract_path(state, type);
+
+  dst->type = lookup_symbol(state, local_path);
+  free_symbol_path(local_path);
+
+  return 0;
+}
+
+static int
 validate_expression(struct ValidationState *state,
   const struct ASTNode *expression)
 {
@@ -1662,7 +1756,7 @@ validate_expression(struct ValidationState *state,
   }
 
   /* Look for latex. */
-  proto.latex = NULL;
+  proto.latex.segments = NULL;
   for (size_t i = 0; i < ARRAY_LENGTH(expression->children); ++i)
   {
     const struct ASTNode *child =
@@ -1670,7 +1764,8 @@ validate_expression(struct ValidationState *state,
     const struct ASTNodeData *child_data = AST_NODE_DATA(child);
     if (child_data->type == ASTNodeTypeLatex)
     {
-      proto.latex = strdup(child_data->name);
+      int err = extract_latex_format(state, child, &env, &proto.latex);
+      PROPAGATE_ERROR(err);
     }
   }
 
