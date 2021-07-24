@@ -1,6 +1,9 @@
 #ifndef CORE_H
 #define CORE_H
 
+#include "common.h"
+#include "logic.h"
+
 #define LOG_NORMAL(out, ...) \
 do { \
   fprintf(out, __VA_ARGS__); \
@@ -16,7 +19,7 @@ while (0);
 
 struct SymbolPath
 {
-  Array segments;
+  ARR(char *) segments;
 };
 
 struct Parameter
@@ -41,7 +44,7 @@ struct LatexFormatSegment
 
 struct LatexFormat
 {
-  Array segments;
+  ARR(struct LatexFormatSegment) segments;
 };
 
 struct Constant
@@ -60,8 +63,8 @@ struct Expression
   const SymbolPath *path;
 
   const struct Type *type;
-  Array parameters;
-  Array bindings;
+  ARR(struct Parameter) parameters;
+  ARR(Value *) bindings;
 
   bool has_latex;
   struct LatexFormat latex;
@@ -74,6 +77,8 @@ enum ValueType
   ValueTypeComposition
 };
 
+typedef ARR(Value *) ValueArray;
+
 struct Value
 {
   enum ValueType value_type;
@@ -84,8 +89,26 @@ struct Value
   const struct Constant *constant;
   bool bound;
   const struct Expression *expression;
-  Array arguments;
+  ValueArray arguments;
 };
+
+struct Argument
+{
+  char *name;
+  Value *value;
+};
+typedef ARR(struct Argument) ArgumentArray;
+
+/* Value methods. */
+void
+copy_value_to(Value *dst, const Value *src);
+
+void
+enumerate_value_occurrences(const Value *target, const Value *search_in,
+  ValueArray *occurrences);
+
+Value *
+instantiate_value(struct LogicState *state, const Value *src, ArgumentArray args);
 
 enum RequirementType
 {
@@ -98,7 +121,7 @@ enum RequirementType
 struct Requirement
 {
   enum RequirementType type;
-  Array arguments;
+  ValueArray arguments;
 };
 
 struct Theorem;
@@ -106,13 +129,7 @@ struct Theorem;
 struct TheoremReference
 {
   struct Theorem *theorem;
-  Array arguments;
-};
-
-struct Argument
-{
-  char *name;
-  Value *value;
+  ValueArray arguments;
 };
 
 struct Theorem
@@ -121,11 +138,11 @@ struct Theorem
   const SymbolPath *path;
   bool is_axiom;
 
-  Array parameters;
-  Array requirements;
-  Array assumptions;
-  Array inferences;
-  Array steps;
+  ARR(struct Parameter) parameters;
+  ARR(struct Requirement) requirements;
+  ValueArray assumptions;
+  ValueArray inferences;
+  ARR(struct TheoremReference) steps;
 };
 
 enum SymbolType
@@ -145,14 +162,48 @@ struct Symbol
 
 struct LogicState
 {
-  Array symbol_table;
+  ARR(struct Symbol) symbol_table;
   uint32_t next_id;
 
   FILE *log_out;
 };
 
+bool
+types_equal(const struct Type *a, const struct Type *b);
+
 int
 instantiate_theorem(struct LogicState *state,
-  const struct Theorem *src, Array args, Array *proven, bool force);
+  const struct Theorem *src, ArgumentArray args, ValueArray *proven, bool force);
+
+/* Requirements. */
+bool
+evaluate_free_for(struct LogicState *state,
+  const Value *source, const Value *target, const Value *context);
+
+bool
+evaluate_not_free(struct LogicState *state,
+  const Value *target, const Value *context);
+
+bool
+evaluate_not_bound(struct LogicState *state,
+  const Value *target, const Value *context);
+
+bool
+evaluate_free(struct LogicState *state,
+  const Value *target, const Value *context);
+
+bool
+evaluate_bound(struct LogicState *state,
+  const Value *target, const Value *context);
+
+bool
+evaluate_substitution(struct LogicState *state,
+  const Value *target, const Value *context,
+  const Value *source, const Value *new_context);
+
+bool
+evaluate_full_substitution(struct LogicState *state,
+  const Value *target, const Value *context,
+  const Value *source, const Value *new_context);
 
 #endif

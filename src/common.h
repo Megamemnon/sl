@@ -106,7 +106,9 @@ do { \
 } \
 while (0)
 
-#define MANAGED_ARRAY_GET(array, index) (array).data[index]
+#define MANAGED_ARRAY_LENGTH(array) (array).length
+
+#define MANAGED_ARRAY_GET(array, index) &((array).data[index])
 
 #define MANAGED_ARRAY_APPEND(array, item) \
 do { \
@@ -120,6 +122,12 @@ do { \
 } \
 while (0)
 
+#define MANAGED_ARRAY_POP(array) \
+do { \
+  (array).length -= 1; \
+} \
+while (0)
+
 #define MANAGED_ARRAY_FREE(array) \
 do { \
   free((array).data); \
@@ -129,8 +137,11 @@ do { \
 while (0)
 
 #define ARR(type) MANAGED_ARRAY(type)
+#define ARR_INIT(array) MANAGED_ARRAY_INIT(array)
+#define ARR_LENGTH(array) MANAGED_ARRAY_LENGTH(array)
 #define ARR_GET(array, index) MANAGED_ARRAY_GET(array, index)
 #define ARR_APPEND(array, item) MANAGED_ARRAY_APPEND(array, item)
+#define ARR_POP(array) MANAGED_ARRAY_POP(array)
 #define ARR_FREE(array) MANAGED_ARRAY_FREE(array)
 
 /* String helpers. */

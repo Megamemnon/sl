@@ -206,22 +206,21 @@ char *
 latex_render_constant(const struct Constant *c)
 {
   char *result;
-  Array segments;
-  ARRAY_INIT(segments, char *);
+  ARR(char *) segments;
+  ARR_INIT(segments);
   size_t len = 1;
-  for (size_t i = 0; i < ARRAY_LENGTH(c->latex.segments); ++i)
+  for (size_t i = 0; i < ARR_LENGTH(c->latex.segments); ++i)
   {
-    const struct LatexFormatSegment *seg =
-      ARRAY_GET(c->latex.segments, struct LatexFormatSegment, i);
+    const struct LatexFormatSegment *seg = ARR_GET(c->latex.segments, i);
     char *str = latex_render_string(seg->string);
-    ARRAY_APPEND(segments, char *, str);
+    ARR_APPEND(segments, str);
     len += strlen(str);
   }
   result = malloc(len);
   char *result_ptr = result;
-  for (size_t i = 0; i < ARRAY_LENGTH(segments); ++i)
+  for (size_t i = 0; i < ARR_LENGTH(segments); ++i)
   {
-    char *seg = *ARRAY_GET(segments, char *, i);
+    char *seg = *ARR_GET(segments, i);
     strcpy(result_ptr, seg);
     result_ptr += strlen(seg);
   }
@@ -233,22 +232,21 @@ char *
 latex_render_expression(const struct Expression *e)
 {
   char *result;
-  Array segments;
-  ARRAY_INIT(segments, char *);
+  ARR(char *) segments;
+  ARR_INIT(segments);
   size_t len = 1;
-  for (size_t i = 0; i < ARRAY_LENGTH(e->latex.segments); ++i)
+  for (size_t i = 0; i < ARR_LENGTH(e->latex.segments); ++i)
   {
-    const struct LatexFormatSegment *seg =
-      ARRAY_GET(e->latex.segments, struct LatexFormatSegment, i);
+    const struct LatexFormatSegment *seg = ARR_GET(e->latex.segments, i);
     char *str = latex_render_string(seg->string);
-    ARRAY_APPEND(segments, char *, str);
+    ARR_APPEND(segments, str);
     len += strlen(str);
   }
   result = malloc(len);
   char *result_ptr = result;
-  for (size_t i = 0; i < ARRAY_LENGTH(segments); ++i)
+  for (size_t i = 0; i < ARR_LENGTH(segments); ++i)
   {
-    char *seg = *ARRAY_GET(segments, char *, i);
+    char *seg = *ARR_GET(segments, i);
     strcpy(result_ptr, seg);
     result_ptr += strlen(seg);
   }
@@ -274,44 +272,43 @@ latex_render_value(const Value *v)
       if (v->expression->has_latex)
       {
         char *result;
-        Array segments;
-        ARRAY_INIT(segments, char *);
+        ARR(char *) segments;
+        ARR_INIT(segments);
         size_t len = 1;
-        for (size_t i = 0; i < ARRAY_LENGTH(v->expression->latex.segments); ++i)
+        for (size_t i = 0; i < ARR_LENGTH(v->expression->latex.segments); ++i)
         {
           const struct LatexFormatSegment *seg =
-            ARRAY_GET(v->expression->latex.segments,
-            struct LatexFormatSegment, i);
+            ARR_GET(v->expression->latex.segments, i);
           char *str;
           if (seg->is_variable)
           {
             /* Find the corresponding argument. */
             size_t arg_index;
-            for (size_t j = 0; j < ARRAY_LENGTH(v->expression->parameters); ++j)
+            for (size_t j = 0; j < ARR_LENGTH(v->expression->parameters); ++j)
             {
               const struct Parameter *param =
-                ARRAY_GET(v->expression->parameters, struct Parameter, j);
+                ARR_GET(v->expression->parameters, j);
               if (strcmp(param->name, seg->string) == 0)
               {
                 arg_index = j;
                 break;
               }
             }
-            Value *arg = *ARRAY_GET(v->arguments, Value *, arg_index);
+            Value *arg = *ARR_GET(v->arguments, arg_index);
             str = latex_render_value(arg);
           }
           else
           {
             str = latex_render_string(seg->string);
           }
-          ARRAY_APPEND(segments, char *, str);
+          ARR_APPEND(segments, str);
           len += strlen(str);
         }
         result = malloc(len);
         char *result_ptr = result;
-        for (size_t i = 0; i < ARRAY_LENGTH(segments); ++i)
+        for (size_t i = 0; i < ARR_LENGTH(segments); ++i)
         {
-          char *seg = *ARRAY_GET(segments, char *, i);
+          char *seg = *ARR_GET(segments, i);
           strcpy(result_ptr, seg);
           result_ptr += strlen(seg);
         }

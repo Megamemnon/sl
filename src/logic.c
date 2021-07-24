@@ -9,7 +9,7 @@ SymbolPath *
 init_symbol_path()
 {
   SymbolPath *path = malloc(sizeof(SymbolPath));
-  ARRAY_INIT(path->segments, char *);
+  ARR_INIT(path->segments);
   return path;
 }
 
@@ -17,10 +17,9 @@ SymbolPath *
 copy_symbol_path(const SymbolPath *src)
 {
   SymbolPath *dst = init_symbol_path();
-  for (size_t i = 0; i < ARRAY_LENGTH(src->segments); ++i)
+  for (size_t i = 0; i < ARR_LENGTH(src->segments); ++i)
   {
-    ARRAY_APPEND(dst->segments, char *,
-      strdup(*ARRAY_GET(src->segments, char *, i)));
+    ARR_APPEND(dst->segments, strdup(*ARRAY_GET(src->segments, char *, i)));
   }
   return dst;
 }
@@ -28,24 +27,24 @@ copy_symbol_path(const SymbolPath *src)
 void
 free_symbol_path(SymbolPath *path)
 {
-  for (size_t i = 0; i < ARRAY_LENGTH(path->segments); ++i)
+  for (size_t i = 0; i < ARR_LENGTH(path->segments); ++i)
   {
-    free(*ARRAY_GET(path->segments, char *, i));
+    free(*ARR_GET(path->segments, i));
   }
-  ARRAY_FREE(path->segments);
+  ARR_FREE(path->segments);
   free(path);
 }
 
 int
 length_of_symbol_path(const SymbolPath *path)
 {
-  return ARRAY_LENGTH(path->segments);
+  return ARR_LENGTH(path->segments);
 }
 
 const char *
 get_symbol_path_segment(const SymbolPath *path, size_t index)
 {
-  return *ARRAY_GET(path->segments, char *, index);
+  return *ARR_GET(path->segments, index);
 }
 
 const char *
@@ -57,24 +56,24 @@ get_symbol_path_last_segment(const SymbolPath *path)
 char *
 string_from_symbol_path(const SymbolPath *path)
 {
-  if (ARRAY_LENGTH(path->segments) == 0)
+  if (ARR_LENGTH(path->segments) == 0)
     return strdup("");
-  size_t str_len = ARRAY_LENGTH(path->segments);
-  for (size_t i = 0; i < ARRAY_LENGTH(path->segments); ++i)
+  size_t str_len = ARR_LENGTH(path->segments);
+  for (size_t i = 0; i < ARR_LENGTH(path->segments); ++i)
   {
-    const char *segment = *ARRAY_GET(path->segments, char *, i);
+    const char *segment = *ARR_GET(path->segments, i);
     str_len += strlen(segment);
   }
   char *str = malloc(str_len);
   char *c = str;
-  for (size_t i = 0; i < ARRAY_LENGTH(path->segments); ++i)
+  for (size_t i = 0; i < ARR_LENGTH(path->segments); ++i)
   {
     if (i > 0)
     {
       *c = '.';
       ++c;
     }
-    const char *segment = *ARRAY_GET(path->segments, char *, i);
+    const char *segment = *ARR_GET(path->segments, i);
     strcpy(c, segment);
     c += strlen(segment);
   }
@@ -85,22 +84,22 @@ string_from_symbol_path(const SymbolPath *path)
 void
 push_symbol_path(SymbolPath *path, const char *segment)
 {
-  ARRAY_APPEND(path->segments, char *, strdup(segment));
+  ARR_APPEND(path->segments, strdup(segment));
 }
 
 void
 pop_symbol_path(SymbolPath *path)
 {
-  free(*ARRAY_GET(path->segments, char *, ARRAY_LENGTH(path->segments) - 1));
-  ARRAY_POP(path->segments);
+  free(*ARR_GET(path->segments, ARRAY_LENGTH(path->segments) - 1));
+  ARR_POP(path->segments);
 }
 
 void
 append_symbol_path(SymbolPath *path, const SymbolPath *to_append)
 {
-  for (size_t i = 0; i < ARRAY_LENGTH(to_append->segments); ++i)
+  for (size_t i = 0; i < ARR_LENGTH(to_append->segments); ++i)
   {
-    const char *segment = *ARRAY_GET(to_append->segments, char *, i);
+    const char *segment = *ARR_GET(to_append->segments, i);
     push_symbol_path(path, segment);
   }
 }
@@ -108,12 +107,12 @@ append_symbol_path(SymbolPath *path, const SymbolPath *to_append)
 bool
 symbol_paths_equal(const SymbolPath *a, const SymbolPath *b)
 {
-  if (ARRAY_LENGTH(a->segments) != ARRAY_LENGTH(b->segments))
+  if (ARR_LENGTH(a->segments) != ARR_LENGTH(b->segments))
     return FALSE;
-  for (size_t i = 0; i < ARRAY_LENGTH(a->segments); ++i)
+  for (size_t i = 0; i < ARR_LENGTH(a->segments); ++i)
   {
-    const char *a_segment = *ARRAY_GET(a->segments, char *, i);
-    const char *b_segment = *ARRAY_GET(b->segments, char *, i);
+    const char *a_segment = *ARR_GET(a->segments, i);
+    const char *b_segment = *ARR_GET(b->segments, i);
     if (strcmp(a_segment, b_segment) != 0)
       return FALSE;
   }
@@ -138,19 +137,18 @@ free_type(struct Type *type)
 static void
 free_expression(struct Expression *expr)
 {
-  for (size_t i = 0; i < ARRAY_LENGTH(expr->parameters); ++i)
+  for (size_t i = 0; i < ARR_LENGTH(expr->parameters); ++i)
   {
-    struct Parameter *param =
-      ARRAY_GET(expr->parameters, struct Parameter, i);
+    struct Parameter *param = ARR_GET(expr->parameters, i);
     free_parameter(param);
   }
-  ARRAY_FREE(expr->parameters);
-  for (size_t i = 0; i < ARRAY_LENGTH(expr->bindings); ++i)
+  ARR_FREE(expr->parameters);
+  for (size_t i = 0; i < ARR_LENGTH(expr->bindings); ++i)
   {
-    Value *binding = *ARRAY_GET(expr->bindings, Value *, i);
+    Value *binding = *ARR_GET(expr->bindings, i);
     free_value(binding);
   }
-  ARRAY_FREE(expr->bindings);
+  ARR_FREE(expr->bindings);
 }
 
 static char *
@@ -161,7 +159,7 @@ string_from_expression(const struct Expression *expr)
   char *type = string_from_symbol_path(expr->type->path);
   len += strlen(path) + strlen(type) + 3; /* '[NAME] : [TYPE]' */
 
-  if (ARRAY_LENGTH(expr->parameters) == 0)
+  if (ARR_LENGTH(expr->parameters) == 0)
   {
     char *str = malloc(len);
     char *c = str;
@@ -185,19 +183,18 @@ string_from_expression(const struct Expression *expr)
   else
   {
     bool first_param = TRUE;
-    Array param_types;
-    ARRAY_INIT(param_types, char *);
-    for (size_t i = 0; i < ARRAY_LENGTH(expr->parameters); ++i)
+    ARR(char *) param_types;
+    ARR_INIT(param_types);
+    for (size_t i = 0; i < ARR_LENGTH(expr->parameters); ++i)
     {
       if (!first_param)
         len += 2;
       if (first_param)
         first_param = FALSE;
-      const struct Parameter *param =
-        ARRAY_GET(expr->parameters, struct Parameter, i);
+      const struct Parameter *param = ARR_GET(expr->parameters, i);
       char *param_type = string_from_symbol_path(param->type->path);
       len += strlen(param->name) + strlen(param_type) + 3; /* '[NAME] : [TYPE]' */
-      ARRAY_APPEND(param_types, char *, param_type);
+      ARR_APPEND(param_types, param_type);
     }
 
     char *str = malloc(len);
@@ -215,7 +212,7 @@ string_from_expression(const struct Expression *expr)
     *c = '(';
     ++c;
     first_param = TRUE;
-    for (size_t i = 0; i < ARRAY_LENGTH(expr->parameters); ++i)
+    for (size_t i = 0; i < ARR_LENGTH(expr->parameters); ++i)
     {
       if (!first_param)
       {
@@ -224,8 +221,7 @@ string_from_expression(const struct Expression *expr)
       }
       if (first_param)
         first_param = FALSE;
-      const struct Parameter *param =
-        ARRAY_GET(expr->parameters, struct Parameter, i);
+      const struct Parameter *param = ARR_GET(expr->parameters, i);
       char *param_type = *ARRAY_GET(param_types, char *, i);
       strcpy(c, param->name);
       c += strlen(param->name);
@@ -240,7 +236,7 @@ string_from_expression(const struct Expression *expr)
     *c = '\0';
     free(path);
     free(type);
-    ARRAY_FREE(param_types);
+    ARR_FREE(param_types);
     return str;
   }
 }
@@ -249,29 +245,26 @@ string_from_expression(const struct Expression *expr)
 static void
 free_theorem(struct Theorem *thm)
 {
-  for (size_t i = 0; i < ARRAY_LENGTH(thm->parameters); ++i)
+  for (size_t i = 0; i < ARR_LENGTH(thm->parameters); ++i)
   {
-    struct Parameter *param =
-      ARRAY_GET(thm->parameters, struct Parameter, i);
+    struct Parameter *param = ARR_GET(thm->parameters, i);
     free_parameter(param);
   }
-  ARRAY_FREE(thm->parameters);
+  ARR_FREE(thm->parameters);
 
-  for (size_t i = 0; i < ARRAY_LENGTH(thm->assumptions); ++i)
+  for (size_t i = 0; i < ARR_LENGTH(thm->assumptions); ++i)
   {
-    struct Value *value =
-      *ARRAY_GET(thm->assumptions, struct Value *, i);
+    struct Value *value = *ARR_GET(thm->assumptions, i);
     free_value(value);
   }
-  ARRAY_FREE(thm->assumptions);
+  ARR_FREE(thm->assumptions);
 
-  for (size_t i = 0; i < ARRAY_LENGTH(thm->inferences); ++i)
+  for (size_t i = 0; i < ARR_LENGTH(thm->inferences); ++i)
   {
-    struct Value *value =
-      *ARRAY_GET(thm->inferences, struct Value *, i);
+    struct Value *value = *ARR_GET(thm->inferences, i);
     free_value(value);
   }
-  ARRAY_FREE(thm->inferences);
+  ARR_FREE(thm->inferences);
 }
 
 /* Symbols */
@@ -299,7 +292,7 @@ LogicState *
 new_logic_state(FILE *log_out)
 {
   LogicState *state = malloc(sizeof(LogicState));
-  ARRAY_INIT(state->symbol_table, struct Symbol);
+  ARR_INIT(state->symbol_table);
   state->next_id = 0;
   state->log_out = log_out;
   return state;
@@ -308,23 +301,21 @@ new_logic_state(FILE *log_out)
 void
 free_logic_state(LogicState *state)
 {
-  for (size_t i = 0; i < ARRAY_LENGTH(state->symbol_table); ++i)
+  for (size_t i = 0; i < ARR_LENGTH(state->symbol_table); ++i)
   {
-    struct Symbol *sym =
-      ARRAY_GET(state->symbol_table, struct Symbol, i);
+    struct Symbol *sym = ARR_GET(state->symbol_table, i);
     free_symbol(sym);
   }
-  ARRAY_FREE(state->symbol_table);
+  ARR_FREE(state->symbol_table);
   free(state);
 }
 
 bool
 logic_state_path_occupied(const LogicState *state, const SymbolPath *path)
 {
-  for (size_t i = 0; i < ARRAY_LENGTH(state->symbol_table); ++i)
+  for (size_t i = 0; i < ARR_LENGTH(state->symbol_table); ++i)
   {
-    struct Symbol *sym =
-      ARRAY_GET(state->symbol_table, struct Symbol, i);
+    struct Symbol *sym = ARR_GET(state->symbol_table, i);
     if (symbol_paths_equal(sym->path, path))
       return TRUE;
   }
@@ -345,10 +336,9 @@ find_first_occupied_path(const LogicState *state, SymbolPath **paths)
 static struct Symbol *
 locate_symbol(LogicState *state, const SymbolPath *path)
 {
-  for (size_t i = 0; i < ARRAY_LENGTH(state->symbol_table); ++i)
+  for (size_t i = 0; i < ARR_LENGTH(state->symbol_table); ++i)
   {
-    struct Symbol *sym =
-      ARRAY_GET(state->symbol_table, struct Symbol, i);
+    struct Symbol *sym = ARR_GET(state->symbol_table, i);
     if (symbol_paths_equal(sym->path, path))
       return sym;
   }
@@ -370,7 +360,7 @@ locate_symbol_with_type(LogicState *state, const SymbolPath *path,
 static void
 add_symbol(LogicState *state, struct Symbol sym)
 {
-  ARRAY_APPEND(state->symbol_table, struct Symbol, sym);
+  ARR_APPEND(state->symbol_table, sym);
 }
 
 LogicError
@@ -406,7 +396,7 @@ add_type(LogicState *state, struct PrototypeType proto)
   return LogicErrorNone;
 }
 
-static bool
+bool
 types_equal(const struct Type *a, const struct Type *b)
 {
   return (a->id == b->id) ? TRUE : FALSE;
@@ -445,14 +435,14 @@ add_constant(LogicState *state, struct PrototypeConstant proto)
   if (proto.latex.segments != NULL)
   {
     c->has_latex = TRUE;
-    ARRAY_INIT(c->latex.segments, struct LatexFormatSegment);
+    ARR_INIT(c->latex.segments);
     for (struct PrototypeLatexFormatSegment **seg = proto.latex.segments;
       *seg != NULL; ++seg)
     {
       struct LatexFormatSegment new_seg;
       new_seg.is_variable = (*seg)->is_variable;
       new_seg.string = strdup((*seg)->string);
-      ARRAY_APPEND(c->latex.segments, struct LatexFormatSegment, new_seg);
+      ARR_APPEND(c->latex.segments, new_seg);
     }
   }
   else
@@ -510,14 +500,14 @@ add_expression(LogicState *state, struct PrototypeExpression proto)
   if (proto.latex.segments != NULL)
   {
     e->has_latex = TRUE;
-    ARRAY_INIT(e->latex.segments, struct LatexFormatSegment);
+    ARR_INIT(e->latex.segments);
     for (struct PrototypeLatexFormatSegment **seg = proto.latex.segments;
       *seg != NULL; ++seg)
     {
       struct LatexFormatSegment new_seg;
       new_seg.is_variable = (*seg)->is_variable;
       new_seg.string = strdup((*seg)->string);
-      ARRAY_APPEND(e->latex.segments, struct LatexFormatSegment, new_seg);
+      ARR_APPEND(e->latex.segments, new_seg);
     }
   }
   else
@@ -539,7 +529,7 @@ add_expression(LogicState *state, struct PrototypeExpression proto)
     return LogicErrorSymbolAlreadyExists;
   }
 
-  ARRAY_INIT(e->parameters, struct Parameter);
+  ARR_INIT(e->parameters);
   for (struct PrototypeParameter **param = proto.parameters;
     *param != NULL; ++param)
   {
@@ -561,15 +551,15 @@ add_expression(LogicState *state, struct PrototypeExpression proto)
     }
     p.type = (struct Type *)type_symbol->object;
     p.name = strdup((*param)->name);
-    ARRAY_APPEND(e->parameters, struct Parameter, p);
+    ARR_APPEND(e->parameters, p);
   }
 
-  ARRAY_INIT(e->bindings, Value *);
+  ARR_INIT(e->bindings);
   if (proto.bindings != NULL)
   {
     for (Value **binding = proto.bindings; *binding != NULL; ++binding)
     {
-      ARRAY_APPEND(e->bindings, Value *, copy_value(*binding));
+      ARR_APPEND(e->bindings, copy_value(*binding));
     }
   }
 
@@ -592,9 +582,9 @@ add_expression(LogicState *state, struct PrototypeExpression proto)
     LOG_VERBOSE(state->log_out, "Signature: '%s'.\n", expr_str);
     free(expr_str);
 
-    for (size_t i = 0; i < ARRAY_LENGTH(e->bindings); ++i)
+    for (size_t i = 0; i < ARR_LENGTH(e->bindings); ++i)
     {
-      Value *binding = *ARRAY_GET(e->bindings, Value *, i);
+      Value *binding = *ARR_GET(e->bindings, i);
       char *binding_str = string_from_value(binding);
       LOG_VERBOSE(state->log_out, "Binds: '%s'.\n", binding_str);
       free(binding_str);
@@ -605,330 +595,6 @@ add_expression(LogicState *state, struct PrototypeExpression proto)
 }
 
 /* Values */
-void
-free_value(Value *value)
-{
-  if (value->value_type == ValueTypeVariable)
-  {
-    free(value->variable_name);
-  }
-  else if (value->value_type == ValueTypeConstant)
-  {
-
-  }
-  else if (value->value_type == ValueTypeComposition)
-  {
-    for (size_t i = 0; i < ARRAY_LENGTH(value->arguments); ++i)
-    {
-      Value *arg = *ARRAY_GET(value->arguments, Value *, i);
-      free_value(arg);
-    }
-    ARRAY_FREE(value->arguments);
-  }
-  free(value);
-}
-
-static void
-copy_value_to(Value *dst, const Value *src)
-{
-  dst->value_type = src->value_type;
-  dst->type = src->type;
-  dst->bound = src->bound;
-  if (src->value_type == ValueTypeVariable)
-  {
-    dst->variable_name = strdup(src->variable_name);
-  }
-  else if (src->value_type == ValueTypeConstant)
-  {
-    dst->constant = src->constant;
-  }
-  else if (src->value_type == ValueTypeComposition)
-  {
-    dst->expression = src->expression;
-    ARRAY_INIT(dst->arguments, Value *);
-    for (size_t i = 0; i < ARRAY_LENGTH(src->arguments); ++i)
-    {
-      const struct Value *arg =
-        *ARRAY_GET(src->arguments, Value *, i);
-      struct Value *arg_copy = copy_value(arg);
-      ARRAY_APPEND(dst->arguments, Value *, arg_copy);
-    }
-  }
-}
-
-Value *
-copy_value(const Value *value)
-{
-  Value *v = malloc(sizeof(Value));
-  copy_value_to(v, value);
-  return v;
-}
-
-bool
-values_equal(const Value *a, const Value *b)
-{
-  /* DO NOT compare `bound`. */
-  if (a->value_type != b->value_type)
-    return FALSE;
-  switch (a->value_type)
-  {
-    case ValueTypeConstant:
-      if (a->constant != b->constant) /* TODO: test for equivalence of constants, not for pointer equality. */
-        return FALSE;
-      break;
-    case ValueTypeVariable:
-      if (!types_equal(a->type, b->type))
-        return FALSE;
-      if (strcmp(a->variable_name, b->variable_name) != 0)
-        return FALSE;
-      break;
-    case ValueTypeComposition:
-      if (!types_equal(a->type, b->type))
-        return FALSE;
-      if (a->expression != b->expression) /* TODO: Use an equivalence function instead of pointer equality. */
-        return FALSE;
-      if (ARRAY_LENGTH(a->arguments) != ARRAY_LENGTH(b->arguments))
-        return FALSE;
-      for (size_t i = 0; i < ARRAY_LENGTH(a->arguments); ++i)
-      {
-        const Value *arg_a = *ARRAY_GET(a->arguments, Value *, i);
-        const Value *arg_b = *ARRAY_GET(b->arguments, Value *, i);
-        if (!values_equal(arg_a, arg_b))
-          return FALSE;
-      }
-      break;
-  }
-  return TRUE;
-}
-
-bool
-value_terminal(const Value *v)
-{
-  switch (v->value_type)
-  {
-    case ValueTypeConstant:
-      return TRUE;
-      break;
-    case ValueTypeVariable:
-      return v->type->atomic;
-      break;
-    case ValueTypeComposition:
-      for (size_t i = 0; i < ARRAY_LENGTH(v->arguments); ++i)
-      {
-        Value *arg = *ARRAY_GET(v->arguments, Value *, i);
-        if (!value_terminal(arg))
-          return FALSE;
-      }
-      return TRUE;
-      break;
-  }
-}
-
-char *
-string_from_value(const Value *value)
-{
-  switch (value->value_type)
-  {
-    case ValueTypeComposition:
-      {
-        char *expr_str = string_from_symbol_path(value->expression->path);
-        char *str;
-        if (ARRAY_LENGTH(value->arguments) == 0)
-        {
-          size_t len = 3 + strlen(expr_str);
-          if (value->bound)
-            len += 1;
-          str = malloc(len);
-          char *c = str;
-          if (value->bound)
-          {
-            *c = '!';
-            ++c;
-          }
-          strcpy(c, expr_str);
-          c += strlen(expr_str);
-          strcpy(c, "()");
-          c += 2;
-          *c = '\0';
-          return str;
-        }
-        else
-        {
-          size_t len = 3 + strlen(expr_str);
-          if (value->bound)
-            len += 1;
-          char **args = malloc(sizeof(char *) * ARRAY_LENGTH(value->arguments));
-          for (size_t i = 0; i < ARRAY_LENGTH(value->arguments); ++i)
-          {
-            const struct Value *arg =
-              *ARRAY_GET(value->arguments, struct Value *, i);
-            args[i] = string_from_value(arg);
-            len += strlen(args[i]);
-          }
-          len += (ARRAY_LENGTH(value->arguments) - 1) * 2;
-
-          str = malloc(len);
-          char *c = str;
-          if (value->bound)
-          {
-            *c = '!';
-            ++c;
-          }
-          strcpy(c, expr_str);
-          c += strlen(expr_str);
-          *c = '(';
-          ++c;
-          bool first_arg = TRUE;
-          for (size_t i = 0; i < ARRAY_LENGTH(value->arguments); ++i)
-          {
-            if (!first_arg)
-            {
-              strcpy(c, ", ");
-              c += 2;
-            }
-            if (first_arg)
-              first_arg = FALSE;
-            strcpy(c, args[i]);
-            c += strlen(args[i]);
-            free(args[i]);
-          }
-          free(args);
-          *c = ')';
-          ++c;
-          *c = '\0';
-          ++c;
-        }
-        free(expr_str);
-        return str;
-      }
-      break;
-    case ValueTypeConstant:
-      {
-        char *const_str = string_from_symbol_path(value->constant->path);
-        size_t len = 1 + strlen(const_str);
-        if (value->bound)
-          len += 1;
-        char *str = malloc(len);
-        char *c = str;
-        if (value->bound)
-        {
-          *c = '!';
-          ++c;
-        }
-        strcpy(c, const_str);
-        c += strlen(const_str);
-        *c = '\0';
-        free(const_str);
-        return str;
-      }
-      break;
-    case ValueTypeVariable:
-      {
-        size_t len = 2 + strlen(value->variable_name);
-        if (value->bound)
-          len += 1;
-        char *str = malloc(len);
-        char *c = str;
-        if (value->bound)
-        {
-          *c = '!';
-          ++c;
-        }
-        *c = '$';
-        ++c;
-        strcpy(c, value->variable_name);
-        c += strlen(value->variable_name);
-        *c = '\0';
-        return str;
-      }
-      break;
-  }
-}
-
-static void
-enumerate_value_occurrences(const Value *target, const Value *search_in,
-  Array *occurrences)
-{
-  if (values_equal(target, search_in))
-  {
-    ARRAY_APPEND(*occurrences, const Value *, search_in);
-  }
-  else if (search_in->value_type == ValueTypeComposition)
-  {
-    for (size_t i = 0; i < ARRAY_LENGTH(search_in->arguments); ++i)
-    {
-      const Value *arg = *ARRAY_GET(search_in->arguments, Value *, i);
-      enumerate_value_occurrences(target, arg, occurrences);
-    }
-  }
-}
-
-static Value *
-instantiate_value(struct LogicState *state, const Value *src, Array args)
-{
-  switch (src->value_type)
-  {
-    case ValueTypeConstant:
-      return copy_value(src);
-      break;
-    case ValueTypeVariable:
-      /* Find the corresponding argument. */
-      {
-        const struct Argument *arg = NULL;
-        for (size_t i = 0; i < ARRAY_LENGTH(args); ++i)
-        {
-          const struct Argument *a = ARRAY_GET(args, struct Argument, i);
-          if (strcmp(a->name, src->variable_name) == 0)
-          {
-            arg = a;
-            break;
-          }
-        }
-        if (arg == NULL)
-        {
-          char *value_str = string_from_value(src);
-          LOG_NORMAL(state->log_out,
-            "Cannot instantiate value '%s' because there is no matching argument.\n",
-            value_str);
-          free(value_str);
-          return NULL;
-        }
-        if (!types_equal(arg->value->type, src->type))
-        {
-          char *value_str = string_from_value(src);
-          char *src_type = string_from_symbol_path(src->type->path);
-          char *arg_type = string_from_symbol_path(arg->value->type->path);
-          LOG_NORMAL(state->log_out,
-            "Cannot instantiate value '%s' of type '%s' because the variable has type '%s'.\n",
-            value_str, src_type, arg_type);
-          free(value_str);
-          free(src_type);
-          free(arg_type);
-          return NULL;
-        }
-        return copy_value(arg->value);
-      }
-      break;
-    case ValueTypeComposition:
-      {
-        Value *dst = malloc(sizeof(Value));
-        dst->type = src->type;
-        dst->value_type = ValueTypeComposition;
-        dst->expression = src->expression;
-        ARRAY_INIT(dst->arguments, struct Value);
-        for (size_t i = 0; i < ARRAY_LENGTH(src->arguments); ++i)
-        {
-          const Value *arg = *ARRAY_GET(src->arguments, struct Value *, i);
-          ARRAY_APPEND(dst->arguments, Value *,
-            instantiate_value(state, arg, args));
-        }
-        return dst;
-      }
-      break;
-  }
-  return 0;
-}
-
 Value *
 new_variable_value(LogicState *state, const char *name, const SymbolPath *type)
 {
@@ -1001,17 +667,16 @@ new_composition_value(LogicState *state, const SymbolPath *expr_path,
   value->expression = (struct Expression *)expr_symbol->object;
   value->type = value->expression->type;
 
-  ARRAY_INIT(value->arguments, Value *);
+  ARR_INIT(value->arguments);
   for (Value * const *arg = args;
     *arg != NULL; ++arg)
   {
-    ARRAY_APPEND(value->arguments, Value *, copy_value(*arg));
+    ARR_APPEND(value->arguments, copy_value(*arg));
   }
 
   /* Make sure that the arguments match the types of the parameters of
      the expression. */
-  if (ARRAY_LENGTH(value->arguments) !=
-    ARRAY_LENGTH(value->expression->parameters))
+  if (ARR_LENGTH(value->arguments) != ARR_LENGTH(value->expression->parameters))
   {
     char *expr_str = string_from_symbol_path(expr_path);
     LOG_NORMAL(state->log_out,
@@ -1021,17 +686,16 @@ new_composition_value(LogicState *state, const SymbolPath *expr_path,
     free_value(value);
     return NULL;
   }
-  Array args_array;
-  ARRAY_INIT(args_array, struct Argument);
-  for (size_t i = 0; i < ARRAY_LENGTH(value->arguments); ++i)
+  ArgumentArray args_array;
+  ARR_INIT(args_array);
+  for (size_t i = 0; i < ARR_LENGTH(value->arguments); ++i)
   {
-    Value *arg = *ARRAY_GET(value->arguments, Value *, i);
-    const struct Parameter *param =
-      ARRAY_GET(value->expression->parameters, struct Parameter, i);
+    Value *arg = *ARR_GET(value->arguments, i);
+    const struct Parameter *param = ARR_GET(value->expression->parameters, i);
     struct Argument argument;
     argument.name = strdup(param->name);
     argument.value = copy_value(arg);
-    ARRAY_APPEND(args_array, struct Argument, argument);
+    ARR_APPEND(args_array, argument);
     if (!types_equal(arg->type, param->type))
     {
       char *expr_str = string_from_symbol_path(expr_path);
@@ -1046,20 +710,20 @@ new_composition_value(LogicState *state, const SymbolPath *expr_path,
 
   /* Look for things to bind. */
   /* TODO: things are getting bound that should be free, like constants. */
-  for (size_t i = 0; i < ARRAY_LENGTH(value->expression->bindings); ++i)
+  for (size_t i = 0; i < ARR_LENGTH(value->expression->bindings); ++i)
   {
-    const Value *binding = *ARRAY_GET(value->expression->bindings, Value *, i);
+    const Value *binding = *ARR_GET(value->expression->bindings, i);
     Value *instantiated = instantiate_value(state, binding, args_array);
 
-    Array occurrences;
-    ARRAY_INIT(occurrences, Value *);
+    ValueArray occurrences;
+    ARR_INIT(occurrences);
     enumerate_value_occurrences(instantiated, value, &occurrences);
-    for (size_t j = 0; j < ARRAY_LENGTH(occurrences); ++j)
+    for (size_t j = 0; j < ARR_LENGTH(occurrences); ++j)
     {
-      Value *occurrence = *ARRAY_GET(occurrences, Value *, j);
+      Value *occurrence = *ARR_GET(occurrences, j);
       occurrence->bound = TRUE;
     }
-    ARRAY_FREE(occurrences);
+    ARR_FREE(occurrences);
 
     free_value(instantiated);
   }
@@ -1085,7 +749,7 @@ add_axiom(LogicState *state, struct PrototypeTheorem proto)
   ++state->next_id;
 
   /* Parameters. */
-  ARRAY_INIT(a->parameters, struct Parameter);
+  ARR_INIT(a->parameters);
   for (struct PrototypeParameter **param = proto.parameters;
     *param != NULL; ++param)
   {
@@ -1107,20 +771,20 @@ add_axiom(LogicState *state, struct PrototypeTheorem proto)
     }
     p.type = (struct Type *)type_symbol->object;
     p.name = strdup((*param)->name);
-    ARRAY_APPEND(a->parameters, struct Parameter, p);
+    ARR_APPEND(a->parameters, p);
   }
 
   /* Requirements. */
-  ARRAY_INIT(a->requirements, struct Requirement);
+  ARR_INIT(a->requirements);
   for (struct PrototypeRequirement **req = proto.requirements;
     *req != NULL; ++req)
   {
     struct Requirement requirement;
 
-    ARRAY_INIT(requirement.arguments, Value *);
+    ARR_INIT(requirement.arguments);
     for (Value **arg = (*req)->arguments; *arg != NULL; ++arg)
     {
-      ARRAY_APPEND(requirement.arguments, Value *, copy_value(*arg));
+      ARR_APPEND(requirement.arguments, copy_value(*arg));
     }
 
     /* Make sure that the number of arguments match the type. */
@@ -1129,25 +793,25 @@ add_axiom(LogicState *state, struct PrototypeTheorem proto)
     if (strcmp((*req)->require, "free_for") == 0)
     {
       requirement.type = RequirementTypeFreeFor;
-      if (ARRAY_LENGTH(requirement.arguments) != 3)
+      if (ARR_LENGTH(requirement.arguments) != 3)
         return LogicErrorSymbolAlreadyExists;
     }
     else if (strcmp((*req)->require, "not_free") == 0)
     {
       requirement.type = RequirementTypeNotFree;
-      if (ARRAY_LENGTH(requirement.arguments) != 2)
+      if (ARR_LENGTH(requirement.arguments) != 2)
         return LogicErrorSymbolAlreadyExists;
     }
     else if (strcmp((*req)->require, "substitution") == 0)
     {
       requirement.type = RequirementTypeSubstitution;
-      if (ARRAY_LENGTH(requirement.arguments) != 4)
+      if (ARR_LENGTH(requirement.arguments) != 4)
         return LogicErrorSymbolAlreadyExists;
     }
     else if (strcmp((*req)->require, "full_substitution") == 0)
     {
       requirement.type = RequirementTypeFullSubstitution;
-      if (ARRAY_LENGTH(requirement.arguments) != 4)
+      if (ARR_LENGTH(requirement.arguments) != 4)
         return LogicErrorSymbolAlreadyExists;
     }
     else
@@ -1156,21 +820,21 @@ add_axiom(LogicState *state, struct PrototypeTheorem proto)
       continue;
     }
 
-    ARRAY_APPEND(a->requirements, struct Requirement, requirement);
+    ARR_APPEND(a->requirements, requirement);
   }
 
   /* Assumptions & inferences. */
-  ARRAY_INIT(a->assumptions, struct Value *);
-  ARRAY_INIT(a->inferences, struct Value *);
+  ARR_INIT(a->assumptions);
+  ARR_INIT(a->inferences);
   for (Value **assume = proto.assumptions;
     *assume != NULL; ++assume)
   {
-    ARRAY_APPEND(a->assumptions, struct Value *, copy_value(*assume));
+    ARR_APPEND(a->assumptions, copy_value(*assume));
   }
   for (Value **infer = proto.inferences;
     *infer != NULL; ++infer)
   {
-    ARRAY_APPEND(a->inferences, struct Value *, copy_value(*infer));
+    ARR_APPEND(a->inferences, copy_value(*infer));
   }
 
   struct Symbol sym;
@@ -1189,17 +853,15 @@ add_axiom(LogicState *state, struct PrototypeTheorem proto)
 
   if (verbose)
   {
-    for (size_t i = 0; i < ARRAY_LENGTH(a->assumptions); ++i)
+    for (size_t i = 0; i < ARR_LENGTH(a->assumptions); ++i)
     {
-      char *str = string_from_value(*ARRAY_GET(a->assumptions,
-        struct Value *, i));
+      char *str = string_from_value(*ARR_GET(a->assumptions, i));
       printf("Assumption %zu: %s\n", i, str);
       free(str);
     }
-    for (size_t i = 0; i < ARRAY_LENGTH(a->inferences); ++i)
+    for (size_t i = 0; i < ARR_LENGTH(a->inferences); ++i)
     {
-      char *str = string_from_value(*ARRAY_GET(a->inferences,
-        struct Value *, i));
+      char *str = string_from_value(*ARR_GET(a->inferences, i));
       printf("Inference %zu: %s\n", i, str);
       free(str);
     }
@@ -1212,332 +874,95 @@ add_axiom(LogicState *state, struct PrototypeTheorem proto)
 }
 
 static bool
-statement_proven(const Value *statement, Array proven)
+statement_proven(const Value *statement, ValueArray proven)
 {
-  for (size_t i = 0; i < ARRAY_LENGTH(proven); ++i)
+  for (size_t i = 0; i < ARR_LENGTH(proven); ++i)
   {
-    const Value *s = *ARRAY_GET(proven, Value *, i);
+    const Value *s = *ARR_GET(proven, i);
     if (values_equal(statement, s))
       return TRUE;
   }
   return FALSE;
 }
 
-static void
-make_substitution_in_place(const Value *source, const Value *target,
-  Value *context)
-{
-  if (values_equal(target, context))
-  {
-    copy_value_to(context, source);
-  }
-  else if (context->value_type == ValueTypeComposition)
-  {
-    for (size_t i = 0; i < ARRAY_LENGTH(context->arguments); ++i)
-    {
-      Value *arg = *ARRAY_GET(context->arguments, Value *, i);
-        make_substitution_in_place(source, target, arg);
-    }
-  }
-}
-
-static bool
-new_bindings_exist(LogicState *state, const Value *context)
-{
-  if (context->value_type == ValueTypeComposition)
-  {
-    Array args_array;
-    ARRAY_INIT(args_array, struct Argument);
-    for (size_t i = 0; i < ARRAY_LENGTH(context->arguments); ++i)
-    {
-      Value *arg = *ARRAY_GET(context->arguments, Value *, i);
-      bool child_binds = new_bindings_exist(state, arg);
-      if (child_binds)
-        return TRUE;
-
-      const struct Parameter *param =
-        ARRAY_GET(context->expression->parameters, struct Parameter, i);
-      struct Argument argument;
-      argument.name = strdup(param->name);
-      argument.value = copy_value(arg);
-      ARRAY_APPEND(args_array, struct Argument, argument);
-    }
-
-    /* Look for things to bind. */
-    for (size_t i = 0; i < ARRAY_LENGTH(context->expression->bindings); ++i)
-    {
-      const Value *binding =
-        *ARRAY_GET(context->expression->bindings, Value *, i);
-      Value *instantiated = instantiate_value(state, binding, args_array);
-
-      Array occurrences;
-      ARRAY_INIT(occurrences, Value *);
-      enumerate_value_occurrences(instantiated, context, &occurrences);
-      for (size_t j = 0; j < ARRAY_LENGTH(occurrences); ++j)
-      {
-        Value *occurrence = *ARRAY_GET(occurrences, Value *, j);
-        if (occurrence->bound == FALSE)
-          return TRUE;
-      }
-      ARRAY_FREE(occurrences);
-
-      free_value(instantiated);
-    }
-  }
-  return FALSE;
-}
-
-static bool
-substitution_is_binding(LogicState *state, const Value *source,
-  const Value *target, const Value *context)
-{
-  Value *ctx = copy_value(context);
-
-  /* Make the substitution in place. Then traverse the tree, and at each
-     composition node, try to make new bindings. */
-  make_substitution_in_place(source, target, ctx);
-
-  return new_bindings_exist(state, ctx);
-}
-
-static bool
-evaluate_free_for(struct LogicState *state,
-  const Value *source, const Value *target, const Value *context)
-{
-  /* Special case: anything is always free for itself. */
-  if (values_equal(source, target))
-    return TRUE;
-
-  /* TODO: Instead of requiring everything to be terminal, in cases that
-     we have non-terminals, figure out what must be required in order to
-     make it work and check for that requirement in the environment. */
-  if (!value_terminal(source) || !value_terminal(target)
-    || !value_terminal(context))
-    return FALSE;
-
-  return !substitution_is_binding(state, source, target, context);
-}
-
-static bool
-evaluate_not_free(struct LogicState *state,
-  const Value *target, const Value *context)
-{
-  /* TODO: Instead of requiring everything to be terminal, in cases that
-     we have non-terminals, figure out what must be required in order to
-     make it work and check for that requirement in the environment. */
-  if (!value_terminal(target) || !value_terminal(context))
-    return FALSE;
-
-  bool not_free = TRUE;
-  Array occurrences;
-  ARRAY_INIT(occurrences, const Value *);
-  enumerate_value_occurrences(target, context, &occurrences);
-  for (size_t i = 0; i < ARRAY_LENGTH(occurrences); ++i)
-  {
-    const Value *occurrence = *ARRAY_GET(occurrences, const Value *, i);
-    if (!occurrence->bound)
-      not_free = FALSE;
-  }
-  ARRAY_FREE(occurrences);
-
-  return not_free;
-}
-
-static bool
-is_substitution(const Value *target, const Value *context,
-  const Value *source, const Value *new_context)
-{
-  if (values_equal(target, context))
-  {
-    if (values_equal(source, new_context))
-      return TRUE;
-    else if (values_equal(target, new_context))
-      return TRUE;
-    else
-      return FALSE;
-  }
-  else if (context->value_type == ValueTypeComposition)
-  {
-    if (new_context->value_type != ValueTypeComposition)
-      return FALSE;
-    if (ARRAY_LENGTH(context->arguments) !=
-      ARRAY_LENGTH(new_context->arguments))
-      return FALSE;
-    for (size_t i = 0; i < ARRAY_LENGTH(context->arguments); ++i)
-    {
-      const Value *ctx_arg = *ARRAY_GET(context->arguments, Value *, i);
-      const Value *new_ctx_arg =
-        *ARRAY_GET(new_context->arguments, Value *, i);
-      if (!is_substitution(target, ctx_arg, source, new_ctx_arg))
-        return FALSE;
-    }
-    return TRUE;
-  }
-  else
-  {
-    if (values_equal(context, new_context))
-      return TRUE;
-    else
-      return FALSE;
-  }
-}
-
-static bool
-evaluate_substitution(struct LogicState *state,
-  const Value *target, const Value *context,
-  const Value *source, const Value *new_context)
-{
-  /* As a special case that doesn't (and cannot) require evaluation,
-     always return true when performing the identity substitution. */
-  if (values_equal(target, source) && values_equal(context, new_context))
-    return TRUE;
-
-  /* TODO: Instead of requiring everything to be terminal, in cases that
-     we have non-terminals, figure out what must be required in order to
-     make it work and check for that requirement in the environment. */
-  if (!value_terminal(target) || !value_terminal(context)
-    || !value_terminal(source) || !value_terminal(new_context))
-    return FALSE;
-
-  return is_substitution(target, context, source, new_context);
-}
-
-static bool
-is_full_substitution(const Value *target, const Value *context,
-  const Value *source, const Value *new_context)
-{
-  if (values_equal(target, context))
-  {
-    if (values_equal(source, new_context))
-      return TRUE;
-    else
-      return FALSE;
-  }
-  else if (context->value_type == ValueTypeComposition)
-  {
-    if (new_context->value_type != ValueTypeComposition)
-      return FALSE;
-    if (ARRAY_LENGTH(context->arguments) !=
-      ARRAY_LENGTH(new_context->arguments))
-      return FALSE;
-    for (size_t i = 0; i < ARRAY_LENGTH(context->arguments); ++i)
-    {
-      const Value *ctx_arg = *ARRAY_GET(context->arguments, Value *, i);
-      const Value *new_ctx_arg =
-        *ARRAY_GET(new_context->arguments, Value *, i);
-      if (!is_full_substitution(target, ctx_arg, source, new_ctx_arg))
-        return FALSE;
-    }
-    return TRUE;
-  }
-  else
-  {
-    if (values_equal(context, new_context))
-      return TRUE;
-    else
-      return FALSE;
-  }
-}
-
-static bool
-evaluate_full_substitution(struct LogicState *state,
-  const Value *target, const Value *context,
-  const Value *source, const Value *new_context)
-{
-  /* As a special case that doesn't (and cannot) require evaluation,
-     always return true when performing the identity substitution. */
-  if (values_equal(target, source) && values_equal(context, new_context))
-    return TRUE;
-
-  /* TODO: Instead of requiring everything to be terminal, in cases that
-     we have non-terminals, figure out what must be required in order to
-     make it work and check for that requirement in the environment. */
-  if (!value_terminal(target) || !value_terminal(context)
-    || !value_terminal(source) || !value_terminal(new_context))
-    return FALSE;
-
-  return is_substitution(target, context, source, new_context);
-}
-
 int
 instantiate_theorem(struct LogicState *state,
-  const struct Theorem *src, Array args, Array *proven, bool force)
+  const struct Theorem *src, ArgumentArray args, ValueArray *proven, bool force)
 {
   /* Check the requirements. */
   if (!force)
   {
-    for (size_t i = 0; i < ARRAY_LENGTH(src->requirements); ++i)
+    for (size_t i = 0; i < ARR_LENGTH(src->requirements); ++i)
     {
       bool satisfied = FALSE;
-      const struct Requirement *req =
-        ARRAY_GET(src->requirements, struct Requirement, i);
+      const struct Requirement *req = ARR_GET(src->requirements, i);
 
-      Array instantiated_args;
-      ARRAY_INIT(instantiated_args, Value *);
-      for (size_t j = 0; j < ARRAY_LENGTH(req->arguments); ++j)
+      ARR(Value *) instantiated_args;
+      ARR_INIT(instantiated_args);
+      for (size_t j = 0; j < ARR_LENGTH(req->arguments); ++j)
       {
-        const Value *arg = *ARRAY_GET(req->arguments, Value *, j);
+        const Value *arg = *ARR_GET(req->arguments, j);
         Value *instantiated = instantiate_value(state, arg, args);
-        ARRAY_APPEND(instantiated_args, Value *, instantiated);
+        ARR_APPEND(instantiated_args, instantiated);
       }
 
       switch (req->type)
       {
         case RequirementTypeFreeFor:
           {
-            if (ARRAY_LENGTH(instantiated_args) != 3)
+            if (ARR_LENGTH(instantiated_args) != 3)
             {
               LOG_NORMAL(state->log_out,
                 "Requirement has wrong number of arguments");
               return 1;
             }
-            const Value *source = *ARRAY_GET(instantiated_args, Value *, 0);
-            const Value *target = *ARRAY_GET(instantiated_args, Value *, 1);
-            const Value *context = *ARRAY_GET(instantiated_args, Value *, 2);
+            const Value *source = *ARR_GET(instantiated_args, 0);
+            const Value *target = *ARR_GET(instantiated_args, 1);
+            const Value *context = *ARR_GET(instantiated_args, 2);
             satisfied = evaluate_free_for(state, source, target, context);
           }
           break;
         case RequirementTypeNotFree:
           {
-            if (ARRAY_LENGTH(instantiated_args) != 2)
+            if (ARR_LENGTH(instantiated_args) != 2)
             {
               LOG_NORMAL(state->log_out,
                 "Requirement has wrong number of arguments");
               return 1;
             }
-            const Value *target = *ARRAY_GET(instantiated_args, Value *, 0);
-            const Value *context = *ARRAY_GET(instantiated_args, Value *, 1);
+            const Value *target = *ARR_GET(instantiated_args, 0);
+            const Value *context = *ARR_GET(instantiated_args, 1);
             satisfied = evaluate_not_free(state, target, context);
           }
           break;
         case RequirementTypeSubstitution:
           {
-            if (ARRAY_LENGTH(instantiated_args) != 4)
+            if (ARR_LENGTH(instantiated_args) != 4)
             {
               LOG_NORMAL(state->log_out,
                 "Requirement has wrong number of arguments");
               return 1;
             }
-            const Value *target = *ARRAY_GET(instantiated_args, Value *, 0);
-            const Value *context = *ARRAY_GET(instantiated_args, Value *, 1);
-            const Value *source = *ARRAY_GET(instantiated_args, Value *, 2);
-            const Value *new_context = *ARRAY_GET(instantiated_args, Value *, 3);
+            const Value *target = *ARR_GET(instantiated_args, 0);
+            const Value *context = *ARR_GET(instantiated_args, 1);
+            const Value *source = *ARR_GET(instantiated_args, 2);
+            const Value *new_context = *ARR_GET(instantiated_args, 3);
             satisfied = evaluate_substitution(state, target, context,
               source, new_context);
           }
           break;
         case RequirementTypeFullSubstitution:
           {
-            if (ARRAY_LENGTH(instantiated_args) != 4)
+            if (ARR_LENGTH(instantiated_args) != 4)
             {
               LOG_NORMAL(state->log_out,
                 "Requirement has wrong number of arguments");
               return 1;
             }
-            const Value *target = *ARRAY_GET(instantiated_args, Value *, 0);
-            const Value *context = *ARRAY_GET(instantiated_args, Value *, 1);
-            const Value *source = *ARRAY_GET(instantiated_args, Value *, 2);
-            const Value *new_context = *ARRAY_GET(instantiated_args, Value *, 3);
+            const Value *target = *ARR_GET(instantiated_args, 0);
+            const Value *context = *ARR_GET(instantiated_args, 1);
+            const Value *source = *ARR_GET(instantiated_args, 2);
+            const Value *new_context = *ARR_GET(instantiated_args, 3);
             satisfied = evaluate_full_substitution(state, target, context,
               source, new_context);
           }
@@ -1549,21 +974,21 @@ instantiate_theorem(struct LogicState *state,
     }
 
     /* First, instantiate the assumptions. */
-    Array instantiated_assumptions;
-    ARRAY_INIT(instantiated_assumptions, Value *);
-    for (size_t i = 0; i < ARRAY_LENGTH(src->assumptions); ++i)
+    ARR(Value *) instantiated_assumptions;
+    ARR_INIT(instantiated_assumptions);
+    for (size_t i = 0; i < ARR_LENGTH(src->assumptions); ++i)
     {
-      const Value *assumption = *ARRAY_GET(src->assumptions, Value *, i);
+      const Value *assumption = *ARR_GET(src->assumptions, i);
       Value *instantiated = instantiate_value(state, assumption, args);
       if (instantiated == NULL)
         return 1;
-      ARRAY_APPEND(instantiated_assumptions, Value *, instantiated);
+      ARR_APPEND(instantiated_assumptions, instantiated);
     }
 
     /* Verify that each assumption has been proven. */
-    for (size_t i = 0; i < ARRAY_LENGTH(instantiated_assumptions); ++i)
+    for (size_t i = 0; i < ARR_LENGTH(instantiated_assumptions); ++i)
     {
-      Value *assumption = *ARRAY_GET(instantiated_assumptions, Value *, i);
+      Value *assumption = *ARR_GET(instantiated_assumptions, i);
       if (!statement_proven(assumption, *proven))
       {
         char *theorem_str = string_from_symbol_path(src->path);
@@ -1577,29 +1002,29 @@ instantiate_theorem(struct LogicState *state,
       }
       free_value(assumption);
     }
-    ARRAY_FREE(instantiated_assumptions);
+    ARR_FREE(instantiated_assumptions);
   }
 
   /* Add all the inferences to the environment as proven statements. */
-  for (size_t i = 0; i < ARRAY_LENGTH(src->inferences); ++i)
+  for (size_t i = 0; i < ARR_LENGTH(src->inferences); ++i)
   {
-    const Value *inference = *ARRAY_GET(src->inferences, Value *, i);
+    const Value *inference = *ARR_GET(src->inferences, i);
     Value *instantiated = instantiate_value(state, inference, args);
     if (instantiated == NULL)
       return 1;
-    ARRAY_APPEND(*proven, Value *, instantiated);
+    ARR_APPEND(*proven, instantiated);
   }
 
   return 0;
 }
 
 static void
-list_proven(LogicState *state, Array proven)
+list_proven(LogicState *state, ValueArray proven)
 {
   LOG_NORMAL(state->log_out, "Statements proven:\n");
-  for (size_t i = 0; i < ARRAY_LENGTH(proven); ++i)
+  for (size_t i = 0; i < ARR_LENGTH(proven); ++i)
   {
-    Value *stmt = *ARRAY_GET(proven, Value *, i);
+    Value *stmt = *ARR_GET(proven, i);
     char *str = string_from_value(stmt);
     LOG_NORMAL(state->log_out, "> '%s'\n", str);
     free(str);
@@ -1626,7 +1051,7 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
   ++state->next_id;
 
   /* Parameters. */
-  ARRAY_INIT(a->parameters, struct Parameter);
+  ARR_INIT(a->parameters);
   for (struct PrototypeParameter **param = proto.parameters;
     *param != NULL; ++param)
   {
@@ -1648,39 +1073,39 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
     }
     p.type = (struct Type *)type_symbol->object;
     p.name = strdup((*param)->name);
-    ARRAY_APPEND(a->parameters, struct Parameter, p);
+    ARR_APPEND(a->parameters, p);
   }
 
-  ARRAY_INIT(a->requirements, struct Requirement);
+  ARR_INIT(a->requirements);
 
   /* Assumptions & inferences. */
-  ARRAY_INIT(a->assumptions, struct Value *);
-  ARRAY_INIT(a->inferences, struct Value *);
+  ARR_INIT(a->assumptions);
+  ARR_INIT(a->inferences);
   for (Value **assume = proto.assumptions;
     *assume != NULL; ++assume)
   {
-    ARRAY_APPEND(a->assumptions, struct Value *, copy_value(*assume));
+    ARR_APPEND(a->assumptions, copy_value(*assume));
   }
   for (Value **infer = proto.inferences;
     *infer != NULL; ++infer)
   {
-    ARRAY_APPEND(a->inferences, struct Value *, copy_value(*infer));
+    ARR_APPEND(a->inferences, copy_value(*infer));
   }
 
   /* Finally, check the proof. */
-  Array proven;
-  ARRAY_INIT(proven, Value *);
-  ARRAY_INIT(a->steps, struct TheoremReference);
+  ValueArray proven;
+  ARR_INIT(proven);
+  ARR_INIT(a->steps);
   for (Value **assume = proto.assumptions;
     *assume != NULL; ++assume)
   {
-    ARRAY_APPEND(proven, struct Value *, copy_value(*assume));
+    ARR_APPEND(proven, copy_value(*assume));
   }
   for (struct PrototypeProofStep **step = proto.steps;
     *step != NULL; ++step)
   {
     struct TheoremReference ref;
-    ARRAY_INIT(ref.arguments, Value *);
+    ARR_INIT(ref.arguments);
     const struct Symbol *thm_symbol = locate_symbol_with_type(state,
       (*step)->theorem_path, SymbolTypeTheorem);
     if (thm_symbol == NULL)
@@ -1695,24 +1120,24 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
     size_t args_n = 0;
     for (Value **arg = (*step)->arguments; *arg != NULL; ++arg)
       ++args_n;
-    if (args_n != ARRAY_LENGTH(ref.theorem->parameters))
+    if (args_n != ARR_LENGTH(ref.theorem->parameters))
     {
       LOG_NORMAL(state->log_out,
         "Cannot add theorem because an axiom/theorem referenced received the wrong number of arguments.\n");
       return LogicErrorSymbolAlreadyExists;
     }
 
-    Array args;
-    ARRAY_INIT(args, struct Argument);
+    ArgumentArray args;
+    ARR_INIT(args);
     for (size_t i = 0; i < args_n; ++i)
     {
-      struct Parameter *param = ARRAY_GET(ref.theorem->parameters, struct Parameter, i);
+      struct Parameter *param = ARR_GET(ref.theorem->parameters, i);
 
       struct Argument arg;
       arg.name = strdup(param->name);
       arg.value = copy_value((*step)->arguments[i]);
 
-      ARRAY_APPEND(ref.arguments, Value *, copy_value(arg.value));
+      ARR_APPEND(ref.arguments, copy_value(arg.value));
 
       if (!types_equal(param->type, arg.value->type))
       {
@@ -1721,7 +1146,7 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
         return LogicErrorSymbolAlreadyExists;
       }
 
-      ARRAY_APPEND(args, struct Argument, arg);
+      ARR_APPEND(args, arg);
     }
 
     if (instantiate_theorem(state, ref.theorem, args, &proven, FALSE) != 0)
@@ -1734,18 +1159,18 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
 
     for (size_t i = 0; i < args_n; ++i)
     {
-      struct Argument *arg = ARRAY_GET(args, struct Argument, i);
+      struct Argument *arg = ARR_GET(args, i);
       free(arg->name);
       free_value(arg->value);
     }
-    ARRAY_FREE(args);
-    ARRAY_APPEND(a->steps, struct TheoremReference, ref);
+    ARR_FREE(args);
+    ARR_APPEND(a->steps, ref);
   }
 
   /* Check that all the inferences have been proven. */
-  for (size_t i = 0; i < ARRAY_LENGTH(a->inferences); ++i)
+  for (size_t i = 0; i < ARR_LENGTH(a->inferences); ++i)
   {
-    Value *infer = *ARRAY_GET(a->inferences, Value *, i);
+    Value *infer = *ARR_GET(a->inferences, i);
     if (!statement_proven(infer, proven))
     {
       LOG_NORMAL(state->log_out,
@@ -1755,12 +1180,12 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
   }
 
   /* Free all the statements that we've proven. */
-  for (size_t i = 0; i < ARRAY_LENGTH(proven); ++i)
+  for (size_t i = 0; i < ARR_LENGTH(proven); ++i)
   {
-    Value *v = *ARRAY_GET(proven, Value *, i);
+    Value *v = *ARR_GET(proven, i);
     free_value(v);
   }
-  ARRAY_FREE(proven);
+  ARR_FREE(proven);
 
   struct Symbol sym;
   sym.path = copy_symbol_path(proto.theorem_path);
@@ -1778,17 +1203,15 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
 
   if (verbose)
   {
-    for (size_t i = 0; i < ARRAY_LENGTH(a->assumptions); ++i)
+    for (size_t i = 0; i < ARR_LENGTH(a->assumptions); ++i)
     {
-      char *str = string_from_value(*ARRAY_GET(a->assumptions,
-        struct Value *, i));
+      char *str = string_from_value(*ARR_GET(a->assumptions, i));
       printf("Assumption %zu: %s\n", i, str);
       free(str);
     }
-    for (size_t i = 0; i < ARRAY_LENGTH(a->inferences); ++i)
+    for (size_t i = 0; i < ARR_LENGTH(a->inferences); ++i)
     {
-      char *str = string_from_value(*ARRAY_GET(a->inferences,
-        struct Value *, i));
+      char *str = string_from_value(*ARR_GET(a->inferences, i));
       printf("Inference %zu: %s\n", i, str);
       free(str);
     }

@@ -709,6 +709,7 @@ namespace propositional_calculus
     }
   }
 
+/*
   theorem
   conjunction_biconditional_elimination(phi : Formula, psi : Formula,
     chi : formula)
@@ -721,6 +722,7 @@ namespace propositional_calculus
     step hypothetical_syllogism_meta(and(iff($psi, $phi), iff($chi, $phi)),
       and(iff($chi, $phi), iff($psi, $phi)), implies($chi, $psi));
   }
+*/
 
   theorem
   double_negation(phi : Formula)
