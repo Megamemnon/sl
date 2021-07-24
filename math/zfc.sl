@@ -78,6 +78,23 @@ namespace propositional_calculus
 
   /*
 
+  Some of my own common theorems.
+
+  */
+  theorem
+  false_implies(phi : Formula)
+  {
+    infer implies(F, $phi);
+
+    step transposition(F, $phi);
+    step simplification(not(F), not($phi));
+    step false();
+    step modus_ponens(not(F), implies(not($phi), not(F)));
+    step modus_ponens(implies(not($phi), not(F)), implies(F, $phi));
+  }
+
+  /*
+
   Common theorems of propositional calculus, based on the list given in
   https://en.wikipedia.org/wiki/Hilbert_system
 
@@ -407,6 +424,17 @@ namespace propositional_calculus
     step conjunction_elimination_right_meta($phi, $psi);
   }
 
+  theorem
+  negative_conjunction_introduction(phi : Formula, psi : Formula)
+  {
+    infer implies(not($phi), not(and($psi, $phi)));
+
+    step conjunction_elimination_right($psi, $phi);
+    step transposition_2(and($psi, $phi), $phi);
+    step modus_ponens(implies(and($psi, $phi), $phi),
+      implies(not($phi), not(and($psi, $phi))));
+  }
+
   expr Formula
   or(phi : Formula, psi : Formula)
   {
@@ -547,6 +575,154 @@ namespace propositional_calculus
   }
 
   theorem
+  biconditional_distribution_left(phi : Formula, psi : Formula, chi : Formula)
+  {
+    infer implies(iff($phi, $psi),
+      implies(implies($phi, $chi), implies($psi, $chi)));
+
+    step biconditional_elimination_left($phi, $psi);
+    step hypothetical_syllogism_2($psi, $phi, $chi);
+    step hypothetical_syllogism_meta(iff($phi, $psi), implies($psi, $phi),
+      implies(implies($phi, $chi), implies($psi, $chi)));
+  }
+
+  theorem
+  biconditional_distribution_right(phi : Formula, psi : Formula, chi : Formula)
+  {
+    infer implies(iff($phi, $psi),
+      implies(implies($chi, $phi), implies($chi, $psi)));
+
+    step biconditional_elimination_right($phi, $psi);
+    step hypothetical_syllogism($chi, $phi, $psi);
+    step hypothetical_syllogism_meta(iff($phi, $psi), implies($phi, $psi),
+      implies(implies($chi, $phi), implies($chi, $psi)));
+  }
+
+  theorem
+  infer_negated_equivalent(phi : Formula, psi : Formula, chi : Formula)
+  {
+    assume not($chi);
+    assume implies($phi, iff($psi, $chi));
+
+    infer implies($phi, not($psi));
+
+    step biconditional_elimination_right($psi, $chi);
+    step hypothetical_syllogism_meta($phi, iff($psi, $chi),
+      implies($psi, $chi));
+    step transposition_2($psi, $chi);
+    step hypothetical_syllogism_meta($phi, implies($psi, $chi),
+      implies(not($chi), not($psi)));
+    step intermediate_elimination($phi, not($chi), not($psi));
+  }
+
+  namespace lemma
+  {
+    /*
+    theorem
+    biconditional_introduction_from_implication(phi : Formula, psi : Formula)
+    {
+      infer implies(implies($phi, $psi), implies(implies($psi, $phi),
+        iff($phi, $psi)));
+
+      step conjunction_introduction(implies($phi, $psi), implies($psi, $phi));
+      step biconditional_introduction($phi, $psi);
+
+    }
+    */
+
+    /*
+    theorem
+    biconditional_commutation_l1(phi : Formula, psi : Formula)
+    {
+      infer implies(iff($phi, $psi), iff($psi, $phi));
+
+      step biconditional_elimination_left($phi, $psi);
+      step biconditional_elimination_right($phi, $psi);
+      step biconditional_introduction($psi, $phi);
+      step conjunction_introduction(implies($psi, $phi), implies($phi, $psi));
+      step hypothetical_syllogism_meta()
+    }
+    */
+  }
+
+  namespace lemma
+  {
+    theorem
+    conjunction_commutation_l1(phi : Formula, psi : Formula)
+    {
+      infer implies(and($phi, $psi), and($psi, $phi));
+
+      step conjunction_elimination_left($phi, $psi);
+      step conjunction_elimination_right($phi, $psi);
+      step conjunction_introduction($psi, $phi);
+      step hypothetical_syllogism_meta(and($phi, $psi), $psi,
+        implies($phi, and($psi, $phi)));
+      step distributive(and($phi, $psi), $phi, and($psi, $phi));
+      step modus_ponens(implies(and($phi, $psi),
+        implies($phi, and($psi, $phi))),
+        implies(implies(and($phi, $psi), $phi),
+        implies(and($phi, $psi), and($psi, $phi))));
+      step modus_ponens(implies(and($phi, $psi), $phi),
+        implies(and($phi, $psi), and($psi, $phi)));
+    }
+  }
+
+  theorem
+  conjunction_commutation(phi : Formula, psi : Formula)
+  {
+    infer iff(and($phi, $psi), and($psi, $phi));
+
+    step lemma.conjunction_commutation_l1($phi, $psi);
+    step lemma.conjunction_commutation_l1($psi, $phi);
+    step biconditional_introduction_meta(and($phi, $psi), and($psi, $phi));
+  }
+
+  namespace lemma
+  {
+    theorem
+    conjunction_biconditional_elimination_l1(phi : Formula, psi : Formula,
+      chi : Formula)
+    {
+      infer implies(and(iff($psi, $phi), iff($chi, $phi)), implies($psi, $chi));
+
+      step conjunction_elimination_left(iff($psi, $phi), iff($chi, $phi));
+      step conjunction_elimination_right(iff($psi, $phi), iff($chi, $phi));
+      step biconditional_elimination_right($psi, $phi);
+      step biconditional_elimination_left($chi, $phi);
+      step hypothetical_syllogism_meta(and(iff($psi, $phi), iff($chi, $phi)),
+        iff($psi, $phi), implies($psi, $phi));
+      step hypothetical_syllogism_meta(and(iff($psi, $phi), iff($chi, $phi)),
+        iff($chi, $phi), implies($phi, $chi));
+      step hypothetical_syllogism_2($psi, $phi, $chi);
+      step hypothetical_syllogism_meta(and(iff($psi, $phi), iff($chi, $phi)),
+        implies($psi, $phi), implies(implies($phi, $chi), implies($psi, $chi)));
+      step distributive(and(iff($psi, $phi), iff($chi, $phi)),
+        implies($phi, $chi), implies($psi, $chi));
+      step modus_ponens(implies(and(iff($psi, $phi), iff($chi, $phi)),
+        implies(implies($phi, $chi), implies($psi, $chi))),
+        implies(implies(and(iff($psi, $phi), iff($chi, $phi)),
+        implies($phi, $chi)), implies(and(iff($psi, $phi), iff($chi, $phi)),
+        implies($psi, $chi))));
+      step modus_ponens(implies(and(iff($psi, $phi), iff($chi, $phi)),
+        implies($phi, $chi)),
+        implies(and(iff($psi, $phi), iff($chi, $phi)), implies($psi, $chi)));
+    }
+  }
+
+  theorem
+  conjunction_biconditional_elimination(phi : Formula, psi : Formula,
+    chi : formula)
+  {
+    infer implies(and(iff($psi, $phi), iff($chi, $phi)), iff($psi, $chi));
+
+    step conjunction_biconditional_elimination_l1($phi, $psi, $chi);
+    step conjunction_biconditional_elimination_l1($phi, $chi, $psi);
+    step conjunction_commutation_l1(iff($chi, $phi), iff($psi, $phi));
+    step hypothetical_syllogism_meta(and(iff($psi, $phi), iff($chi, $phi)),
+      and(iff($chi, $phi), iff($psi, $phi)), implies($chi, $psi));
+  }
+
+  theorem
   double_negation(phi : Formula)
   {
     infer iff($phi, not(not($phi)));
@@ -554,6 +730,16 @@ namespace propositional_calculus
     step double_negation_left($phi);
     step double_negation_right($phi);
     step biconditional_introduction_meta($phi, not(not($phi)));
+  }
+
+  theorem
+  false_conjunction(phi : Formula)
+  {
+    infer iff(and($phi, F), F);
+
+    step conjunction_elimination_right($phi, F);
+    step false_implies(and($phi, F));
+    step biconditional_introduction_meta(and($phi, F), F);
   }
 }
 /* alias propositional_calculus prop; */
@@ -573,8 +759,6 @@ namespace predicate_calculus
 
   type Term;
   type Variable atomic;
-  type Function atomic;
-  type Predicate2 atomic;
 
   namespace vars
   {
@@ -639,18 +823,6 @@ namespace predicate_calculus
     latex $x;
   }
 
-  expr Term
-  eval_f(f : Function, t : Term)
-  {
-    latex "\\left( " + $f + " \\right)\\left( " + $t + " \\right) ";
-  }
-
-  expr Formula
-  eval_p(p : Predicate2, s : Term, t : Term)
-  {
-    latex "\\left( " + $p + " \\right)\\left( " + $s + " , " + $t + " \\right) ";
-  }
-
   expr Formula
   any(x : Variable, phi : Formula)
   {
@@ -676,6 +848,14 @@ namespace predicate_calculus
       implies($phi, any($x, $psi)));
   }
 
+  /* TODO: this can be proven. */
+  axiom
+  quantified_implication(x : Variable, phi : Formula, psi : Formula)
+  {
+    infer implies(any($x, implies($phi, $psi)),
+      implies(any($x, $phi), any($x, $psi)));
+  }
+
   axiom
   generalization(x : Variable, phi : Formula)
   {
@@ -690,6 +870,19 @@ namespace predicate_calculus
     infer implies(any($x, $phi), $phi);
 
     step instantiation($x, $phi, t($x), $phi);
+  }
+
+  theorem
+  implication_generalization(x : Variable, phi : Formula, psi : Formula)
+  {
+    assume implies($phi, $psi);
+
+    infer implies(any($x, $phi), any($x, $psi));
+
+    step generalization($x, implies($phi, $psi));
+    step quantified_implication($x, $phi, $psi);
+    step modus_ponens(any($x, implies($phi, $psi)),
+      implies(any($x, $phi), any($x, $psi)));
   }
 
   expr Formula
@@ -789,14 +982,200 @@ namespace predicate_calculus
     infer iff(exists($x, $phi), not(any($x, not($phi))));
   }
 
-  /*expr Formula
-  exists_unique(x : Variable, phi : Formula) binds ($x);
+  theorem
+  implication_generalization_existential(x : Variable, phi : Formula,
+    psi : Formula)
+  {
+    assume implies($phi, $psi);
+
+    infer implies(exists($x, $phi), exists($x, $psi));
+
+    step transposition_2($phi, $psi);
+    step modus_ponens(implies($phi, $psi), implies(not($psi), not($phi)));
+    step implication_generalization($x, not($psi), not($phi));
+    step transposition_2(any($x, not($psi)), any($x, not($phi)));
+    step modus_ponens(implies(any($x, not($psi)), any($x, not($phi))),
+      implies(not(any($x, not($phi))), not(any($x, not($psi)))));
+    step existential_quantification($x, $phi);
+    step biconditional_elimination_right_meta(exists($x, $phi),
+      not(any($x, not($phi))));
+    step hypothetical_syllogism_meta(exists($x, $phi),
+      not(any($x, not($phi))), not(any($x, not($psi))));
+    step existential_quantification($x, $psi);
+    step biconditional_elimination_left_meta(exists($x, $psi),
+      not(any($x, not($psi))));
+    step hypothetical_syllogism_meta(exists($x, $phi),
+      not(any($x, not($psi))), exists($x, $psi));
+  }
+
+  expr Formula
+  exists_unique(x : Variable, phi : Formula)
+  {
+    latex "\\exists! " + $x + " " + $phi;
+    bind $x;
+  }
 
   axiom
-  existential_uniqueness(x : Variable, phi : Formula)
+  existential_uniqueness(x : Variable, phi : Formula,
+    y : Variable, phi_0 : Formula)
   {
-    infer iff(exists_unique($x, $phi), and(exists($x, $phi), ))
-  }*/
+    require free_for(t($y), t($x), $phi);
+    require substitution(t($x), $phi, t($y), $phi_0);
+
+    infer iff(exists_unique($x, $phi), and(exists($x, $phi),
+      not(exists($y, and($phi_0, not(eq(t($x), t($y))))))));
+  }
+
+  type Predicate1 atomic;
+  type Predicate2 atomic;
+  type Predicate3 atomic;
+
+  expr Formula
+  eval_p1(p : Predicate1, t_1 : Term)
+  {
+    latex "\\left( " + $p + " \\right)\\left( " + $t_1 + " \\right) ";
+  }
+
+  expr Formula
+  eval_p2(p : Predicate2, t_1 : Term, t_2 : Term)
+  {
+    latex "\\left( " + $p + " \\right)\\left( " + $t_1 + " , " + $t_2 +
+      " \\right) ";
+  }
+
+  expr Formula
+  eval_p3(p : Predicate3, t_1 : Term, t_2 : Term, t_3 : Term)
+  {
+    latex "\\left( " + $p + " \\right)\\left( " + $t_1 + " , " + $t_2 +
+      " , " + $t_3 + " \\right) ";
+  }
+
+  type Function0 atomic;
+  type Function1 atomic;
+  type Function2 atomic;
+  type Function3 atomic;
+
+  expr Term
+  eval_f0(f : Function0)
+  {
+    latex $f;
+  }
+
+  expr Term
+  eval_f1(f : Function1, t_1 : Term)
+  {
+    latex "\\left( " + $f + " \\right)\\left( " + $t_1 + " \\right) ";
+  }
+
+  expr Term
+  eval_f2(f : Function2, t_1 : Term, t_2 : Term)
+  {
+    latex "\\left( " + $f + " \\right)\\left( " + $t_1 + " , " + $t_2 +
+      " \\right) ";
+  }
+
+  expr Term
+  eval_f3(f : Function3, t_1 : Term, t_2 : Term, t_3 : Term)
+  {
+    latex "\\left( " + $f + " \\right)\\left( " + $t_1 + " , " + $t_2 +
+      " , " + $t_3 + " \\right) ";
+  }
+
+  axiom
+  extend_predicate1(p : Predicate1, phi : Formula, x_1 : Variable)
+  {
+    /* require free($x_1, $phi); */
+    /* require cover_free($x_1, $phi); */
+
+    infer any($x_1, iff(eval_p1($p, t($x_1)), $phi));
+  }
+
+  axiom
+  extend_predicate2(p : Predicate2, phi : Formula, x_1 : Variable,
+    x_2 : Variable)
+  {
+    /* require distinct($x_1, $x_2); */
+    /* require free($x_1, $phi); */
+    /* require free($x_2, $phi); */
+    /* require cover_free($x_1, $x_2, $phi); */
+
+    infer any($x_1, any($x_2, iff(eval_p2($p, t($x_1), t($x_2)), $phi)));
+  }
+
+  axiom
+  extend_predicate3(p : Predicate3, phi : Formula, x_1 : Variable,
+    x_2 : Variable, x_3 : Variable)
+  {
+    /* require distinct($x_1, $x_2, $x_3); */
+    /* require free($x_1, $phi); */
+    /* require free($x_2, $phi); */
+    /* require free($x_3, $phi); */
+    /* require cover_free($x_1, $x_2, $x_3, $phi); */
+
+    infer any($x_1, any($x_2, any($x_3,
+      iff(eval_p3($p, t($x_1), t($x_2), t($x_3)), $phi))));
+  }
+
+  axiom
+  extend_function0(f : Function0, phi : Formula, phi_0 : Formula)
+  {
+    require free_for(eval_f0($f), t(vars.y), $phi);
+    require full_substitution(t(vars.y), $phi, eval_f0($f), $phi_0);
+
+    assume exists_unique(vars.y, $phi);
+
+    infer $phi_0;
+  }
+
+  axiom
+  extend_function1(f : Function1, phi : Formula, phi_0 : Formula,
+    x_1 : Variable)
+  {
+    /* require distinct(vars.y, $x_1); */
+    /* require free($x_1, $phi); */
+    /* require cover_free(vars.y, $x_1, $phi); */
+    require free_for(eval_f1($f, t($x_1)), t(vars.y), $phi);
+    require full_substitution(t(vars.y), $phi, eval_f1($f, t($x_1)), $phi_0);
+
+    assume any($x_1, exists_unique(vars.y, $phi));
+
+    infer any($x_1, $phi_0);
+  }
+
+  axiom
+  extend_function2(f : Function2, phi : Formula, phi_0 : Formula,
+    x_1 : Variable, x_2 : Variable)
+  {
+    /* require distinct(vars.y, $x_1, $x_2); */
+    /* require free($x_1, $phi); */
+    /* require free($x_2, $phi); */
+    /* require cover_free(vars.y, $x_1, $x_2, $phi); */
+    require free_for(eval_f2($f, t($x_1), t($x_2)), t(vars.y), $phi);
+    require full_substitution(t(vars.y), $phi,
+      eval_f2($f, t($x_1), t($x_2)), $phi_0);
+
+    assume any($x_1, any($x_2, exists_unique(vars.y, $phi)));
+
+    infer any($x_1, any($x_2, $phi_0));
+  }
+
+  axiom
+  extend_function3(f : Function3, phi : Formula, phi_0 : Formula,
+    x_1 : Variable, x_2 : Variable, x_3 : Variable)
+  {
+    /* require distinct(vars.y, $x_1, $x_2, $x_3); */
+    /* require free($x_1, $phi); */
+    /* require free($x_2, $phi); */
+    /* require free($x_3, $phi); */
+    /* require cover_free(vars.y, $x_1, $x_2, $x_3, $phi); */
+    require free_for(eval_f3($f, t($x_1), t($x_2), t($x_3)), t(vars.y), $phi);
+    require full_substitution(t(vars.y), $phi,
+      eval_f3($f, t($x_1), t($x_2), t($x_3)), $phi_0);
+
+    assume any($x_1, any($x_2, any($x_3, exists_unique(vars.y, $phi))));
+
+    infer any($x_1, any($x_2, any($x_3, $phi_0)));
+  }
 }
 /* alias predicate_calculus pred; */
 
@@ -814,19 +1193,19 @@ namespace zfc
   extensionality()
   {
     infer any(vars.x, any(vars.y, implies(
-      any(vars.z, iff(eval_p(in, t(vars.z), t(vars.x)),
-      eval_p(in, t(vars.z), t(vars.y)))), eq(t(vars.x), t(vars.y)))));
+      any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.x)),
+      eval_p2(in, t(vars.z), t(vars.y)))), eq(t(vars.x), t(vars.y)))));
   }
 
   axiom
   regularity()
   {
-    def nonempty exists(vars.a, eval_p(in, t(vars.a), t(vars.x)));
+    def nonempty exists(vars.a, eval_p2(in, t(vars.a), t(vars.x)));
 
     infer any(vars.x, implies(%nonempty,
-      exists(vars.y, and(eval_p(in, t(vars.y), t(vars.x)),
-      not(exists(vars.z, and(eval_p(in, t(vars.z), t(vars.y)),
-      eval_p(in, t(vars.z), t(vars.y)))))))));
+      exists(vars.y, and(eval_p2(in, t(vars.y), t(vars.x)),
+      not(exists(vars.z, and(eval_p2(in, t(vars.z), t(vars.y)),
+      eval_p2(in, t(vars.z), t(vars.y)))))))));
   }
 
   axiom
@@ -835,31 +1214,122 @@ namespace zfc
     require free(vars.x, $phi);
 
     infer any(vars.z, exists(vars.y, any(vars.x,
-      iff(eval_p(in, t(vars.x), t(vars.y)),
-      and(eval_p(in, t(vars.x), t(vars.z)), $phi)))));
+      iff(eval_p2(in, t(vars.x), t(vars.y)),
+      and(eval_p2(in, t(vars.x), t(vars.z)), $phi)))));
+  }
+
+  const empty : Function0
+  {
+    latex "\\emptyset";
+  }
+
+  namespace lemma
+  {
+    theorem
+    empty_set_exists()
+    {
+      infer exists(vars.y, any(vars.x, not(eval_p2(in, t(vars.x), t(vars.y)))));
+
+      step specification(F);
+      step false();
+      step negative_conjunction_introduction(F,
+        eval_p2(in, t(vars.x), t(vars.z)));
+      step modus_ponens(not(F), not(and(eval_p2(in, t(vars.x), t(vars.z)), F)));
+      step instantiation_elimination(vars.z, exists(vars.y, any(vars.x,
+        iff(eval_p2(in, t(vars.x), t(vars.y)), and(
+        eval_p2(in, t(vars.x), t(vars.z)), F)))));
+      step modus_ponens(any(vars.z, exists(vars.y, any(vars.x,
+        iff(eval_p2(in, t(vars.x), t(vars.y)), and(
+        eval_p2(in, t(vars.x), t(vars.z)), F))))),
+        exists(vars.y, any(vars.x,
+        iff(eval_p2(in, t(vars.x), t(vars.y)), and(
+        eval_p2(in, t(vars.x), t(vars.z)), F)))));
+      step identity(iff(eval_p2(in, t(vars.x), t(vars.y)), and(
+        eval_p2(in, t(vars.x), t(vars.z)), F)));
+      step infer_negated_equivalent(iff(eval_p2(in, t(vars.x), t(vars.y)), and(
+        eval_p2(in, t(vars.x), t(vars.z)), F)),
+        eval_p2(in, t(vars.x), t(vars.y)), and(
+        eval_p2(in, t(vars.x), t(vars.z)), F));
+      step implication_generalization(vars.x, iff(eval_p2(in, t(vars.x),
+        t(vars.y)), and(eval_p2(in, t(vars.x), t(vars.z)), F)),
+        not(eval_p2(in, t(vars.x), t(vars.y))));
+      step implication_generalization_existential(vars.y,
+        any(vars.x, iff(eval_p2(in, t(vars.x),
+        t(vars.y)), and(eval_p2(in, t(vars.x), t(vars.z)), F))),
+        any(vars.x, not(eval_p2(in, t(vars.x), t(vars.y)))));
+      step modus_ponens(exists(vars.y, any(vars.x,
+        iff(eval_p2(in, t(vars.x), t(vars.y)), and(
+        eval_p2(in, t(vars.x), t(vars.z)), F)))),
+        exists(vars.y, any(vars.x, not(eval_p2(in, t(vars.x), t(vars.y))))));
+    }
+
+    axiom
+    empty_set_unique()
+    {
+      infer exists_unique(vars.y, any(vars.x,
+        not(eval_p2(in, t(vars.x), t(vars.y)))));
+    }
+  }
+
+  theorem
+  empty_set()
+  {
+    infer any(vars.x, not(eval_p2(in, t(vars.x), eval_f0(empty))));
+
+    step lemma.empty_set_exists();
+    step lemma.empty_set_unique();
+    step extend_function0(empty,
+      any(vars.x, not(eval_p2(in, t(vars.x), t(vars.y)))),
+      any(vars.x, not(eval_p2(in, t(vars.x), eval_f0(empty)))));
   }
 
   axiom
   pairing()
   {
     infer any(vars.x, any(vars.y, exists(vars.z, and(
-      eval_p(in, t(vars.x), t(vars.z)),
-      eval_p(in, t(vars.y), t(vars.z))))));
-  }
-
-  const union : Function
-  {
-    latex "\\cup";
+      eval_p2(in, t(vars.x), t(vars.z)),
+      eval_p2(in, t(vars.y), t(vars.z))))));
   }
 
   axiom
-  union_of()
+  replacement(phi : Formula)
   {
-    infer any(vars.x, any(vars.y, iff(
-      eval_p(in, t(vars.y), eval_f(union, t(vars.x))),
-      exists(vars.z, and(eval_p(in, t(vars.y), t(vars.z)),
-      eval_p(in, t(vars.z), t(vars.x)))))));
+    //require free(vars.x, $phi);
+    //require free(vars.y, $phi);
+    //require free(vars.A, $phi);
+    //require not_free(vars.B, $phi);
+
+    infer any(vars.A, implies(any(vars.x, implies(
+      eval_p2(in, t(vars.x), t(vars.A)), exists_unique(vars.y, $phi))),
+      exists(vars.B, any(vars.x, implies(eval_p2(in, t(vars.x), t(vars.A)),
+      exists(vars.y, and(eval_p2(in, t(vars.y), t(vars.B)), $phi)))))));
   }
+
+  /*
+  theorem
+  empty_set()
+  {
+    infer any(vars.x, not(eval_p2(in, t(vars.x), eval_f0(empty))));
+
+    step specification(F);
+  }
+  */
+
+  const successor : Function1
+  {
+    latex "S";
+  }
+
+  /*
+  axiom
+  infinity()
+  {
+    infer exists(vars.X, and(eval_p2(in, empty, t(vars.X)),
+      any(vars.y,
+      implies(eval_p2(in, t(vars.y), t(vars.X)),
+      eval_p2(in, eval_f1(successor, t(vars.y)), t(vars.X))))));
+  }
+  */
 
   const subset : Predicate2
   {
@@ -870,27 +1340,76 @@ namespace zfc
   subset_of()
   {
     infer any(vars.x, any(vars.y,
-      iff(eval_p(subset, t(vars.x), t(vars.y)),
-      any(vars.z, implies(eval_p(in, t(vars.z), t(vars.x)),
-      eval_p(in, t(vars.z), t(vars.y)))))));
+      iff(eval_p2(subset, t(vars.x), t(vars.y)),
+      any(vars.z, implies(eval_p2(in, t(vars.z), t(vars.x)),
+      eval_p2(in, t(vars.z), t(vars.y)))))));
   }
 
   axiom
   power_set()
   {
     infer any(vars.x, exists(vars.y, any(vars.z,
-      implies(eval_p(subset, t(vars.z), t(vars.x)),
-      eval_p(in, t(vars.z), t(vars.y))))));
+      implies(eval_p2(subset, t(vars.z), t(vars.x)),
+      eval_p2(in, t(vars.z), t(vars.y))))));
   }
 
-  const empty : Term
+  const union : Function1
   {
-    latex "\\emptyset";
+    latex "\\cup";
   }
 
   axiom
-  empty_set()
+  union_of()
   {
-    infer any(vars.x, not(eval_p(in, t(vars.x), empty)));
+    infer any(vars.x, any(vars.y, iff(
+      eval_p2(in, t(vars.y), eval_f1(union, t(vars.x))),
+      exists(vars.z, and(eval_p2(in, t(vars.y), t(vars.z)),
+      eval_p2(in, t(vars.z), t(vars.x)))))));
+  }
+
+  const naturals_ordinals : Function0
+  {
+    latex "\\mathbb{N}";
+  }
+
+  const zero_ordinal : Function0
+  {
+    latex "0";
+  }
+
+  const ordered_pair : Function2
+  {
+    latex "\\left( \\cdot_1 , \\cdot_2 \\right)";
+  }
+
+  const cartesian_product : Function2
+  {
+    latex "\\left( \\cdot_1 \\times \\cdot_2 \\right)";
+  }
+
+  axiom
+  cartesian_product_of_sets()
+  {
+    infer any(vars.A, any(vars.B, any(vars.x, iff(
+      eval_p2(in, t(vars.x), eval_f2(cartesian_product, t(vars.A), t(vars.B))),
+      exists(vars.a, exists(vars.b, and(and(eval_p2(in, t(vars.a), t(vars.A)),
+      eval_p2(in, t(vars.b), t(vars.B))), eq(t(vars.x),
+      eval_f2(ordered_pair, t(vars.a), t(vars.b))))))))));
+  }
+
+  const map : Predicate3
+  {
+    latex "\\cdot_1 : \\cdot_2 \\to \\cdot_3";
+  }
+
+  axiom
+  map_of_sets()
+  {
+    infer any(vars.f, any(vars.X, any(vars.Y, iff(
+      eval_p3(map, t(vars.f), t(vars.X), t(vars.Y)),
+      any(vars.x, implies(eval_p2(in, t(vars.x), t(vars.X)),
+      exists_unique(vars.y, and(eval_p2(in, t(vars.y), t(vars.Y)),
+      eval_p2(in, eval_f2(ordered_pair, t(vars.x), t(vars.y)),
+      t(vars.f))))))))));
   }
 }

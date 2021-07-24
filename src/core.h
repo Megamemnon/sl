@@ -101,6 +101,20 @@ struct Requirement
   Array arguments;
 };
 
+struct Theorem;
+
+struct TheoremReference
+{
+  struct Theorem *theorem;
+  Array arguments;
+};
+
+struct Argument
+{
+  char *name;
+  Value *value;
+};
+
 struct Theorem
 {
   uint32_t id;
@@ -111,6 +125,7 @@ struct Theorem
   Array requirements;
   Array assumptions;
   Array inferences;
+  Array steps;
 };
 
 enum SymbolType
@@ -135,5 +150,9 @@ struct LogicState
 
   FILE *log_out;
 };
+
+int
+instantiate_theorem(struct LogicState *state,
+  const struct Theorem *src, Array args, Array *proven, bool force);
 
 #endif

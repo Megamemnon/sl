@@ -863,12 +863,6 @@ enumerate_value_occurrences(const Value *target, const Value *search_in,
   }
 }
 
-struct Argument
-{
-  char *name;
-  Value *value;
-};
-
 static Value *
 instantiate_value(struct LogicState *state, const Value *src, Array args)
 {
@@ -1465,123 +1459,126 @@ evaluate_full_substitution(struct LogicState *state,
   return is_substitution(target, context, source, new_context);
 }
 
-static int
+int
 instantiate_theorem(struct LogicState *state,
-  const struct Theorem *src, Array args, Array *proven)
+  const struct Theorem *src, Array args, Array *proven, bool force)
 {
   /* Check the requirements. */
-  for (size_t i = 0; i < ARRAY_LENGTH(src->requirements); ++i)
+  if (!force)
   {
-    bool satisfied = FALSE;
-    const struct Requirement *req =
-      ARRAY_GET(src->requirements, struct Requirement, i);
-
-    Array instantiated_args;
-    ARRAY_INIT(instantiated_args, Value *);
-    for (size_t j = 0; j < ARRAY_LENGTH(req->arguments); ++j)
+    for (size_t i = 0; i < ARRAY_LENGTH(src->requirements); ++i)
     {
-      const Value *arg = *ARRAY_GET(req->arguments, Value *, j);
-      Value *instantiated = instantiate_value(state, arg, args);
-      ARRAY_APPEND(instantiated_args, Value *, instantiated);
+      bool satisfied = FALSE;
+      const struct Requirement *req =
+        ARRAY_GET(src->requirements, struct Requirement, i);
+
+      Array instantiated_args;
+      ARRAY_INIT(instantiated_args, Value *);
+      for (size_t j = 0; j < ARRAY_LENGTH(req->arguments); ++j)
+      {
+        const Value *arg = *ARRAY_GET(req->arguments, Value *, j);
+        Value *instantiated = instantiate_value(state, arg, args);
+        ARRAY_APPEND(instantiated_args, Value *, instantiated);
+      }
+
+      switch (req->type)
+      {
+        case RequirementTypeFreeFor:
+          {
+            if (ARRAY_LENGTH(instantiated_args) != 3)
+            {
+              LOG_NORMAL(state->log_out,
+                "Requirement has wrong number of arguments");
+              return 1;
+            }
+            const Value *source = *ARRAY_GET(instantiated_args, Value *, 0);
+            const Value *target = *ARRAY_GET(instantiated_args, Value *, 1);
+            const Value *context = *ARRAY_GET(instantiated_args, Value *, 2);
+            satisfied = evaluate_free_for(state, source, target, context);
+          }
+          break;
+        case RequirementTypeNotFree:
+          {
+            if (ARRAY_LENGTH(instantiated_args) != 2)
+            {
+              LOG_NORMAL(state->log_out,
+                "Requirement has wrong number of arguments");
+              return 1;
+            }
+            const Value *target = *ARRAY_GET(instantiated_args, Value *, 0);
+            const Value *context = *ARRAY_GET(instantiated_args, Value *, 1);
+            satisfied = evaluate_not_free(state, target, context);
+          }
+          break;
+        case RequirementTypeSubstitution:
+          {
+            if (ARRAY_LENGTH(instantiated_args) != 4)
+            {
+              LOG_NORMAL(state->log_out,
+                "Requirement has wrong number of arguments");
+              return 1;
+            }
+            const Value *target = *ARRAY_GET(instantiated_args, Value *, 0);
+            const Value *context = *ARRAY_GET(instantiated_args, Value *, 1);
+            const Value *source = *ARRAY_GET(instantiated_args, Value *, 2);
+            const Value *new_context = *ARRAY_GET(instantiated_args, Value *, 3);
+            satisfied = evaluate_substitution(state, target, context,
+              source, new_context);
+          }
+          break;
+        case RequirementTypeFullSubstitution:
+          {
+            if (ARRAY_LENGTH(instantiated_args) != 4)
+            {
+              LOG_NORMAL(state->log_out,
+                "Requirement has wrong number of arguments");
+              return 1;
+            }
+            const Value *target = *ARRAY_GET(instantiated_args, Value *, 0);
+            const Value *context = *ARRAY_GET(instantiated_args, Value *, 1);
+            const Value *source = *ARRAY_GET(instantiated_args, Value *, 2);
+            const Value *new_context = *ARRAY_GET(instantiated_args, Value *, 3);
+            satisfied = evaluate_full_substitution(state, target, context,
+              source, new_context);
+          }
+          break;
+      }
+
+      if (!satisfied)
+        return 1;
     }
 
-    switch (req->type)
+    /* First, instantiate the assumptions. */
+    Array instantiated_assumptions;
+    ARRAY_INIT(instantiated_assumptions, Value *);
+    for (size_t i = 0; i < ARRAY_LENGTH(src->assumptions); ++i)
     {
-      case RequirementTypeFreeFor:
-        {
-          if (ARRAY_LENGTH(instantiated_args) != 3)
-          {
-            LOG_NORMAL(state->log_out,
-              "Requirement has wrong number of arguments");
-            return 1;
-          }
-          const Value *source = *ARRAY_GET(instantiated_args, Value *, 0);
-          const Value *target = *ARRAY_GET(instantiated_args, Value *, 1);
-          const Value *context = *ARRAY_GET(instantiated_args, Value *, 2);
-          satisfied = evaluate_free_for(state, source, target, context);
-        }
-        break;
-      case RequirementTypeNotFree:
-        {
-          if (ARRAY_LENGTH(instantiated_args) != 2)
-          {
-            LOG_NORMAL(state->log_out,
-              "Requirement has wrong number of arguments");
-            return 1;
-          }
-          const Value *target = *ARRAY_GET(instantiated_args, Value *, 0);
-          const Value *context = *ARRAY_GET(instantiated_args, Value *, 1);
-          satisfied = evaluate_not_free(state, target, context);
-        }
-        break;
-      case RequirementTypeSubstitution:
-        {
-          if (ARRAY_LENGTH(instantiated_args) != 4)
-          {
-            LOG_NORMAL(state->log_out,
-              "Requirement has wrong number of arguments");
-            return 1;
-          }
-          const Value *target = *ARRAY_GET(instantiated_args, Value *, 0);
-          const Value *context = *ARRAY_GET(instantiated_args, Value *, 1);
-          const Value *source = *ARRAY_GET(instantiated_args, Value *, 2);
-          const Value *new_context = *ARRAY_GET(instantiated_args, Value *, 3);
-          satisfied = evaluate_substitution(state, target, context,
-            source, new_context);
-        }
-        break;
-      case RequirementTypeFullSubstitution:
-        {
-          if (ARRAY_LENGTH(instantiated_args) != 4)
-          {
-            LOG_NORMAL(state->log_out,
-              "Requirement has wrong number of arguments");
-            return 1;
-          }
-          const Value *target = *ARRAY_GET(instantiated_args, Value *, 0);
-          const Value *context = *ARRAY_GET(instantiated_args, Value *, 1);
-          const Value *source = *ARRAY_GET(instantiated_args, Value *, 2);
-          const Value *new_context = *ARRAY_GET(instantiated_args, Value *, 3);
-          satisfied = evaluate_full_substitution(state, target, context,
-            source, new_context);
-        }
-        break;
+      const Value *assumption = *ARRAY_GET(src->assumptions, Value *, i);
+      Value *instantiated = instantiate_value(state, assumption, args);
+      if (instantiated == NULL)
+        return 1;
+      ARRAY_APPEND(instantiated_assumptions, Value *, instantiated);
     }
 
-    if (!satisfied)
-      return 1;
-  }
-
-  /* First, instantiate the assumptions. */
-  Array instantiated_assumptions;
-  ARRAY_INIT(instantiated_assumptions, Value *);
-  for (size_t i = 0; i < ARRAY_LENGTH(src->assumptions); ++i)
-  {
-    const Value *assumption = *ARRAY_GET(src->assumptions, Value *, i);
-    Value *instantiated = instantiate_value(state, assumption, args);
-    if (instantiated == NULL)
-      return 1;
-    ARRAY_APPEND(instantiated_assumptions, Value *, instantiated);
-  }
-
-  /* Verify that each assumption has been proven. */
-  for (size_t i = 0; i < ARRAY_LENGTH(instantiated_assumptions); ++i)
-  {
-    Value *assumption = *ARRAY_GET(instantiated_assumptions, Value *, i);
-    if (!statement_proven(assumption, *proven))
+    /* Verify that each assumption has been proven. */
+    for (size_t i = 0; i < ARRAY_LENGTH(instantiated_assumptions); ++i)
     {
-      char *theorem_str = string_from_symbol_path(src->path);
-      char *assumption_str = string_from_value(assumption);
-      LOG_NORMAL(state->log_out,
-        "Cannot instantiate theorem '%s' because the assumption '%s' is not satisfied.\n",
-        theorem_str, assumption_str);
-      free(theorem_str);
-      free(assumption_str);
-      return 1;
+      Value *assumption = *ARRAY_GET(instantiated_assumptions, Value *, i);
+      if (!statement_proven(assumption, *proven))
+      {
+        char *theorem_str = string_from_symbol_path(src->path);
+        char *assumption_str = string_from_value(assumption);
+        LOG_NORMAL(state->log_out,
+          "Cannot instantiate theorem '%s' because the assumption '%s' is not satisfied.\n",
+          theorem_str, assumption_str);
+        free(theorem_str);
+        free(assumption_str);
+        return 1;
+      }
+      free_value(assumption);
     }
-    free_value(assumption);
+    ARRAY_FREE(instantiated_assumptions);
   }
-  ARRAY_FREE(instantiated_assumptions);
 
   /* Add all the inferences to the environment as proven statements. */
   for (size_t i = 0; i < ARRAY_LENGTH(src->inferences); ++i)
@@ -1673,6 +1670,7 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
   /* Finally, check the proof. */
   Array proven;
   ARRAY_INIT(proven, Value *);
+  ARRAY_INIT(a->steps, struct TheoremReference);
   for (Value **assume = proto.assumptions;
     *assume != NULL; ++assume)
   {
@@ -1681,6 +1679,8 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
   for (struct PrototypeProofStep **step = proto.steps;
     *step != NULL; ++step)
   {
+    struct TheoremReference ref;
+    ARRAY_INIT(ref.arguments, Value *);
     const struct Symbol *thm_symbol = locate_symbol_with_type(state,
       (*step)->theorem_path, SymbolTypeTheorem);
     if (thm_symbol == NULL)
@@ -1689,13 +1689,13 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
         "Cannot add theorem because an axiom/theorem referenced in proof does not exist.\n");
       return LogicErrorSymbolAlreadyExists;
     }
-    struct Theorem *thm = (struct Theorem *)thm_symbol->object;
+    ref.theorem = (struct Theorem *)thm_symbol->object;
 
     /* Build a list of arguments. */
     size_t args_n = 0;
     for (Value **arg = (*step)->arguments; *arg != NULL; ++arg)
       ++args_n;
-    if (args_n != ARRAY_LENGTH(thm->parameters))
+    if (args_n != ARRAY_LENGTH(ref.theorem->parameters))
     {
       LOG_NORMAL(state->log_out,
         "Cannot add theorem because an axiom/theorem referenced received the wrong number of arguments.\n");
@@ -1706,11 +1706,13 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
     ARRAY_INIT(args, struct Argument);
     for (size_t i = 0; i < args_n; ++i)
     {
-      struct Parameter *param = ARRAY_GET(thm->parameters, struct Parameter, i);
+      struct Parameter *param = ARRAY_GET(ref.theorem->parameters, struct Parameter, i);
 
       struct Argument arg;
       arg.name = strdup(param->name);
       arg.value = copy_value((*step)->arguments[i]);
+
+      ARRAY_APPEND(ref.arguments, Value *, copy_value(arg.value));
 
       if (!types_equal(param->type, arg.value->type))
       {
@@ -1722,7 +1724,7 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
       ARRAY_APPEND(args, struct Argument, arg);
     }
 
-    if (instantiate_theorem(state, thm, args, &proven) != 0)
+    if (instantiate_theorem(state, ref.theorem, args, &proven, FALSE) != 0)
     {
       LOG_NORMAL(state->log_out,
         "Cannot add theorem because an axiom/theorem referenced could not be instantiated.\n");
@@ -1737,6 +1739,7 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
       free_value(arg->value);
     }
     ARRAY_FREE(args);
+    ARRAY_APPEND(a->steps, struct TheoremReference, ref);
   }
 
   /* Check that all the inferences have been proven. */

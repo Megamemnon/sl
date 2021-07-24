@@ -255,7 +255,8 @@ html_render_theorem(const struct Theorem *theorem, FILE *f)
   {
     char *path = string_from_symbol_path(theorem->path);
     char *path_label;
-    asprintf(&path_label, "<h4>Path: <code>%s</code></h4>\n", path);
+    asprintf(&path_label, "<h4>Path: <code><a href=\"./symbols/theorem-%zu.html\">%s</a></code></h4>\n",
+      theorem->id, path);
     fputs(path_label, f);
     free(path);
     free(path_label);
@@ -325,7 +326,7 @@ html_render_theorem(const struct Theorem *theorem, FILE *f)
 }
 
 int
-html_render_index(const LogicState *state, const char *filepath)
+html_render_index_page(const LogicState *state, const char *filepath)
 {
   FILE *f = fopen(filepath, "w");
   if (f == NULL)
@@ -361,15 +362,213 @@ html_render_index(const LogicState *state, const char *filepath)
 }
 
 int
+html_render_theorem_page(const LogicState *state,
+  const struct Theorem *theorem, const char *filepath)
+{
+  FILE *f = fopen(filepath, "w");
+  if (f == NULL)
+    return 1;
+  {
+    char *head = html_head(get_symbol_path_last_segment(theorem->path));
+    fputs(head, f);
+    free(head);
+  }
+
+  {
+    char *id_label;
+    if (theorem->is_axiom)
+      asprintf(&id_label, "<h1><code>%zu:</code> Axiom</h1>\n", theorem->id);
+    else
+      asprintf(&id_label, "<h1><code>%zu:</code> Theorem</h1>\n", theorem->id);
+    fputs(id_label, f);
+    free(id_label);
+  }
+  {
+    char *path = string_from_symbol_path(theorem->path);
+    char *path_label;
+    asprintf(&path_label, "<h2>Path: <code>%s</code></h2>\n", path);
+    fputs(path_label, f);
+    free(path);
+    free(path_label);
+  }
+  if (ARRAY_LENGTH(theorem->parameters))
+  {
+    fputs("<h2>Parameters:</h2>\n", f);
+    fputs("<ol>\n", f);
+    for (size_t i = 0; i < ARRAY_LENGTH(theorem->parameters); ++i)
+    {
+      const struct Parameter *param =
+        ARRAY_GET(theorem->parameters, struct Parameter, i);
+      char *param_type = string_from_symbol_path(param->type->path);
+      char *param_str = latex_render_string(param->name);
+      char *param_label;
+      asprintf(&param_label,
+        "<li><code>%s</code> : <code><a href=\"#sym-%zu\">%s</a></code><br />\\(%s\\)</li>\n",
+        param->name, param->type->id, param_type, param_str);
+      fputs(param_label, f);
+      free(param_type);
+      free(param_str);
+      free(param_label);
+    }
+    fputs("</ol>\n", f);
+  }
+  if (ARRAY_LENGTH(theorem->assumptions))
+  {
+    fputs("<h2>Assumptions:</h2>\n", f);
+    fputs("<ul>\n", f);
+    for (size_t i = 0; i < ARRAY_LENGTH(theorem->assumptions); ++i)
+    {
+      const Value *assume = *ARRAY_GET(theorem->assumptions, Value *, i);
+      char *assume_str = html_render_value(assume);
+      char *assume_latex = latex_render_value(assume);
+      char *assume_label;
+      asprintf(&assume_label, "<li><code>%s</code><br />\\(%s\\)</li>\n",
+        assume_str, assume_latex);
+      fputs(assume_label, f);
+      free(assume_str);
+      free(assume_latex);
+      free(assume_label);
+
+    }
+    fputs("</ul>\n", f);
+  }
+  if (ARRAY_LENGTH(theorem->inferences))
+  {
+    fputs("<h2>Inferences:</h2>\n", f);
+    fputs("<ul>\n", f);
+    for (size_t i = 0; i < ARRAY_LENGTH(theorem->inferences); ++i)
+    {
+      const Value *infer = *ARRAY_GET(theorem->inferences, Value *, i);
+      char *infer_str = html_render_value(infer);
+      char *infer_latex = latex_render_value(infer);
+      char *infer_label;
+      asprintf(&infer_label, "<li><code>%s</code><br />\\(%s\\)</li>\n",
+        infer_str, infer_latex);
+      fputs(infer_label, f);
+      free(infer_str);
+      free(infer_latex);
+      free(infer_label);
+    }
+    fputs("</ul>\n", f);
+  }
+  if (!theorem->is_axiom)
+  {
+    fputs("<div>\n", f);
+    fputs("<h4>Steps:</h4>\n", f);
+    fputs("<ol>\n", f);
+    for (size_t i = 0; i < ARRAY_LENGTH(theorem->steps); ++i)
+    {
+      struct TheoremReference *ref =
+        ARRAY_GET(theorem->steps, struct TheoremReference, i);
+      fputs("<li><div>\n", f);
+      {
+        char *path = string_from_symbol_path(ref->theorem->path);
+        char *path_label;
+        asprintf(&path_label, "<h4>Path: <code><a href=\"../symbols/theorem-%zu.html\">%s</a></code></h4>\n",
+          ref->theorem->id, path);
+        fputs(path_label, f);
+        free(path);
+        free(path_label);
+      }
+      fputs("<h4>Arguments: </h4>\n", f);
+      fputs("<ol>\n", f);
+      for (size_t j = 0; j < ARRAY_LENGTH(ref->arguments); ++j)
+      {
+        const Value *arg = *ARRAY_GET(ref->arguments, Value *, j);
+        char *arg_str = html_render_value(arg);
+        char *arg_latex = latex_render_value(arg);
+        char *arg_label;
+        asprintf(&arg_label, "<li><code>%s</code><br />\\(%s\\)</li>\n",
+          arg_str, arg_latex);
+        fputs(arg_label, f);
+        free(arg_str);
+        free(arg_latex);
+        free(arg_label);
+      }
+      fputs("</ol>\n", f);
+      fputs("<h4>Inferred: </h4>\n", f);
+      fputs("<ul>\n", f);
+      {
+        Array proven_arr;
+        ARRAY_INIT(proven_arr, Value *);
+        Array args;
+        ARRAY_INIT(args, struct Argument);
+        for (size_t j = 0; j < ARRAY_LENGTH(ref->arguments); ++j)
+        {
+          struct Parameter *param = ARRAY_GET(ref->theorem->parameters, struct Parameter, j);
+
+          struct Argument arg;
+          arg.name = strdup(param->name);
+          arg.value = copy_value(*ARRAY_GET(ref->arguments, Value *, j));
+
+          ARRAY_APPEND(args, struct Argument, arg);
+        }
+
+        instantiate_theorem(state, ref->theorem, args, &proven_arr, TRUE);
+
+        for (size_t j = 0; j < ARRAY_LENGTH(proven_arr); ++j)
+        {
+          Value *proven = *ARRAY_GET(proven_arr, Value *, j);
+          char *proven_str = html_render_value(proven);
+          char *proven_latex = latex_render_value(proven);
+          char *proven_label;
+          asprintf(&proven_label, "<li><code>%s</code><br />\\(%s\\)</li>\n",
+            proven_str, proven_latex);
+          fputs(proven_label, f);
+          free(proven_str);
+          free(proven_latex);
+          free(proven_label);
+        }
+      }
+      fputs("</ul>\n", f);
+      fputs("</div></li>\n", f);
+    }
+    fputs("</ol>\n", f);
+    fputs("</div>\n", f);
+  }
+  fputs("</div>\n", f);
+
+  fputs("<a href=\"../index.html\">Index</a>", f);
+  fputs(HTML_END, f);
+  fclose(f);
+  return 0;
+}
+
+int
 render_html(const LogicState *state, const char *output_dir)
 {
   mkdir(output_dir, 0777); /* TODO: handle errors. */
-
+  {
+    char symbol_dir[1024];
+    snprintf(symbol_dir, 1024, "%s/symbols", output_dir);
+    mkdir(symbol_dir, 0777); /* TODO: handle errors. */
+  }
   {
     char index_path[1024];
     snprintf(index_path, 1024, "%s/index.html", output_dir);
-    int err = html_render_index(state, index_path);
+    int err = html_render_index_page(state, index_path);
     PROPAGATE_ERROR(err);
+  }
+  for (size_t i = 0; i < ARRAY_LENGTH(state->symbol_table); ++i)
+  {
+    const struct Symbol *sym =
+      ARRAY_GET(state->symbol_table, struct Symbol, i);
+    char page_path[1024];
+    if (sym->type == SymbolTypeTheorem)
+    {
+      const struct Theorem *thm = (struct Theorem *)sym->object;
+      snprintf(page_path, 1024, "%s/symbols/theorem-%zu.html",
+        output_dir, thm->id);
+      html_render_theorem_page(state, thm, page_path);
+    }
+    /*if (sym->type == SymbolTypeType)
+      html_render_type((struct Type *)sym->object, f);
+    else if (sym->type == SymbolTypeConstant)
+      html_render_constant((struct Constant *)sym->object, f);
+    else if (sym->type == SymbolTypeExpression)
+      html_render_expression((struct Expression *)sym->object, f);*/
+    /*if (sym->type == SymbolTypeTheorem)
+      html_render_theorem_page((struct Theorem *)sym->object, f);*/
   }
   return 0;
 }

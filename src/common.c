@@ -1,5 +1,6 @@
 #include "common.h"
 #include <stdio.h>
+#include <string.h>
 
 /* From http://www.cse.yorku.ca/~oz/hash.html */
 uint32_t
@@ -12,6 +13,24 @@ hash(char *str)
     hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
 
   return hash;
+}
+
+char *
+strndup(const char *str, size_t n)
+{
+  if (strlen(str) <= n)
+  {
+    return strdup(str);
+  }
+  else
+  {
+    char *result = malloc(n + 1);
+    if (result == NULL)
+      return NULL;
+    strncpy(result, str, n);
+    result[n] = '\0';
+    return result;
+  }
 }
 
 int

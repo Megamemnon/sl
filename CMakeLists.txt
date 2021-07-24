@@ -8,6 +8,7 @@ set(CMAKE_BUILD_TYPE Debug)
 add_library(sl
   src/arg.c
   src/common.c
+  src/_lex.c
   src/lex.c
   src/logic.c
   src/parse.c
@@ -26,6 +27,7 @@ add_executable(test_sl
   tests/test.c
 
   tests/test_core.c
+  tests/test_parse.c
 )
 target_include_directories(test_sl PUBLIC src)
 target_link_libraries(test_sl sl)

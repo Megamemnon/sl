@@ -1,27 +1,44 @@
 #include "test_case.h"
+#include <ctype.h>
+#include <stdio.h>
 
 int
 main(int argc, char **argv)
 {
+  struct TestCase test_cases[] = {
+    test_values,
+    test_lexer
+  };
+
   struct TestState state;
   init_test_state(&state);
 
-  run_test_case(&state, test_values);
+  for (size_t i = 0; i < sizeof(test_cases) / sizeof(struct TestCase); ++i)
+  {
+    run_test_case(&state, test_cases[i]);
+    if (state.error != 0)
+      break;
+  }
 
   cleanup_test_state(&state);
-  return 0;
+  return state.error;
 }
 
 void
 init_test_state(struct TestState *state)
 {
-
+  state->error = 0;
 }
 
 void
-run_test_case(struct TestState *state, run_test_t test_case)
+run_test_case(struct TestState *state, struct TestCase test_case)
 {
-  int result = test_case(state);
+  printf("Running test \"%s\"...\n", test_case.name);
+  state->error = test_case.run(state);
+  if (state->error == 0)
+    printf("Good.\n");
+  else
+    printf("Failed.\n");
 }
 
 void

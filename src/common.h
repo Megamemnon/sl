@@ -38,7 +38,7 @@ do { \
   (array).length = 0; \
   (array).reserved = 1; \
 } \
-while(0)
+while (0)
 
 #define ARRAY_INIT_WITH_RESERVED(array, type, to_reserve) \
 do { \
@@ -47,7 +47,7 @@ do { \
   (array).length = 0; \
   (array).reserved = to_reserve; \
 } \
-while(0)
+while (0)
 
 #define ARRAY_LENGTH(array) (array).length
 
@@ -63,13 +63,13 @@ do { \
   ((type *)(array).data)[(array).length] = item; \
   (array).length += 1; \
 } \
-while(0)
+while (0)
 
 #define ARRAY_POP(array) \
 do { \
   (array).length -= 1; \
 } \
-while(0)
+while (0)
 
 #define ARRAY_FREE(array) \
 do { \
@@ -78,7 +78,7 @@ do { \
   (array).length = 0; \
   (array).reserved = 0; \
 } \
-while(0)
+while (0)
 
 #define ARRAY_COPY(dst, src) \
 do { \
@@ -88,10 +88,63 @@ do { \
   (dst).data = malloc((src).element_size * (src).reserved); \
   memcpy((dst).data, (src).data, (src).element_size * (src).length); \
 } \
-while(0)
+while (0)
+
+#define MANAGED_ARRAY(type) \
+struct \
+{ \
+  type *data; \
+  size_t length; \
+  size_t reserved; \
+}
+
+#define MANAGED_ARRAY_INIT(array) \
+do { \
+  (array).data = malloc(sizeof(*(array).data)); \
+  (array).length = 0; \
+  (array).reserved = 1; \
+} \
+while (0)
+
+#define MANAGED_ARRAY_GET(array, index) (array).data[index]
+
+#define MANAGED_ARRAY_APPEND(array, item) \
+do { \
+  if ((array).reserved < (array).length + 1) \
+  { \
+    (array).reserved = (array).reserved * 2; \
+    (array).data = realloc((array).data, sizeof(*(array).data) * (array).reserved); \
+  } \
+  (array).data[(array).length] = item; \
+  (array).length += 1; \
+} \
+while (0)
+
+#define MANAGED_ARRAY_FREE(array) \
+do { \
+  free((array).data); \
+  (array).length = 0; \
+  (array).reserved = 0; \
+} \
+while (0)
+
+#define ARR(type) MANAGED_ARRAY(type)
+#define ARR_GET(array, index) MANAGED_ARRAY_GET(array, index)
+#define ARR_APPEND(array, item) MANAGED_ARRAY_APPEND(array, item)
+#define ARR_FREE(array) MANAGED_ARRAY_FREE(array)
+
+/* String helpers. */
+struct sl_StringSlice
+{
+  const char *begin;
+  size_t length;
+};
 
 uint32_t
 hash(char *str);
+
+char *
+strndup(const char *str, size_t n);
 
 int
 asprintf(char **str, const char *fmt, ...);

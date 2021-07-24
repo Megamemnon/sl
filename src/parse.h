@@ -1,6 +1,75 @@
 #ifndef PARSE_H
 #define PARSE_H
 
+#include "common.h"
+#include <ctype.h>
+#include <stdio.h>
+#include <stdint.h>
+
+typedef struct sl_LexerState sl_LexerState;
+
+enum sl_LexerTokenType
+{
+  sl_LexerTokenType_None = 0,
+  sl_LexerTokenType_Unknown,
+  sl_LexerTokenType_LineEnd,
+  sl_LexerTokenType_Identifier,
+  sl_LexerTokenType_String,
+  sl_LexerTokenType_Number,
+  sl_LexerTokenType_LineComment,
+  sl_LexerTokenType_OpeningBlockComment,
+  sl_LexerTokenType_ClosingBlockComment,
+  sl_LexerTokenType_OpeningParenthesis,
+  sl_LexerTokenType_ClosingParenthesis,
+  sl_LexerTokenType_OpeningBrace,
+  sl_LexerTokenType_ClosingBrace,
+  sl_LexerTokenType_OpeningAngle,
+  sl_LexerTokenType_ClosingAngle,
+  sl_LexerTokenType_OpeningBracket,
+  sl_LexerTokenType_ClosingBracket,
+  sl_LexerTokenType_Plus,
+  sl_LexerTokenType_Dot,
+  sl_LexerTokenType_Comma,
+  sl_LexerTokenType_Semicolon,
+  sl_LexerTokenType_Colon,
+  sl_LexerTokenType_Percent,
+  sl_LexerTokenType_DollarSign
+};
+typedef enum sl_LexerTokenType sl_LexerTokenType;
+
+struct sl_LexerNumber
+{
+  bool is_number;
+  uint32_t value;
+};
+
+sl_LexerState *
+sl_lexer_new_state_from_file(FILE *input);
+
+sl_LexerState *
+sl_lexer_new_state_from_string(const char *input);
+
+void
+sl_lexer_free_state(sl_LexerState *state);
+
+int
+sl_lexer_advance(sl_LexerState *state);
+
+sl_LexerTokenType
+sl_lexer_get_current_token_type(const sl_LexerState *state);
+
+struct sl_StringSlice
+sl_lexer_get_current_token_string_value(const sl_LexerState *state);
+
+struct sl_LexerNumber
+sl_lexer_get_current_token_numerical_value(const sl_LexerState *state);
+
+uint32_t
+sl_lexer_get_current_token_line(const sl_LexerState *state);
+
+uint32_t
+sl_lexer_get_current_token_column(const sl_LexerState *state);
+
 #include "lex.h"
 #include "common.h"
 #include <stdlib.h>
