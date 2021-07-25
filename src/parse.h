@@ -72,50 +72,85 @@ uint32_t
 sl_lexer_get_current_token_column(const sl_LexerState *state);
 
 #include "lex.h"
-#include "common.h"
-#include <stdlib.h>
 
-/* Generally parsers need to be written per language, so these are just
-   general functions for manipulating ASTs. */
-struct ASTNode;
-
-typedef void (* free_node_callback_t)(struct ASTNode *);
-
- /* Copy the user data from the source to the destination. */
-typedef void (* copy_node_callback_t)(struct ASTNode *, const struct ASTNode *);
-
-struct ASTNode
+enum sl_ASTNodeType
 {
-  struct ASTNode *parent;
-  Array children;
-
-  void *data;
-
-  free_node_callback_t free_callback;
-  copy_node_callback_t copy_callback;
+  sl_ASTNodeType_None = 0,
+  sl_ASTNodeType_Namespace,
+  sl_ASTNodeType_Use,
+  sl_ASTNodeType_Type,
+  sl_ASTNodeType_ConstantDeclaration,
+  sl_ASTNodeType_Expression,
+  sl_ASTNodeType_Axiom,
+  sl_ASTNodeType_Theorem,
+  sl_ASTNodeType_ParameterList,
+  sl_ASTNodeType_Parameter,
+  sl_ASTNodeType_Latex,
+  sl_ASTNodeType_Bind,
+  sl_ASTNodeType_Def,
+  sl_ASTNodeType_Assume,
+  sl_ASTNodeType_Require,
+  sl_ASTNodeType_Infer,
+  sl_ASTNodeType_Step,
+  sl_ASTNodeType_LatexString,
+  sl_ASTNodeType_LatexVariable,
+  sl_ASTNodeType_Composition,
+  sl_ASTNodeType_Constant,
+  sl_ASTNodeType_Variable,
+  sl_ASTNodeType_Placeholder,
+  sl_ASTNodeType_TheoremReference,
+  sl_ASTNodeType_CompositionArgumentList,
+  sl_ASTNodeType_Path,
+  sl_ASTNodeType_PathSegment
 };
+typedef enum sl_ASTNodeType sl_ASTNodeType;
+
+struct sl_ASTNode;
+typedef struct sl_ASTNode sl_ASTNode;
+
+const sl_ASTNode *
+sl_node_get_parent(const sl_ASTNode *node);
+
+size_t
+sl_node_get_child_count(const sl_ASTNode *node);
+
+const sl_ASTNode *
+sl_node_get_child(const sl_ASTNode *node, size_t index);
+
+sl_ASTNodeType
+sl_node_get_type(const sl_ASTNode *node);
+
+const struct Token *
+sl_node_get_location(const sl_ASTNode *node);
+
+const char *
+sl_node_get_name(const sl_ASTNode *node);
+
+const char *
+sl_node_get_typename(const sl_ASTNode *node);
+
+bool
+sl_node_get_atomic(const sl_ASTNode *node);
+
+sl_ASTNode *
+sl_node_new();
 
 void
-init_tree(struct ASTNode *root);
+free_tree(sl_ASTNode *root);
 
 void
-free_tree(struct ASTNode *root);
+copy_tree(sl_ASTNode *dst, const sl_ASTNode *src);
 
 void
-copy_tree(struct ASTNode *dst, const struct ASTNode *src);
+print_tree(const sl_ASTNode *root);
 
-typedef void (* print_node_callback_t)(char *, size_t, const struct ASTNode *);
+sl_ASTNode *
+new_child(sl_ASTNode *parent);
 
-void
-print_tree(const struct ASTNode *root, print_node_callback_t print_callback);
-
-struct ASTNode *
-new_child(struct ASTNode *parent);
-
-typedef void (* traverse_node_callback_t)(const struct ASTNode *, void *);
+typedef void (* traverse_node_callback_t)(const sl_ASTNode *, void *);
 
 void
-traverse_tree(const struct ASTNode *root, traverse_node_callback_t node_callback,
+traverse_tree(const sl_ASTNode *root, traverse_node_callback_t node_callback,
   void *user_data);
 
 struct ParserError
@@ -130,51 +165,9 @@ struct ParserState
   struct LexState *input;
   size_t token_index;
 
-  struct ASTNode ast_root;
-  struct ASTNode *ast_current;
+  sl_ASTNode *ast_root;
+  sl_ASTNode *ast_current;
 };
-
-bool
-done_parsing(struct ParserState *state);
-
-Array *
-parser_token_buffer(struct ParserState *state);
-
-struct Token *
-get_current_token(struct ParserState *state);
-
-void
-add_child_and_descend(struct ParserState *state);
-
-void
-ascend(struct ParserState *state);
-
-int
-advance(struct ParserState *state);
-
-int
-consume_keyword(struct ParserState *state, const char *keyword);
-
-bool
-next_is_keyword(struct ParserState *state, const char *keyword);
-
-int
-consume_symbol(struct ParserState *state, const char *symbol);
-
-bool
-next_is_symbol(struct ParserState *state, const char *symbol);
-
-int
-consume_identifier(struct ParserState *state, const char **identifier);
-
-bool
-next_is_string(struct ParserState *state);
-
-int
-consume_string(struct ParserState *state, const char **string);
-
-bool
-tokens_remain(struct ParserState *state);
 
 #define LOG_NORMAL(out, ...) \
 do { \
@@ -188,56 +181,6 @@ do { \
     fprintf(out, __VA_ARGS__); \
 } \
 while (0);
-
-enum ASTNodeType
-{
-  ASTNodeTypeNone = 0,
-  ASTNodeTypeNamespace,
-
-  ASTNodeTypeUse,
-  ASTNodeTypeType,
-  ASTNodeTypeConstantDeclaration,
-  ASTNodeTypeExpression,
-  ASTNodeTypeAxiom,
-  ASTNodeTypeTheorem,
-
-  ASTNodeTypeParameterList,
-  ASTNodeTypeParameter,
-
-  ASTNodeTypeLatex,
-  ASTNodeTypeBind,
-
-  ASTNodeTypeDef,
-  ASTNodeTypeAssume,
-  ASTNodeTypeRequire,
-  ASTNodeTypeInfer,
-  ASTNodeTypeStep,
-
-  ASTNodeTypeLatexString,
-  ASTNodeTypeLatexVariable,
-
-  ASTNodeTypeComposition,
-  ASTNodeTypeConstant,
-  ASTNodeTypeVariable,
-  ASTNodeTypePlaceholder,
-  ASTNodeTypeTheoremReference,
-
-  ASTNodeTypeCompositionArgumentList,
-  ASTNodeTypePath,
-
-  ASTNodeTypePathSegment
-};
-
-struct ASTNodeData
-{
-  enum ASTNodeType type;
-  const struct Token *location;
-  char *name;
-  char *typename;
-  bool atomic;
-};
-
-#define AST_NODE_DATA(node) ((struct ASTNodeData *)node->data)
 
 int
 parse_root(struct ParserState *state);

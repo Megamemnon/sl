@@ -1,67 +1,163 @@
 #include "parse.h"
 #include "common.h"
-
 #include <string.h>
+
+typedef ARR(sl_ASTNode) NodeArray;
+
+struct sl_ASTNode
+{
+  sl_ASTNode *parent;
+  Array children;
+
+  sl_ASTNodeType type;
+  const struct Token *location;
+  char *name;
+  char *typename;
+  bool atomic;
+};
 
 int verbose = 0;
 
-void
-init_tree(struct ASTNode *root)
+const sl_ASTNode *
+sl_node_get_parent(const sl_ASTNode *node)
 {
-  root->parent = NULL;
-  ARRAY_INIT(root->children, struct ASTNode);
+  if (node == NULL)
+    return NULL;
+  return node->parent;
+}
+
+size_t
+sl_node_get_child_count(const sl_ASTNode *node)
+{
+  if (node == NULL)
+    return 0;
+  return ARRAY_LENGTH(node->children);
+}
+
+const sl_ASTNode *
+sl_node_get_child(const sl_ASTNode *node, size_t index)
+{
+  if (node == NULL)
+    return NULL;
+  if (index >= ARRAY_LENGTH(node->children))
+    return NULL;
+  return ARRAY_GET(node->children, sl_ASTNode, index);
+}
+
+sl_ASTNodeType
+sl_node_get_type(const sl_ASTNode *node)
+{
+  if (node == NULL)
+    return sl_ASTNodeType_None;
+  return node->type;
+}
+
+const struct Token *
+sl_node_get_location(const sl_ASTNode *node)
+{
+  if (node == NULL)
+    return NULL;
+  return node->location;
+}
+
+const char *
+sl_node_get_name(const sl_ASTNode *node)
+{
+  if (node == NULL)
+    return NULL;
+  return node->name;
+}
+
+const char *
+sl_node_get_typename(const sl_ASTNode *node)
+{
+  if (node == NULL)
+    return NULL;
+  return node->typename;
+}
+
+bool
+sl_node_get_atomic(const sl_ASTNode *node)
+{
+  if (node == NULL)
+    return FALSE;
+  return node->atomic;
+}
+
+sl_ASTNode *
+sl_node_new()
+{
+  sl_ASTNode *node = SL_NEW(sl_ASTNode);
+  node->parent = NULL;
+  node->name = NULL;
+  node->typename = NULL;
+  ARRAY_INIT(node->children, sl_ASTNode);
+  return node;
 }
 
 static void
-free_children(struct ASTNode *root)
+free_children(sl_ASTNode *root)
 {
   for (size_t i = 0; i < ARRAY_LENGTH(root->children); ++i)
   {
-    free_children(ARRAY_GET(root->children, struct ASTNode, i));
+    free_children(ARRAY_GET(root->children, sl_ASTNode, i));
   }
   ARRAY_FREE(root->children);
-  if (root->free_callback != NULL)
-    root->free_callback(root);
+  if (root->name != NULL)
+    free(root->name);
+  if (root->typename != NULL)
+    free(root->typename);
 }
 
 void
-free_tree(struct ASTNode *root)
+free_tree(sl_ASTNode *root)
 {
   /* Recursively free the children of this node. */
   free_children(root);
 }
 
 static void
-copy_node_and_children(struct ASTNode *dst, const struct ASTNode *src)
+copy_node_and_children(sl_ASTNode *dst, const sl_ASTNode *src)
 {
-  dst->free_callback = src->free_callback;
-  dst->copy_callback = src->copy_callback;
-  ARRAY_INIT_WITH_RESERVED(dst->children, struct ASTNode,
+  ARRAY_INIT_WITH_RESERVED(dst->children, sl_ASTNode,
     ARRAY_LENGTH(src->children));
   for (size_t i = 0; i < ARRAY_LENGTH(src->children); ++i)
   {
-    struct ASTNode *dst_child = ARRAY_GET(dst->children, struct ASTNode, i);
-    const struct ASTNode *src_child =
-      ARRAY_GET(src->children, struct ASTNode, i);
+    sl_ASTNode *dst_child = ARRAY_GET(dst->children, sl_ASTNode, i);
+    const sl_ASTNode *src_child =
+      ARRAY_GET(src->children, sl_ASTNode, i);
     copy_node_and_children(dst_child, src_child);
     dst_child->parent = dst;
   }
-  if (dst->copy_callback != NULL)
-    dst->copy_callback(dst, src);
+  {
+    dst->type = src->type;
+    dst->location = src->location;
+    if (src->name != NULL)
+      dst->name = strdup(src->name);
+    else
+      dst->name = NULL;
+
+    if (src->typename == NULL)
+      dst->typename = strdup(src->typename);
+    else
+      dst->typename = NULL;
+  }
 }
 
 void
-copy_tree(struct ASTNode *dst, const struct ASTNode *src)
+copy_tree(sl_ASTNode *dst, const sl_ASTNode *src)
 {
-  struct ASTNode result = {};
+  sl_ASTNode result = {};
   copy_node_and_children(&result, src);
 
   free_tree(dst);
   *dst = result;
 }
 
+/* TODO */
+#if 0
 static void
-print_children(const struct ASTNode *root, unsigned int depth,
+print_children(const sl_ASTNode *root, unsigned int depth,
   print_node_callback_t print_callback)
 {
   for (size_t i = 0; i < depth; ++i)
@@ -71,40 +167,47 @@ print_children(const struct ASTNode *root, unsigned int depth,
   printf("%s\n", buf);
   for (size_t i = 0; i < ARRAY_LENGTH(root->children); ++i)
   {
-    print_children(ARRAY_GET(root->children, struct ASTNode, i),
+    print_children(ARRAY_GET(root->children, sl_ASTNode, i),
       depth + 1, print_callback);
   }
 }
 
 void
-print_tree(const struct ASTNode *root, print_node_callback_t print_callback)
+print_tree(const sl_ASTNode *root, print_node_callback_t print_callback)
 {
   print_children(root, 0, print_callback);
 }
+#endif
 
-struct ASTNode *
-new_child(struct ASTNode *parent)
+sl_ASTNode *
+new_child(sl_ASTNode *parent)
 {
-  struct ASTNode child = {};
+  sl_ASTNode child = {};
   child.parent = parent;
-  ARRAY_INIT(child.children, struct ASTNode);
+  ARRAY_INIT(child.children, sl_ASTNode);
 
-  ARRAY_APPEND(parent->children, struct ASTNode, child);
+  ARRAY_APPEND(parent->children, sl_ASTNode, child);
 
-  return ARRAY_GET(parent->children, struct ASTNode,
+  return ARRAY_GET(parent->children, sl_ASTNode,
     ARRAY_LENGTH(parent->children) - 1);
 }
 
 void
-traverse_tree(const struct ASTNode *root,
+traverse_tree(const sl_ASTNode *root,
   traverse_node_callback_t node_callback, void *user_data)
 {
   for (size_t i = 0; i < ARRAY_LENGTH(root->children); ++i)
   {
-    traverse_tree(ARRAY_GET(root->children, struct ASTNode, i), node_callback,
+    traverse_tree(ARRAY_GET(root->children, sl_ASTNode, i), node_callback,
       user_data);
   }
   node_callback(root, user_data);
+}
+
+Array *
+parser_token_buffer(struct ParserState *state)
+{
+  return lex_state_front_buffer(state->input);
 }
 
 bool
@@ -113,12 +216,6 @@ done_parsing(struct ParserState *state)
   if (state->token_index >= ARRAY_LENGTH(*parser_token_buffer(state)))
     return TRUE;
   return FALSE;
-}
-
-Array *
-parser_token_buffer(struct ParserState *state)
-{
-  return lex_state_front_buffer(state->input);
 }
 
 struct Token *
@@ -237,49 +334,24 @@ tokens_remain(struct ParserState *state)
 }
 
 static void
-free_ast_node(struct ASTNode *node)
+free_ast_node(sl_ASTNode *node)
 {
-  struct ASTNodeData *data = AST_NODE_DATA(node);
-  if (data->name != NULL)
-    free(data->name);
-  if (data->typename != NULL)
-    free(data->typename);
-  free(data);
+  if (node == NULL)
+    return;
+  if (node->name != NULL)
+    free(node->name);
+  if (node->typename != NULL)
+    free(node->typename);
 }
 
 static void
-copy_ast_node(struct ASTNode *dst, const struct ASTNode *src)
+init_ast_node(sl_ASTNode *node)
 {
-  struct ASTNodeData *dst_data = AST_NODE_DATA(src);
-  const struct ASTNodeData *src_data = AST_NODE_DATA(src);
-
-  dst_data->type = src_data->type;
-  dst_data->location = src_data->location;
-  if (src_data->name != NULL)
-    dst_data->name = strdup(src_data->name);
-  else
-    dst_data->name = NULL;
-
-  if (src_data->typename == NULL)
-    dst_data->typename = strdup(src_data->typename);
-  else
-    dst_data->typename = NULL;
-}
-
-static void
-init_ast_node(struct ASTNode *node)
-{
-  node->data = malloc(sizeof(struct ASTNodeData));
-
-  struct ASTNodeData *data = AST_NODE_DATA(node);
-  data->type = ASTNodeTypeNone;
-  data->location = NULL;
-  data->name = NULL;
-  data->typename = NULL;
-  data->atomic = FALSE;
-
-  node->free_callback = &free_ast_node;
-  node->copy_callback = &copy_ast_node;
+  node->type = sl_ASTNodeType_None;
+  node->location = NULL;
+  node->name = NULL;
+  node->typename = NULL;
+  node->atomic = FALSE;
 }
 
 static int
@@ -290,8 +362,8 @@ parse_path(struct ParserState *state)
 {
   add_child_and_descend(state);
   init_ast_node(state->ast_current);
-  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypePath;
-  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+  state->ast_current->type = sl_ASTNodeType_Path;
+  state->ast_current->location = get_current_token(state);
 
   const char *first_segment;
   if (!consume_identifier(state, &first_segment))
@@ -303,9 +375,9 @@ parse_path(struct ParserState *state)
   {
     add_child_and_descend(state);
     init_ast_node(state->ast_current);
-    AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
-    AST_NODE_DATA(state->ast_current)->type = ASTNodeTypePathSegment;
-    AST_NODE_DATA(state->ast_current)->name = strdup(first_segment);
+    state->ast_current->location = get_current_token(state);
+    state->ast_current->type = sl_ASTNodeType_PathSegment;
+    state->ast_current->name = strdup(first_segment);
     ascend(state);
   }
 
@@ -321,9 +393,9 @@ parse_path(struct ParserState *state)
     {
       add_child_and_descend(state);
       init_ast_node(state->ast_current);
-      AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
-      AST_NODE_DATA(state->ast_current)->type = ASTNodeTypePathSegment;
-      AST_NODE_DATA(state->ast_current)->name = strdup(segment);
+      state->ast_current->location = get_current_token(state);
+      state->ast_current->type = sl_ASTNodeType_PathSegment;
+      state->ast_current->name = strdup(segment);
       ascend(state);
     }
   }
@@ -337,8 +409,8 @@ parse_use(struct ParserState *state)
 {
   add_child_and_descend(state);
   init_ast_node(state->ast_current);
-  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeUse;
-  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+  state->ast_current->type = sl_ASTNodeType_Use;
+  state->ast_current->location = get_current_token(state);
 
   if (!consume_keyword(state, "use"))
   {
@@ -364,8 +436,8 @@ parse_type(struct ParserState *state)
 {
   add_child_and_descend(state);
   init_ast_node(state->ast_current);
-  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeType;
-  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+  state->ast_current->type = sl_ASTNodeType_Type;
+  state->ast_current->location = get_current_token(state);
 
   if (!consume_keyword(state, "type"))
   {
@@ -381,16 +453,16 @@ parse_type(struct ParserState *state)
   }
   else
   {
-    AST_NODE_DATA(state->ast_current)->typename = strdup(typename);
+    state->ast_current->typename = strdup(typename);
   }
 
   if (consume_keyword(state, "atomic"))
   {
-    AST_NODE_DATA(state->ast_current)->atomic = TRUE;
+    state->ast_current->atomic = TRUE;
   }
   else
   {
-    AST_NODE_DATA(state->ast_current)->atomic = FALSE;
+    state->ast_current->atomic = FALSE;
   }
 
   if (!consume_symbol(state, ";"))
@@ -408,12 +480,12 @@ parse_value(struct ParserState *state)
 {
   add_child_and_descend(state);
   init_ast_node(state->ast_current);
-  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+  state->ast_current->location = get_current_token(state);
 
   if (consume_symbol(state, "$"))
   {
     /* This is a variable. */
-    AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeVariable;
+    state->ast_current->type = sl_ASTNodeType_Variable;
     const char *variable_name;
     if (!consume_identifier(state, &variable_name))
     {
@@ -422,13 +494,13 @@ parse_value(struct ParserState *state)
     }
     else
     {
-      AST_NODE_DATA(state->ast_current)->name = strdup(variable_name);
+      state->ast_current->name = strdup(variable_name);
     }
   }
   else if (consume_symbol(state, "%"))
   {
     /* This is a placeholder. */
-    AST_NODE_DATA(state->ast_current)->type = ASTNodeTypePlaceholder;
+    state->ast_current->type = sl_ASTNodeType_Placeholder;
     const char *placeholder_name;
     if (!consume_identifier(state, &placeholder_name))
     {
@@ -437,7 +509,7 @@ parse_value(struct ParserState *state)
     }
     else
     {
-      AST_NODE_DATA(state->ast_current)->name = strdup(placeholder_name);
+      state->ast_current->name = strdup(placeholder_name);
     }
   }
   else
@@ -449,12 +521,12 @@ parse_value(struct ParserState *state)
     if (consume_symbol(state, "("))
     {
       /* We have a composition. Parse the arguments. */
-      AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeComposition;
+      state->ast_current->type = sl_ASTNodeType_Composition;
 
       add_child_and_descend(state);
       init_ast_node(state->ast_current);
-      AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
-      AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeCompositionArgumentList;
+      state->ast_current->location = get_current_token(state);
+      state->ast_current->type = sl_ASTNodeType_CompositionArgumentList;
 
       bool first_token = TRUE;
       while (!consume_symbol(state, ")"))
@@ -479,7 +551,7 @@ parse_value(struct ParserState *state)
     else
     {
       /* Just a constant. */
-      AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeConstant;
+      state->ast_current->type = sl_ASTNodeType_Constant;
     }
   }
 
@@ -492,8 +564,8 @@ parse_latex(struct ParserState *state)
 {
   add_child_and_descend(state);
   init_ast_node(state->ast_current);
-  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeLatex;
-  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+  state->ast_current->type = sl_ASTNodeType_Latex;
+  state->ast_current->location = get_current_token(state);
 
   if (!consume_keyword(state, "latex"))
   {
@@ -518,8 +590,8 @@ parse_latex(struct ParserState *state)
     {
       add_child_and_descend(state);
       init_ast_node(state->ast_current);
-      AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeLatexString;
-      AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+      state->ast_current->type = sl_ASTNodeType_LatexString;
+      state->ast_current->location = get_current_token(state);
       const char *latex_str;
       if (!consume_string(state, &latex_str))
       {
@@ -528,7 +600,7 @@ parse_latex(struct ParserState *state)
       }
       else
       {
-        AST_NODE_DATA(state->ast_current)->name = strdup(latex_str);
+        state->ast_current->name = strdup(latex_str);
       }
       ascend(state);
     }
@@ -537,8 +609,8 @@ parse_latex(struct ParserState *state)
       /* This is a variable. */
       add_child_and_descend(state);
       init_ast_node(state->ast_current);
-      AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeLatexVariable;
-      AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+      state->ast_current->type = sl_ASTNodeType_LatexVariable;
+      state->ast_current->location = get_current_token(state);
       const char *variable_name;
       if (!consume_identifier(state, &variable_name))
       {
@@ -547,7 +619,7 @@ parse_latex(struct ParserState *state)
       }
       else
       {
-        AST_NODE_DATA(state->ast_current)->name = strdup(variable_name);
+        state->ast_current->name = strdup(variable_name);
       }
       ascend(state);
     }
@@ -585,8 +657,8 @@ parse_constant_declaration(struct ParserState *state)
 {
   add_child_and_descend(state);
   init_ast_node(state->ast_current);
-  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeConstantDeclaration;
-  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+  state->ast_current->type = sl_ASTNodeType_ConstantDeclaration;
+  state->ast_current->location = get_current_token(state);
 
   if (!consume_keyword(state, "const"))
   {
@@ -602,7 +674,7 @@ parse_constant_declaration(struct ParserState *state)
   }
   else
   {
-    AST_NODE_DATA(state->ast_current)->name = strdup(const_name);
+    state->ast_current->name = strdup(const_name);
   }
 
   if (!consume_symbol(state, ":"))
@@ -637,8 +709,8 @@ parse_parameter_list(struct ParserState *state)
 {
   add_child_and_descend(state);
   init_ast_node(state->ast_current);
-  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeParameterList;
-  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+  state->ast_current->type = sl_ASTNodeType_ParameterList;
+  state->ast_current->location = get_current_token(state);
 
   if (!consume_symbol(state, "("))
   {
@@ -662,8 +734,8 @@ parse_parameter_list(struct ParserState *state)
 
     add_child_and_descend(state);
     init_ast_node(state->ast_current);
-    AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeParameter;
-    AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+    state->ast_current->type = sl_ASTNodeType_Parameter;
+    state->ast_current->location = get_current_token(state);
 
     const char *parameter_name;
     if (!consume_identifier(state, &parameter_name))
@@ -673,7 +745,7 @@ parse_parameter_list(struct ParserState *state)
     }
     else
     {
-      AST_NODE_DATA(state->ast_current)->name = strdup(parameter_name);
+      state->ast_current->name = strdup(parameter_name);
     }
 
     if (!consume_symbol(state, ":"))
@@ -698,8 +770,8 @@ parse_bind(struct ParserState *state)
 {
   add_child_and_descend(state);
   init_ast_node(state->ast_current);
-  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeBind;
-  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+  state->ast_current->type = sl_ASTNodeType_Bind;
+  state->ast_current->location = get_current_token(state);
 
   if (!consume_keyword(state, "bind"))
   {
@@ -748,8 +820,8 @@ parse_expression(struct ParserState *state)
 {
   add_child_and_descend(state);
   init_ast_node(state->ast_current);
-  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeExpression;
-  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+  state->ast_current->type = sl_ASTNodeType_Expression;
+  state->ast_current->location = get_current_token(state);
 
   if (!consume_keyword(state, "expr"))
   {
@@ -768,7 +840,7 @@ parse_expression(struct ParserState *state)
   }
   else
   {
-    AST_NODE_DATA(state->ast_current)->name = strdup(expression_name);
+    state->ast_current->name = strdup(expression_name);
   }
 
   err = parse_parameter_list(state);
@@ -797,8 +869,8 @@ parse_require(struct ParserState *state)
 {
   add_child_and_descend(state);
   init_ast_node(state->ast_current);
-  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeRequire;
-  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+  state->ast_current->type = sl_ASTNodeType_Require;
+  state->ast_current->location = get_current_token(state);
 
   if (!consume_keyword(state, "require"))
   {
@@ -814,7 +886,7 @@ parse_require(struct ParserState *state)
   }
   else
   {
-    AST_NODE_DATA(state->ast_current)->name = strdup(require_name);
+    state->ast_current->name = strdup(require_name);
   }
 
   if (!consume_symbol(state, "("))
@@ -856,8 +928,8 @@ parse_definition(struct ParserState *state)
 {
   add_child_and_descend(state);
   init_ast_node(state->ast_current);
-  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeDef;
-  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+  state->ast_current->type = sl_ASTNodeType_Def;
+  state->ast_current->location = get_current_token(state);
 
   if (!consume_keyword(state, "def"))
   {
@@ -873,7 +945,7 @@ parse_definition(struct ParserState *state)
   }
   else
   {
-    AST_NODE_DATA(state->ast_current)->name = strdup(definition_name);
+    state->ast_current->name = strdup(definition_name);
   }
 
   int err = parse_value(state);
@@ -894,8 +966,8 @@ parse_assume(struct ParserState *state)
 {
   add_child_and_descend(state);
   init_ast_node(state->ast_current);
-  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeAssume;
-  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+  state->ast_current->type = sl_ASTNodeType_Assume;
+  state->ast_current->location = get_current_token(state);
 
   if (!consume_keyword(state, "assume"))
   {
@@ -921,8 +993,8 @@ parse_infer(struct ParserState *state)
 {
   add_child_and_descend(state);
   init_ast_node(state->ast_current);
-  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeInfer;
-  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+  state->ast_current->type = sl_ASTNodeType_Infer;
+  state->ast_current->location = get_current_token(state);
 
   if (!consume_keyword(state, "infer"))
   {
@@ -981,8 +1053,8 @@ parse_axiom(struct ParserState *state)
 {
   add_child_and_descend(state);
   init_ast_node(state->ast_current);
-  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeAxiom;
-  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+  state->ast_current->type = sl_ASTNodeType_Axiom;
+  state->ast_current->location = get_current_token(state);
 
   if (!consume_keyword(state, "axiom"))
   {
@@ -998,7 +1070,7 @@ parse_axiom(struct ParserState *state)
   }
   else
   {
-    AST_NODE_DATA(state->ast_current)->name = strdup(axiom_name);
+    state->ast_current->name = strdup(axiom_name);
   }
 
   int err = parse_parameter_list(state);
@@ -1025,8 +1097,8 @@ parse_theorem_reference(struct ParserState *state)
 {
   add_child_and_descend(state);
   init_ast_node(state->ast_current);
-  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeTheoremReference;
-  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+  state->ast_current->type = sl_ASTNodeType_TheoremReference;
+  state->ast_current->location = get_current_token(state);
 
   int err = parse_path(state);
   PROPAGATE_ERROR(err);
@@ -1064,8 +1136,8 @@ parse_step(struct ParserState *state)
 {
   add_child_and_descend(state);
   init_ast_node(state->ast_current);
-  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeStep;
-  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+  state->ast_current->type = sl_ASTNodeType_Step;
+  state->ast_current->location = get_current_token(state);
 
   if (!consume_keyword(state, "step"))
   {
@@ -1129,8 +1201,8 @@ parse_theorem(struct ParserState *state)
 {
   add_child_and_descend(state);
   init_ast_node(state->ast_current);
-  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeTheorem;
-  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+  state->ast_current->type = sl_ASTNodeType_Theorem;
+  state->ast_current->location = get_current_token(state);
 
   if (!consume_keyword(state, "theorem"))
   {
@@ -1146,7 +1218,7 @@ parse_theorem(struct ParserState *state)
   }
   else
   {
-    AST_NODE_DATA(state->ast_current)->name = strdup(theorem_name);
+    state->ast_current->name = strdup(theorem_name);
   }
 
   int err = parse_parameter_list(state);
@@ -1221,8 +1293,8 @@ parse_namespace(struct ParserState *state)
 {
   add_child_and_descend(state);
   init_ast_node(state->ast_current);
-  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeNamespace;
-  AST_NODE_DATA(state->ast_current)->location = get_current_token(state);
+  state->ast_current->type = sl_ASTNodeType_Namespace;
+  state->ast_current->location = get_current_token(state);
 
   if (!consume_keyword(state, "namespace"))
   {
@@ -1238,7 +1310,7 @@ parse_namespace(struct ParserState *state)
   }
   else
   {
-    AST_NODE_DATA(state->ast_current)->name = strdup(namespace_name);
+    state->ast_current->name = strdup(namespace_name);
   }
 
   if (!consume_symbol(state, "{"))
@@ -1261,11 +1333,12 @@ parse_namespace(struct ParserState *state)
 int
 parse_root(struct ParserState *state)
 {
-  init_tree(&state->ast_root);
+  state->ast_root = sl_node_new();
+  state->ast_current = state->ast_root;
 
   add_child_and_descend(state);
   init_ast_node(state->ast_current);
-  AST_NODE_DATA(state->ast_current)->type = ASTNodeTypeNamespace;
+  state->ast_current->type = sl_ASTNodeType_Namespace;
 
   while (tokens_remain(state))
   {
@@ -1278,76 +1351,71 @@ parse_root(struct ParserState *state)
 }
 
 static void
-print_ast_node(char *buf, size_t len, const struct ASTNode *node)
+print_ast_node(char *buf, size_t len, const sl_ASTNode *node)
 {
-  if (node->data == NULL)
+  switch (node->type)
   {
-    snprintf(buf, len, "");
-    return;
-  }
-  switch (AST_NODE_DATA(node)->type)
-  {
-    case ASTNodeTypeNone:
+    case sl_ASTNodeType_None:
       snprintf(buf, len, "Unknown<>");
-    case ASTNodeTypeNamespace:
-      if (AST_NODE_DATA(node)->name == NULL)
+    case sl_ASTNodeType_Namespace:
+      if (node->name == NULL)
         snprintf(buf, len, "Namespace<Unnamed>");
       else
         snprintf(buf, len, "Namespace<\"%s\">",
-          AST_NODE_DATA(node)->name);
+          node->name);
       break;
-    case ASTNodeTypeType:
-      snprintf(buf, len, "Type<%s>", AST_NODE_DATA(node)->typename);
+    case sl_ASTNodeType_Type:
+      snprintf(buf, len, "Type<%s>", node->typename);
       break;
-    case ASTNodeTypeExpression:
+    case sl_ASTNodeType_Expression:
       snprintf(buf, len, "Expression<\"%s\" : %s>",
-        AST_NODE_DATA(node)->name, AST_NODE_DATA(node)->typename);
+        node->name, node->typename);
       break;
-    case ASTNodeTypeAxiom:
-      snprintf(buf, len, "Axiom<\"%s\">", AST_NODE_DATA(node)->name);
+    case sl_ASTNodeType_Axiom:
+      snprintf(buf, len, "Axiom<\"%s\">", node->name);
       break;
-    case ASTNodeTypeTheorem:
-      snprintf(buf, len, "Theorem<\"%s\">", AST_NODE_DATA(node)->name);
+    case sl_ASTNodeType_Theorem:
+      snprintf(buf, len, "Theorem<\"%s\">", node->name);
       break;
-    case ASTNodeTypeParameter:
+    case sl_ASTNodeType_Parameter:
       snprintf(buf, len, "Parameter<\"%s\" : %s>",
-        AST_NODE_DATA(node)->name, AST_NODE_DATA(node)->typename);
+        node->name, node->typename);
       break;
-    case ASTNodeTypeDef:
-      snprintf(buf, len, "Def<\"%s\">", AST_NODE_DATA(node)->name);
+    case sl_ASTNodeType_Def:
+      snprintf(buf, len, "Def<\"%s\">", node->name);
       break;
-    case ASTNodeTypeAssume:
+    case sl_ASTNodeType_Assume:
       snprintf(buf, len, "Assume<>");
       break;
-    case ASTNodeTypeRequire:
+    case sl_ASTNodeType_Require:
       snprintf(buf, len, "Require<>");
       break;
-    case ASTNodeTypeInfer:
+    case sl_ASTNodeType_Infer:
       snprintf(buf, len, "Infer<>");
       break;
-    case ASTNodeTypeStep:
+    case sl_ASTNodeType_Step:
       snprintf(buf, len, "Step<>");
       break;
-    case ASTNodeTypeComposition:
-      snprintf(buf, len, "Composition<\"%s\">", AST_NODE_DATA(node)->name);
+    case sl_ASTNodeType_Composition:
+      snprintf(buf, len, "Composition<\"%s\">", node->name);
       break;
-    case ASTNodeTypeConstant:
-      snprintf(buf, len, "Constant<\"%s\">", AST_NODE_DATA(node)->name);
+    case sl_ASTNodeType_Constant:
+      snprintf(buf, len, "Constant<\"%s\">", node->name);
       break;
-    case ASTNodeTypeVariable:
-      snprintf(buf, len, "Variable<\"%s\">", AST_NODE_DATA(node)->name);
+    case sl_ASTNodeType_Variable:
+      snprintf(buf, len, "Variable<\"%s\">", node->name);
       break;
-    case ASTNodeTypePlaceholder:
-      snprintf(buf, len, "Placeholder<\"%s\">", AST_NODE_DATA(node)->name);
+    case sl_ASTNodeType_Placeholder:
+      snprintf(buf, len, "Placeholder<\"%s\">", node->name);
       break;
-    case ASTNodeTypeTheoremReference:
+    case sl_ASTNodeType_TheoremReference:
       snprintf(buf, len, "Theorem Reference<>");
       break;
-    case ASTNodeTypePath:
+    case sl_ASTNodeType_Path:
       snprintf(buf, len, "Path<>");
       break;
-    case ASTNodeTypePathSegment:
-      snprintf(buf, len, "Path Segment<\"%s\">", AST_NODE_DATA(node)->name);
+    case sl_ASTNodeType_PathSegment:
+      snprintf(buf, len, "Path Segment<\"%s\">", node->name);
       break;
     default:
       snprintf(buf, len, "");

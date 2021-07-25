@@ -109,6 +109,14 @@ do { \
 } \
 while (0)
 
+#define MANAGED_ARRAY_INIT_RESERVED(array, to_reserve) \
+do { \
+  (array).data = malloc(sizeof(*(array).data) * (to_reserve)); \
+  (array).length = 0; \
+  (array).reserved = to_reserve; \
+} \
+while (0)
+
 #define MANAGED_ARRAY_LENGTH(array) (array).length
 
 #define MANAGED_ARRAY_GET(array, index) &((array).data[index])
@@ -141,6 +149,8 @@ while (0)
 
 #define ARR(type) MANAGED_ARRAY(type)
 #define ARR_INIT(array) MANAGED_ARRAY_INIT(array)
+#define ARR_INIT_RESERVE(array, reserved) \
+  MANAGED_ARRAY_INIT_RESERVED(array, reserved)
 #define ARR_LENGTH(array) MANAGED_ARRAY_LENGTH(array)
 #define ARR_GET(array, index) MANAGED_ARRAY_GET(array, index)
 #define ARR_APPEND(array, item) MANAGED_ARRAY_APPEND(array, item)
