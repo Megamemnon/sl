@@ -16,6 +16,6 @@ TODO:
 extern int verbose;
 
 int
-sl_verify(LogicState *logic_state, const char *input_path, FILE *out);
+sl_verify(sl_LogicState *logic_state, const char *input_path, FILE *out);
 
 #endif

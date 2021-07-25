@@ -6,13 +6,14 @@
 
 #define LOG_NORMAL(out, ...) \
 do { \
-  fprintf(out, __VA_ARGS__); \
+  if (out != NULL) \
+    fprintf(out, __VA_ARGS__); \
 } \
 while (0);
 
 #define LOG_VERBOSE(out, ...) \
 do { \
-  if (verbose) \
+  if (out != NULL && verbose) \
     fprintf(out, __VA_ARGS__); \
 } \
 while (0);
@@ -108,12 +109,18 @@ enumerate_value_occurrences(const Value *target, const Value *search_in,
   ValueArray *occurrences);
 
 Value *
-instantiate_value(struct LogicState *state, const Value *src, ArgumentArray args);
+instantiate_value(struct sl_LogicState *state, const Value *src, ArgumentArray args);
 
 enum RequirementType
 {
+  RequirementTypeDistinct,
   RequirementTypeFreeFor,
   RequirementTypeNotFree,
+  RequirementTypeNotBound,
+  RequirementTypeFree,
+  RequirementTypeBound,
+  RequirementTypeCoverFree,
+  RequirementTypeCoverBound,
   RequirementTypeSubstitution,
   RequirementTypeFullSubstitution
 };
@@ -145,6 +152,19 @@ struct Theorem
   ARR(struct TheoremReference) steps;
 };
 
+struct ProofEnvironment
+{
+  ARR(struct Parameter) parameters;
+  ARR(struct Requirement) requirements;
+  ValueArray proven;
+};
+
+struct ProofEnvironment *
+new_proof_environment();
+
+void
+free_proof_environment(struct ProofEnvironment *env);
+
 enum SymbolType
 {
   SymbolTypeType,
@@ -160,7 +180,7 @@ struct Symbol
   void *object;
 };
 
-struct LogicState
+struct sl_LogicState
 {
   ARR(struct Symbol) symbol_table;
   uint32_t next_id;
@@ -172,38 +192,16 @@ bool
 types_equal(const struct Type *a, const struct Type *b);
 
 int
-instantiate_theorem(struct LogicState *state,
-  const struct Theorem *src, ArgumentArray args, ValueArray *proven, bool force);
+instantiate_theorem(struct sl_LogicState *state, const struct Theorem *src,
+  ArgumentArray args, ValueArray *proven, bool force);
 
 /* Requirements. */
-bool
-evaluate_free_for(struct LogicState *state,
-  const Value *source, const Value *target, const Value *context);
+int
+make_requirement(sl_LogicState *state,
+  struct Requirement *dst, const struct PrototypeRequirement *src);
 
 bool
-evaluate_not_free(struct LogicState *state,
-  const Value *target, const Value *context);
-
-bool
-evaluate_not_bound(struct LogicState *state,
-  const Value *target, const Value *context);
-
-bool
-evaluate_free(struct LogicState *state,
-  const Value *target, const Value *context);
-
-bool
-evaluate_bound(struct LogicState *state,
-  const Value *target, const Value *context);
-
-bool
-evaluate_substitution(struct LogicState *state,
-  const Value *target, const Value *context,
-  const Value *source, const Value *new_context);
-
-bool
-evaluate_full_substitution(struct LogicState *state,
-  const Value *target, const Value *context,
-  const Value *source, const Value *new_context);
+evaluate_requirement(sl_LogicState *state, const struct Requirement *req,
+  ArgumentArray environment_args, const struct ProofEnvironment *env);
 
 #endif

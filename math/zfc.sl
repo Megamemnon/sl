@@ -1035,6 +1035,7 @@ namespace predicate_calculus
   expr Formula
   eval_p1(p : Predicate1, t_1 : Term)
   {
+    // require unused($p);
     latex "\\left( " + $p + " \\right)\\left( " + $t_1 + " \\right) ";
   }
 
@@ -1086,7 +1087,6 @@ namespace predicate_calculus
   axiom
   extend_predicate1(p : Predicate1, phi : Formula, x_1 : Variable)
   {
-    /* require free($x_1, $phi); */
     /* require cover_free($x_1, $phi); */
 
     infer any($x_1, iff(eval_p1($p, t($x_1)), $phi));
@@ -1096,9 +1096,7 @@ namespace predicate_calculus
   extend_predicate2(p : Predicate2, phi : Formula, x_1 : Variable,
     x_2 : Variable)
   {
-    /* require distinct($x_1, $x_2); */
-    /* require free($x_1, $phi); */
-    /* require free($x_2, $phi); */
+    require distinct($x_1, $x_2);
     /* require cover_free($x_1, $x_2, $phi); */
 
     infer any($x_1, any($x_2, iff(eval_p2($p, t($x_1), t($x_2)), $phi)));
@@ -1108,10 +1106,7 @@ namespace predicate_calculus
   extend_predicate3(p : Predicate3, phi : Formula, x_1 : Variable,
     x_2 : Variable, x_3 : Variable)
   {
-    /* require distinct($x_1, $x_2, $x_3); */
-    /* require free($x_1, $phi); */
-    /* require free($x_2, $phi); */
-    /* require free($x_3, $phi); */
+    require distinct($x_1, $x_2, $x_3);
     /* require cover_free($x_1, $x_2, $x_3, $phi); */
 
     infer any($x_1, any($x_2, any($x_3,
@@ -1133,7 +1128,7 @@ namespace predicate_calculus
   extend_function1(f : Function1, phi : Formula, phi_0 : Formula,
     x_1 : Variable)
   {
-    /* require distinct(vars.y, $x_1); */
+    require distinct(vars.y, $x_1);
     /* require free($x_1, $phi); */
     /* require cover_free(vars.y, $x_1, $phi); */
     require free_for(eval_f1($f, t($x_1)), t(vars.y), $phi);
@@ -1148,7 +1143,7 @@ namespace predicate_calculus
   extend_function2(f : Function2, phi : Formula, phi_0 : Formula,
     x_1 : Variable, x_2 : Variable)
   {
-    /* require distinct(vars.y, $x_1, $x_2); */
+    require distinct(vars.y, $x_1, $x_2);
     /* require free($x_1, $phi); */
     /* require free($x_2, $phi); */
     /* require cover_free(vars.y, $x_1, $x_2, $phi); */
@@ -1165,7 +1160,7 @@ namespace predicate_calculus
   extend_function3(f : Function3, phi : Formula, phi_0 : Formula,
     x_1 : Variable, x_2 : Variable, x_3 : Variable)
   {
-    /* require distinct(vars.y, $x_1, $x_2, $x_3); */
+    require distinct(vars.y, $x_1, $x_2, $x_3);
     /* require free($x_1, $phi); */
     /* require free($x_2, $phi); */
     /* require free($x_3, $phi); */
@@ -1199,6 +1194,18 @@ namespace zfc
       eval_p2(in, t(vars.z), t(vars.y)))), eq(t(vars.x), t(vars.y)))));
   }
 
+  /* TODO: this follows from extensionality. */
+  axiom
+  set_builder_uniqueness(phi : Formula)
+  {
+    require not_free(vars.y, $phi);
+
+    infer implies(exists(vars.x, any(vars.y,
+      iff(eval_p2(in, t(vars.y), t(vars.x)), $phi))),
+      exists_unique(vars.x, any(vars.y,
+      iff(eval_p2(in, t(vars.y), t(vars.x)), $phi))));
+  }
+
   axiom
   regularity()
   {
@@ -1213,7 +1220,7 @@ namespace zfc
   axiom
   specification(phi : Formula)
   {
-    require free(vars.x, $phi);
+    /* require free(vars.x, $phi); */
 
     infer any(vars.z, exists(vars.y, any(vars.x,
       iff(eval_p2(in, t(vars.x), t(vars.y)),
@@ -1265,6 +1272,7 @@ namespace zfc
         exists(vars.y, any(vars.x, not(eval_p2(in, t(vars.x), t(vars.y))))));
     }
 
+    /* TODO: this can be inferred from set_builder_uniqueness. */
     axiom
     empty_set_unique()
     {
@@ -1293,6 +1301,81 @@ namespace zfc
       eval_p2(in, t(vars.y), t(vars.z))))));
   }
 
+  const singleton : Function1
+  {
+    latex "\\{ \\cdot_1 \\}";
+  }
+
+  namespace lemma
+  {
+    /* TODO: prove this from pairing. */
+    axiom
+    singleton_exists()
+    {
+      infer any(vars.a, exists(vars.y, any(vars.x, iff(
+        eval_p2(in, t(vars.x), t(vars.y)), eq(t(vars.x), t(vars.a))))));
+    }
+
+    axiom
+    singleton_unique()
+    {
+      infer any(vars.a, exists_unique(vars.y, any(vars.x, iff(
+        eval_p2(in, t(vars.x), t(vars.y)), eq(t(vars.x), t(vars.a))))));
+    }
+  }
+
+  theorem
+  singleton_containing()
+  {
+    infer any(vars.a, any(vars.x, iff(eval_p2(in, t(vars.x),
+      eval_f1(singleton, t(vars.a))), eq(t(vars.x), t(vars.a)))));
+
+    step lemma.singleton_unique();
+    step extend_function1(singleton, any(vars.x, iff(
+      eval_p2(in, t(vars.x), t(vars.y)), eq(t(vars.x), t(vars.a)))),
+      any(vars.x, iff(eval_p2(in, t(vars.x), eval_f1(singleton, t(vars.a))),
+      eq(t(vars.x), t(vars.a)))), vars.a);
+  }
+
+  const pair : Function2
+  {
+    latex "\\{ \\cdot_1 , \\cdot_2 \\}";
+  }
+
+  namespace lemma
+  {
+    /* TODO: prove this from pairing. */
+    axiom pair_exists()
+    {
+      infer any(vars.a, any(vars.b, exists(vars.y, any(vars.x,
+        iff(eval_p2(in, t(vars.x), t(vars.y)),
+        or(eq(t(vars.x), t(vars.a)), eq(t(vars.x), t(vars.b))))))));
+    }
+
+    axiom pair_unique()
+    {
+    infer any(vars.a, any(vars.b, exists_unique(vars.y, any(vars.x,
+      iff(eval_p2(in, t(vars.x), t(vars.y)),
+      or(eq(t(vars.x), t(vars.a)), eq(t(vars.x), t(vars.b))))))));
+    }
+  }
+
+  theorem
+  pair_containing()
+  {
+    infer any(vars.a, any(vars.b, any(vars.x, iff(
+      eval_p2(in, t(vars.x), eval_f2(pair, t(vars.a), t(vars.b))),
+      or(eq(t(vars.x), t(vars.a)), eq(t(vars.x), t(vars.b)))))));
+
+    step lemma.pair_unique();
+    step extend_function2(pair, any(vars.x, iff(
+      eval_p2(in, t(vars.x), t(vars.y)),
+      or(eq(t(vars.x), t(vars.a)), eq(t(vars.x), t(vars.b))))),
+      any(vars.x, iff(eval_p2(in, t(vars.x),
+      eval_f2(pair, t(vars.a), t(vars.b))), or(eq(t(vars.x), t(vars.a)),
+      eq(t(vars.x), t(vars.b))))), vars.a, vars.b);
+  }
+
   axiom
   replacement(phi : Formula)
   {
@@ -1306,16 +1389,6 @@ namespace zfc
       exists(vars.B, any(vars.x, implies(eval_p2(in, t(vars.x), t(vars.A)),
       exists(vars.y, and(eval_p2(in, t(vars.y), t(vars.B)), $phi)))))));
   }
-
-  /*
-  theorem
-  empty_set()
-  {
-    infer any(vars.x, not(eval_p2(in, t(vars.x), eval_f0(empty))));
-
-    step specification(F);
-  }
-  */
 
   const successor : Function1
   {
@@ -1338,13 +1411,16 @@ namespace zfc
     latex "\\subset";
   }
 
-  axiom
+  theorem
   subset_of()
   {
     infer any(vars.x, any(vars.y,
       iff(eval_p2(subset, t(vars.x), t(vars.y)),
       any(vars.z, implies(eval_p2(in, t(vars.z), t(vars.x)),
       eval_p2(in, t(vars.z), t(vars.y)))))));
+
+    step extend_predicate2(subset, any(vars.z, implies(eval_p2(in, t(vars.z),
+      t(vars.x)), eval_p2(in, t(vars.z), t(vars.y)))), vars.x, vars.y);
   }
 
   axiom
@@ -1357,16 +1433,17 @@ namespace zfc
 
   const union : Function1
   {
-    latex "\\cup";
+    latex "\\cup \\cdot_1";
   }
 
+  /* TODO: prove from the axiom of union. */
   axiom
-  union_of()
+  union_of_elements()
   {
-    infer any(vars.x, any(vars.y, iff(
-      eval_p2(in, t(vars.y), eval_f1(union, t(vars.x))),
-      exists(vars.z, and(eval_p2(in, t(vars.y), t(vars.z)),
-      eval_p2(in, t(vars.z), t(vars.x)))))));
+    infer any(vars.a, any(vars.x, iff(eval_p2(in, t(vars.x),
+      eval_f1(union, t(vars.a))), exists(vars.z, and(
+      eval_p2(in, t(vars.x), t(vars.z)),
+      eval_p2(in, t(vars.z), t(vars.a)))))));
   }
 
   const naturals_ordinals : Function0

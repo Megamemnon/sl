@@ -1232,7 +1232,7 @@ struct ValidationState
   struct CompilationUnit *unit;
   const struct ParserState *input;
 
-  LogicState *logic;
+  sl_LogicState *logic;
   SymbolPath *prefix_path;
   Array search_paths;
 };
@@ -2128,6 +2128,7 @@ validate_theorem(struct ValidationState *state,
   proto.theorem_path = copy_symbol_path(state->prefix_path);
   push_symbol_path(proto.theorem_path, data->name);
 
+  size_t requirements_n = 0;
   size_t assumptions_n = 0;
   size_t inferences_n = 0;
   size_t steps_n = 0;
@@ -2136,6 +2137,8 @@ validate_theorem(struct ValidationState *state,
     const struct ASTNode *child =
       ARRAY_GET(theorem->children, struct ASTNode, i);
     const struct ASTNodeData *child_data = AST_NODE_DATA(child);
+    if (child_data->type == ASTNodeTypeRequire)
+      ++requirements_n;
     if (child_data->type == ASTNodeTypeAssume)
       ++assumptions_n;
     else if (child_data->type == ASTNodeTypeInfer)
@@ -2143,6 +2146,8 @@ validate_theorem(struct ValidationState *state,
     else if (child_data->type == ASTNodeTypeStep)
       ++steps_n;
   }
+  proto.requirements =
+    malloc(sizeof(struct PrototypeRequirement *) * (requirements_n + 1));
   proto.assumptions =
     malloc(sizeof(Value *) * (assumptions_n + 1));
   proto.inferences =
@@ -2177,6 +2182,7 @@ validate_theorem(struct ValidationState *state,
   }
   proto.parameters[args_n] = NULL;
 
+  size_t require_index = 0;
   size_t assume_index = 0;
   size_t infer_index = 0;
   size_t step_index = 0;
@@ -2185,7 +2191,12 @@ validate_theorem(struct ValidationState *state,
     const struct ASTNode *child =
       ARRAY_GET(theorem->children, struct ASTNode, i);
     const struct ASTNodeData *child_data = AST_NODE_DATA(child);
-    if (child_data->type == ASTNodeTypeDef)
+    if (child_data->type == ASTNodeTypeRequire)
+    {
+      proto.requirements[require_index] = extract_require(state, child, &env);
+      ++require_index;
+    }
+    else if (child_data->type == ASTNodeTypeDef)
     {
       int err = extract_definition(state, child, &env);
       PROPAGATE_ERROR(err);
@@ -2209,6 +2220,7 @@ validate_theorem(struct ValidationState *state,
     }
   }
   proto.parameters[args_n] = NULL;
+  proto.requirements[requirements_n] = NULL;
   proto.assumptions[assumptions_n] = NULL;
   proto.inferences[inferences_n] = NULL;
   proto.steps[steps_n] = NULL;
@@ -2229,6 +2241,16 @@ validate_theorem(struct ValidationState *state,
     free(proto.parameters[i]->name);
     free_symbol_path(proto.parameters[i]->type);
     free(proto.parameters[i]);
+  }
+  for (size_t i = 0; i < requirements_n; ++i)
+  {
+    free(proto.requirements[i]->require);
+    for (Value **arg = proto.requirements[i]->arguments; *arg != NULL; ++arg)
+    {
+      free_value(*arg);
+    }
+    free(proto.requirements[i]->arguments);
+    free(proto.requirements[i]);
   }
   for (size_t i = 0; i < assumptions_n; ++i)
   {
@@ -2372,7 +2394,7 @@ validate(struct ValidationState *state)
 }
 
 int
-sl_verify(LogicState *logic_state, const char *input_path, FILE *out)
+sl_verify(sl_LogicState *logic_state, const char *input_path, FILE *out)
 {
   /* Open the file. */
   LOG_NORMAL(out, "Validating sl file '%s'.\n", input_path);

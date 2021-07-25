@@ -17,9 +17,12 @@ do { \
 } \
 while(0)
 
-/* Array helpers */
 #include <stdlib.h>
+/* Memory helpers */
+#define SL_NEW(type) malloc(sizeof(type))
+#define SL_FREE(ptr) free(ptr)
 
+/* Array helpers */
 struct DynamicArray
 {
   void *data;

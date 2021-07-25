@@ -90,7 +90,7 @@ main(int argc, char **argv)
     }
   }
 
-  LogicState *state = new_logic_state(output);
+  sl_LogicState *state = new_logic_state(output);
   for (size_t i = 0; i < ARRAY_LENGTH(cl.arguments); ++i)
   {
     const char *path = *ARRAY_GET(cl.arguments, char *, i);

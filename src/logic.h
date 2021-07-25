@@ -43,20 +43,20 @@ symbol_paths_equal(const SymbolPath *a, const SymbolPath *b);
 
 /* Functions for manipulating the logic state, which contains all the theorems,
    expressions, etc. that are handled. */
-struct LogicState;
-typedef struct LogicState LogicState;
+struct sl_LogicState;
+typedef struct sl_LogicState sl_LogicState;
 
-LogicState *
+sl_LogicState *
 new_logic_state(FILE *log_out);
 
 void
-free_logic_state(LogicState *state);
+free_logic_state(sl_LogicState *state);
 
 bool
-logic_state_path_occupied(const LogicState *state, const SymbolPath *path);
+logic_state_path_occupied(const sl_LogicState *state, const SymbolPath *path);
 
 SymbolPath *
-find_first_occupied_path(const LogicState *state, SymbolPath **paths); /* NULL-terminated list. */
+find_first_occupied_path(const sl_LogicState *state, SymbolPath **paths); /* NULL-terminated list. */
 
 enum LogicError
 {
@@ -73,7 +73,7 @@ struct PrototypeType
 };
 
 LogicError
-add_type(LogicState *state, struct PrototypeType proto);
+add_type(sl_LogicState *state, struct PrototypeType proto);
 
 struct Value;
 typedef struct Value Value;
@@ -97,7 +97,7 @@ struct PrototypeConstant
 };
 
 LogicError
-add_constant(LogicState *, struct PrototypeConstant proto);
+add_constant(sl_LogicState *, struct PrototypeConstant proto);
 
 /* Expressions. */
 struct PrototypeParameter
@@ -118,7 +118,7 @@ struct PrototypeExpression
 /* TODO: The return value should be a struct, or modify the PrototypeExpression,
    in order to propagate errors with full detail. */
 LogicError
-add_expression(LogicState *state, struct PrototypeExpression expression);
+add_expression(sl_LogicState *state, struct PrototypeExpression expression);
 
 /* Methods to manipulate values. */
 void
@@ -138,13 +138,13 @@ char *
 string_from_value(const Value *value);
 
 Value *
-new_variable_value(LogicState *state, const char *name, const SymbolPath *type);
+new_variable_value(sl_LogicState *state, const char *name, const SymbolPath *type);
 
 Value *
-new_constant_value(LogicState *state, const SymbolPath *constant);
+new_constant_value(sl_LogicState *state, const SymbolPath *constant);
 
 Value *
-new_composition_value(LogicState *state, const SymbolPath *expr_path,
+new_composition_value(sl_LogicState *state, const SymbolPath *expr_path,
   Value * const *args); /* `args` is a NULL-terminated list. */
 
 struct PrototypeProofStep
@@ -172,11 +172,11 @@ struct PrototypeTheorem
 /* TODO: The return value should be a struct, or modify the PrototypeTheorem,
    in order to propagate errors with full detail. */
 LogicError
-add_axiom(LogicState *state, struct PrototypeTheorem axiom);
+add_axiom(sl_LogicState *state, struct PrototypeTheorem axiom);
 
 /* TODO: The return value should be a struct, or modify the PrototypeTheorem,
    in order to propagate errors with full detail. */
 LogicError
-add_theorem(LogicState *state, struct PrototypeTheorem theorem);
+add_theorem(sl_LogicState *state, struct PrototypeTheorem theorem);
 
 #endif

@@ -34,7 +34,7 @@ render_theorem(FILE *out)
 }
 
 int
-render_latex(const LogicState *state, const char *output_filename)
+render_latex(const sl_LogicState *state, const char *output_filename)
 {
   FILE *f = fopen(output_filename, "w");
   fputs(LATEX_BEGIN, f);

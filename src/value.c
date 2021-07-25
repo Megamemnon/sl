@@ -258,7 +258,7 @@ enumerate_value_occurrences(const Value *target, const Value *search_in,
 }
 
 Value *
-instantiate_value(struct LogicState *state, const Value *src,
+instantiate_value(struct sl_LogicState *state, const Value *src,
   ArgumentArray args)
 {
   switch (src->value_type)

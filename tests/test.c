@@ -7,6 +7,7 @@ main(int argc, char **argv)
 {
   struct TestCase test_cases[] = {
     test_values,
+    test_require,
     test_lexer
   };
 

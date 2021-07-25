@@ -325,7 +325,7 @@ html_render_theorem(const struct Theorem *theorem, FILE *f)
 }
 
 int
-html_render_index_page(const LogicState *state, const char *filepath)
+html_render_index_page(const sl_LogicState *state, const char *filepath)
 {
   FILE *f = fopen(filepath, "w");
   if (f == NULL)
@@ -360,7 +360,7 @@ html_render_index_page(const LogicState *state, const char *filepath)
 }
 
 int
-html_render_theorem_page(const LogicState *state,
+html_render_theorem_page(const sl_LogicState *state,
   const struct Theorem *theorem, const char *filepath)
 {
   FILE *f = fopen(filepath, "w");
@@ -448,7 +448,7 @@ html_render_theorem_page(const LogicState *state,
     }
     fputs("</ul>\n", f);
   }
-  if (!theorem->is_axiom)
+  /*if (!theorem->is_axiom)
   {
     fputs("<div>\n", f);
     fputs("<h4>Steps:</h4>\n", f);
@@ -521,7 +521,7 @@ html_render_theorem_page(const LogicState *state,
     }
     fputs("</ol>\n", f);
     fputs("</div>\n", f);
-  }
+  }*/
   fputs("</div>\n", f);
 
   fputs("<a href=\"../index.html\">Index</a>", f);
@@ -531,7 +531,7 @@ html_render_theorem_page(const LogicState *state,
 }
 
 int
-render_html(const LogicState *state, const char *output_dir)
+render_html(const sl_LogicState *state, const char *output_dir)
 {
   mkdir(output_dir, 0777); /* TODO: handle errors. */
   {

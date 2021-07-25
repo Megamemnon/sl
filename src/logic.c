@@ -277,6 +277,8 @@ free_symbol(struct Symbol *sym)
     case SymbolTypeType:
       free_type((struct Type *)sym->object);
       break;
+    case SymbolTypeConstant:
+      break;
     case SymbolTypeExpression:
       free_expression((struct Expression *)sym->object);
       break;
@@ -288,10 +290,10 @@ free_symbol(struct Symbol *sym)
 }
 
 /* Core Logic */
-LogicState *
+sl_LogicState *
 new_logic_state(FILE *log_out)
 {
-  LogicState *state = malloc(sizeof(LogicState));
+  sl_LogicState *state = malloc(sizeof(sl_LogicState));
   ARR_INIT(state->symbol_table);
   state->next_id = 0;
   state->log_out = log_out;
@@ -299,7 +301,7 @@ new_logic_state(FILE *log_out)
 }
 
 void
-free_logic_state(LogicState *state)
+free_logic_state(sl_LogicState *state)
 {
   for (size_t i = 0; i < ARR_LENGTH(state->symbol_table); ++i)
   {
@@ -311,7 +313,7 @@ free_logic_state(LogicState *state)
 }
 
 bool
-logic_state_path_occupied(const LogicState *state, const SymbolPath *path)
+logic_state_path_occupied(const sl_LogicState *state, const SymbolPath *path)
 {
   for (size_t i = 0; i < ARR_LENGTH(state->symbol_table); ++i)
   {
@@ -323,7 +325,7 @@ logic_state_path_occupied(const LogicState *state, const SymbolPath *path)
 }
 
 SymbolPath *
-find_first_occupied_path(const LogicState *state, SymbolPath **paths)
+find_first_occupied_path(const sl_LogicState *state, SymbolPath **paths)
 {
   for (SymbolPath **path = paths; *path != NULL; ++path)
   {
@@ -334,7 +336,7 @@ find_first_occupied_path(const LogicState *state, SymbolPath **paths)
 }
 
 static struct Symbol *
-locate_symbol(LogicState *state, const SymbolPath *path)
+locate_symbol(sl_LogicState *state, const SymbolPath *path)
 {
   for (size_t i = 0; i < ARR_LENGTH(state->symbol_table); ++i)
   {
@@ -346,7 +348,7 @@ locate_symbol(LogicState *state, const SymbolPath *path)
 }
 
 static struct Symbol *
-locate_symbol_with_type(LogicState *state, const SymbolPath *path,
+locate_symbol_with_type(sl_LogicState *state, const SymbolPath *path,
   enum SymbolType type)
 {
   struct Symbol *sym = locate_symbol(state, path);
@@ -358,13 +360,13 @@ locate_symbol_with_type(LogicState *state, const SymbolPath *path,
 }
 
 static void
-add_symbol(LogicState *state, struct Symbol sym)
+add_symbol(sl_LogicState *state, struct Symbol sym)
 {
   ARR_APPEND(state->symbol_table, sym);
 }
 
 LogicError
-add_type(LogicState *state, struct PrototypeType proto)
+add_type(sl_LogicState *state, struct PrototypeType proto)
 {
   if (locate_symbol(state, proto.type_path) != NULL)
   {
@@ -403,7 +405,7 @@ types_equal(const struct Type *a, const struct Type *b)
 }
 
 LogicError
-add_constant(LogicState *state, struct PrototypeConstant proto)
+add_constant(sl_LogicState *state, struct PrototypeConstant proto)
 {
   if (locate_symbol(state, proto.constant_path) != NULL)
   {
@@ -467,7 +469,7 @@ add_constant(LogicState *state, struct PrototypeConstant proto)
 }
 
 LogicError
-add_expression(LogicState *state, struct PrototypeExpression proto)
+add_expression(sl_LogicState *state, struct PrototypeExpression proto)
 {
   if (locate_symbol(state, proto.expression_path) != NULL)
   {
@@ -596,7 +598,7 @@ add_expression(LogicState *state, struct PrototypeExpression proto)
 
 /* Values */
 Value *
-new_variable_value(LogicState *state, const char *name, const SymbolPath *type)
+new_variable_value(sl_LogicState *state, const char *name, const SymbolPath *type)
 {
   Value *value = malloc(sizeof(Value));
 
@@ -621,7 +623,7 @@ new_variable_value(LogicState *state, const char *name, const SymbolPath *type)
 }
 
 Value *
-new_constant_value(LogicState *state, const SymbolPath *constant)
+new_constant_value(sl_LogicState *state, const SymbolPath *constant)
 {
   Value *value = malloc(sizeof(Value));
 
@@ -645,7 +647,7 @@ new_constant_value(LogicState *state, const SymbolPath *constant)
 }
 
 Value *
-new_composition_value(LogicState *state, const SymbolPath *expr_path,
+new_composition_value(sl_LogicState *state, const SymbolPath *expr_path,
   Value * const *args)
 {
   Value *value = malloc(sizeof(Value));
@@ -732,7 +734,7 @@ new_composition_value(LogicState *state, const SymbolPath *expr_path,
 }
 
 LogicError
-add_axiom(LogicState *state, struct PrototypeTheorem proto)
+add_axiom(sl_LogicState *state, struct PrototypeTheorem proto)
 {
   if (locate_symbol(state, proto.theorem_path) != NULL)
   {
@@ -780,47 +782,10 @@ add_axiom(LogicState *state, struct PrototypeTheorem proto)
     *req != NULL; ++req)
   {
     struct Requirement requirement;
+    int err = make_requirement(state, &requirement, *req);
 
-    ARR_INIT(requirement.arguments);
-    for (Value **arg = (*req)->arguments; *arg != NULL; ++arg)
-    {
-      ARR_APPEND(requirement.arguments, copy_value(*arg));
-    }
-
-    /* Make sure that the number of arguments match the type. */
-    /* TODO: make validation of requirements its own function. */
-
-    if (strcmp((*req)->require, "free_for") == 0)
-    {
-      requirement.type = RequirementTypeFreeFor;
-      if (ARR_LENGTH(requirement.arguments) != 3)
-        return LogicErrorSymbolAlreadyExists;
-    }
-    else if (strcmp((*req)->require, "not_free") == 0)
-    {
-      requirement.type = RequirementTypeNotFree;
-      if (ARR_LENGTH(requirement.arguments) != 2)
-        return LogicErrorSymbolAlreadyExists;
-    }
-    else if (strcmp((*req)->require, "substitution") == 0)
-    {
-      requirement.type = RequirementTypeSubstitution;
-      if (ARR_LENGTH(requirement.arguments) != 4)
-        return LogicErrorSymbolAlreadyExists;
-    }
-    else if (strcmp((*req)->require, "full_substitution") == 0)
-    {
-      requirement.type = RequirementTypeFullSubstitution;
-      if (ARR_LENGTH(requirement.arguments) != 4)
-        return LogicErrorSymbolAlreadyExists;
-    }
-    else
-    {
-      /* TODO: just ignore this requirement? */
-      continue;
-    }
-
-    ARR_APPEND(a->requirements, requirement);
+    if (err == 0)
+      ARR_APPEND(a->requirements, requirement);
   }
 
   /* Assumptions & inferences. */
@@ -873,102 +838,52 @@ add_axiom(LogicState *state, struct PrototypeTheorem proto)
   return LogicErrorNone;
 }
 
-static bool
-statement_proven(const Value *statement, ValueArray proven)
+struct ProofEnvironment *
+new_proof_environment()
 {
-  for (size_t i = 0; i < ARR_LENGTH(proven); ++i)
+  struct ProofEnvironment *env = SL_NEW(struct ProofEnvironment);
+  if (env == NULL)
+    return NULL;
+  ARR_INIT(env->parameters); /* TODO: check these. */
+  ARR_INIT(env->requirements);
+  ARR_INIT(env->proven);
+  return env;
+}
+
+void
+free_proof_environment(struct ProofEnvironment *env)
+{
+  ARR_FREE(env->parameters);
+  ARR_FREE(env->requirements);
+  for (size_t i = 0; i < ARR_LENGTH(env->proven); ++i)
+    free_value(*ARR_GET(env->proven, i));
+  ARR_FREE(env->proven);
+  SL_FREE(env);
+}
+
+static bool
+statement_proven(const Value *statement, const struct ProofEnvironment *env)
+{
+  for (size_t i = 0; i < ARR_LENGTH(env->proven); ++i)
   {
-    const Value *s = *ARR_GET(proven, i);
+    const Value *s = *ARR_GET(env->proven, i);
     if (values_equal(statement, s))
       return TRUE;
   }
   return FALSE;
 }
 
-int
-instantiate_theorem(struct LogicState *state,
-  const struct Theorem *src, ArgumentArray args, ValueArray *proven, bool force)
+static int
+instantiate_theorem_in_env(struct sl_LogicState *state, const struct Theorem *src,
+  ArgumentArray args, struct ProofEnvironment *env, bool force)
 {
   /* Check the requirements. */
   if (!force)
   {
     for (size_t i = 0; i < ARR_LENGTH(src->requirements); ++i)
     {
-      bool satisfied = FALSE;
       const struct Requirement *req = ARR_GET(src->requirements, i);
-
-      ARR(Value *) instantiated_args;
-      ARR_INIT(instantiated_args);
-      for (size_t j = 0; j < ARR_LENGTH(req->arguments); ++j)
-      {
-        const Value *arg = *ARR_GET(req->arguments, j);
-        Value *instantiated = instantiate_value(state, arg, args);
-        ARR_APPEND(instantiated_args, instantiated);
-      }
-
-      switch (req->type)
-      {
-        case RequirementTypeFreeFor:
-          {
-            if (ARR_LENGTH(instantiated_args) != 3)
-            {
-              LOG_NORMAL(state->log_out,
-                "Requirement has wrong number of arguments");
-              return 1;
-            }
-            const Value *source = *ARR_GET(instantiated_args, 0);
-            const Value *target = *ARR_GET(instantiated_args, 1);
-            const Value *context = *ARR_GET(instantiated_args, 2);
-            satisfied = evaluate_free_for(state, source, target, context);
-          }
-          break;
-        case RequirementTypeNotFree:
-          {
-            if (ARR_LENGTH(instantiated_args) != 2)
-            {
-              LOG_NORMAL(state->log_out,
-                "Requirement has wrong number of arguments");
-              return 1;
-            }
-            const Value *target = *ARR_GET(instantiated_args, 0);
-            const Value *context = *ARR_GET(instantiated_args, 1);
-            satisfied = evaluate_not_free(state, target, context);
-          }
-          break;
-        case RequirementTypeSubstitution:
-          {
-            if (ARR_LENGTH(instantiated_args) != 4)
-            {
-              LOG_NORMAL(state->log_out,
-                "Requirement has wrong number of arguments");
-              return 1;
-            }
-            const Value *target = *ARR_GET(instantiated_args, 0);
-            const Value *context = *ARR_GET(instantiated_args, 1);
-            const Value *source = *ARR_GET(instantiated_args, 2);
-            const Value *new_context = *ARR_GET(instantiated_args, 3);
-            satisfied = evaluate_substitution(state, target, context,
-              source, new_context);
-          }
-          break;
-        case RequirementTypeFullSubstitution:
-          {
-            if (ARR_LENGTH(instantiated_args) != 4)
-            {
-              LOG_NORMAL(state->log_out,
-                "Requirement has wrong number of arguments");
-              return 1;
-            }
-            const Value *target = *ARR_GET(instantiated_args, 0);
-            const Value *context = *ARR_GET(instantiated_args, 1);
-            const Value *source = *ARR_GET(instantiated_args, 2);
-            const Value *new_context = *ARR_GET(instantiated_args, 3);
-            satisfied = evaluate_full_substitution(state, target, context,
-              source, new_context);
-          }
-          break;
-      }
-
+      bool satisfied = evaluate_requirement(state, req, args, env);
       if (!satisfied)
         return 1;
     }
@@ -989,7 +904,7 @@ instantiate_theorem(struct LogicState *state,
     for (size_t i = 0; i < ARR_LENGTH(instantiated_assumptions); ++i)
     {
       Value *assumption = *ARR_GET(instantiated_assumptions, i);
-      if (!statement_proven(assumption, *proven))
+      if (!statement_proven(assumption, env))
       {
         char *theorem_str = string_from_symbol_path(src->path);
         char *assumption_str = string_from_value(assumption);
@@ -1012,19 +927,19 @@ instantiate_theorem(struct LogicState *state,
     Value *instantiated = instantiate_value(state, inference, args);
     if (instantiated == NULL)
       return 1;
-    ARR_APPEND(*proven, instantiated);
+    ARR_APPEND(env->proven, instantiated);
   }
 
   return 0;
 }
 
 static void
-list_proven(LogicState *state, ValueArray proven)
+list_proven(sl_LogicState *state, const struct ProofEnvironment *env)
 {
   LOG_NORMAL(state->log_out, "Statements proven:\n");
-  for (size_t i = 0; i < ARR_LENGTH(proven); ++i)
+  for (size_t i = 0; i < ARR_LENGTH(env->proven); ++i)
   {
-    Value *stmt = *ARR_GET(proven, i);
+    Value *stmt = *ARR_GET(env->proven, i);
     char *str = string_from_value(stmt);
     LOG_NORMAL(state->log_out, "> '%s'\n", str);
     free(str);
@@ -1034,7 +949,7 @@ list_proven(LogicState *state, ValueArray proven)
 /* TODO: The return value should be a struct, or modify the PrototypeTheorem,
    in order to propagate errors with full detail. */
 LogicError
-add_theorem(LogicState *state, struct PrototypeTheorem proto)
+add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
 {
   if (locate_symbol(state, proto.theorem_path) != NULL)
   {
@@ -1049,6 +964,9 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
   a->is_axiom = FALSE;
   a->id = state->next_id;
   ++state->next_id;
+
+  /* Environment setup. */
+  struct ProofEnvironment *env = new_proof_environment();
 
   /* Parameters. */
   ARR_INIT(a->parameters);
@@ -1074,9 +992,23 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
     p.type = (struct Type *)type_symbol->object;
     p.name = strdup((*param)->name);
     ARR_APPEND(a->parameters, p);
+    ARR_APPEND(env->parameters, p);
   }
 
+  /* Requirements. */
   ARR_INIT(a->requirements);
+  for (struct PrototypeRequirement **req = proto.requirements;
+    *req != NULL; ++req)
+  {
+    struct Requirement requirement;
+    int err = make_requirement(state, &requirement, *req);
+
+    if (err == 0)
+    {
+      ARR_APPEND(a->requirements, requirement);
+      ARR_APPEND(env->requirements, requirement);
+    }
+  }
 
   /* Assumptions & inferences. */
   ARR_INIT(a->assumptions);
@@ -1085,6 +1017,7 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
     *assume != NULL; ++assume)
   {
     ARR_APPEND(a->assumptions, copy_value(*assume));
+    ARR_APPEND(env->proven, copy_value(*assume));
   }
   for (Value **infer = proto.inferences;
     *infer != NULL; ++infer)
@@ -1093,14 +1026,7 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
   }
 
   /* Finally, check the proof. */
-  ValueArray proven;
-  ARR_INIT(proven);
   ARR_INIT(a->steps);
-  for (Value **assume = proto.assumptions;
-    *assume != NULL; ++assume)
-  {
-    ARR_APPEND(proven, copy_value(*assume));
-  }
   for (struct PrototypeProofStep **step = proto.steps;
     *step != NULL; ++step)
   {
@@ -1149,11 +1075,11 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
       ARR_APPEND(args, arg);
     }
 
-    if (instantiate_theorem(state, ref.theorem, args, &proven, FALSE) != 0)
+    if (instantiate_theorem_in_env(state, ref.theorem, args, env, FALSE) != 0)
     {
       LOG_NORMAL(state->log_out,
         "Cannot add theorem because an axiom/theorem referenced could not be instantiated.\n");
-      list_proven(state, proven);
+      list_proven(state, env);
       return LogicErrorSymbolAlreadyExists;
     }
 
@@ -1171,7 +1097,7 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
   for (size_t i = 0; i < ARR_LENGTH(a->inferences); ++i)
   {
     Value *infer = *ARR_GET(a->inferences, i);
-    if (!statement_proven(infer, proven))
+    if (!statement_proven(infer, env))
     {
       LOG_NORMAL(state->log_out,
         "Cannot add theorem because an inference was not proven.\n");
@@ -1180,13 +1106,6 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
   }
 
   /* Free all the statements that we've proven. */
-  for (size_t i = 0; i < ARR_LENGTH(proven); ++i)
-  {
-    Value *v = *ARR_GET(proven, i);
-    free_value(v);
-  }
-  ARR_FREE(proven);
-
   struct Symbol sym;
   sym.path = copy_symbol_path(proto.theorem_path);
   sym.type = SymbolTypeTheorem;
@@ -1220,5 +1139,6 @@ add_theorem(LogicState *state, struct PrototypeTheorem proto)
     free(expr_str);*/
   }
 
+  free_proof_environment(env);
   return LogicErrorNone;
 }
