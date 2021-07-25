@@ -7,15 +7,15 @@ set(CMAKE_BUILD_TYPE Debug)
 # Library
 add_library(sl
   src/arg.c
-  src/ast.c
   src/common.c
   src/_lex.c
   src/lex.c
   src/logic.c
+  src/parse.c
   src/render_html.c
   src/render_latex.c
   src/require.c
-  src/sl.c
+  src/validate.c
   src/value.c
 )
 

@@ -841,21 +841,20 @@ namespace predicate_calculus
     infer implies(any($x, $phi), $phi_0);
   }
 
-  axiom
-  universal_elimination(x : Variable, phi : Formula, psi : Formula)
-  {
-    require not_free($x, $phi);
-
-    infer implies(any($x, implies($phi, $psi)),
-      implies($phi, any($x, $psi)));
-  }
-
   /* TODO: this can be proven. */
   axiom
   quantified_implication(x : Variable, phi : Formula, psi : Formula)
   {
     infer implies(any($x, implies($phi, $psi)),
       implies(any($x, $phi), any($x, $psi)));
+  }
+
+  axiom
+  bound_generalization(x : Variable, phi : Formula)
+  {
+    require not_free($x, $phi);
+
+    infer implies($phi, any($x, $phi));
   }
 
   axiom

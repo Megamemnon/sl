@@ -2,6 +2,7 @@
 #define PARSE_H
 
 #include "common.h"
+#include "logic.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -174,5 +175,76 @@ consume_string(struct ParserState *state, const char **string);
 
 bool
 tokens_remain(struct ParserState *state);
+
+#define LOG_NORMAL(out, ...) \
+do { \
+  fprintf(out, __VA_ARGS__); \
+} \
+while (0);
+
+#define LOG_VERBOSE(out, ...) \
+do { \
+  if (verbose) \
+    fprintf(out, __VA_ARGS__); \
+} \
+while (0);
+
+enum ASTNodeType
+{
+  ASTNodeTypeNone = 0,
+  ASTNodeTypeNamespace,
+
+  ASTNodeTypeUse,
+  ASTNodeTypeType,
+  ASTNodeTypeConstantDeclaration,
+  ASTNodeTypeExpression,
+  ASTNodeTypeAxiom,
+  ASTNodeTypeTheorem,
+
+  ASTNodeTypeParameterList,
+  ASTNodeTypeParameter,
+
+  ASTNodeTypeLatex,
+  ASTNodeTypeBind,
+
+  ASTNodeTypeDef,
+  ASTNodeTypeAssume,
+  ASTNodeTypeRequire,
+  ASTNodeTypeInfer,
+  ASTNodeTypeStep,
+
+  ASTNodeTypeLatexString,
+  ASTNodeTypeLatexVariable,
+
+  ASTNodeTypeComposition,
+  ASTNodeTypeConstant,
+  ASTNodeTypeVariable,
+  ASTNodeTypePlaceholder,
+  ASTNodeTypeTheoremReference,
+
+  ASTNodeTypeCompositionArgumentList,
+  ASTNodeTypePath,
+
+  ASTNodeTypePathSegment
+};
+
+struct ASTNodeData
+{
+  enum ASTNodeType type;
+  const struct Token *location;
+  char *name;
+  char *typename;
+  bool atomic;
+};
+
+#define AST_NODE_DATA(node) ((struct ASTNodeData *)node->data)
+
+int
+parse_root(struct ParserState *state);
+
+extern int verbose;
+
+int
+sl_verify(sl_LogicState *logic_state, const char *input_path, FILE *out);
 
 #endif
