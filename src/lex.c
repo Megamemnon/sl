@@ -460,3 +460,58 @@ sl_lexer_get_current_token_column(const sl_LexerState *state)
 {
   return state->cursor_offset - state->token_length;
 }
+
+struct sl_StringSlice
+sl_lexer_get_current_token_source(const sl_LexerState *state)
+{
+  struct sl_StringSlice slice;
+  slice.begin = NULL;
+  slice.length = 0;
+  if (state != NULL)
+  {
+    slice.begin = state->token_begin;
+    slice.length = state->token_length;
+  }
+  return slice;
+}
+
+int
+sl_lexer_clear_unused(sl_LexerState *state)
+{
+  /* Clear away line endings and comments. */
+  bool in_line_comment;
+  int block_comment_depth;
+
+  in_line_comment = FALSE;
+  block_comment_depth = 0;
+
+  do {
+    if (sl_lexer_get_current_token_type(state) == sl_LexerTokenType_LineEnd)
+    {
+      in_line_comment = FALSE;
+    }
+    else if (sl_lexer_get_current_token_type(state)
+      == sl_LexerTokenType_LineComment)
+    {
+      in_line_comment = TRUE;
+    }
+    else if (sl_lexer_get_current_token_type(state)
+      == sl_LexerTokenType_OpeningBlockComment)
+    {
+      ++block_comment_depth;
+    }
+    else if (sl_lexer_get_current_token_type(state)
+      == sl_LexerTokenType_ClosingBlockComment)
+    {
+      --block_comment_depth;
+    }
+    else if (!in_line_comment && block_comment_depth <= 0)
+    {
+      return 0;
+    }
+
+    if (block_comment_depth < 0)
+      return 1;
+  } while (sl_lexer_advance(state) == 0);
+  return 1;
+}

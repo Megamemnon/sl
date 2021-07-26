@@ -164,6 +164,15 @@ struct sl_StringSlice
   size_t length;
 };
 
+int
+strslicecmp(const struct sl_StringSlice a, const struct sl_StringSlice b);
+
+int
+strslicecmp2(const struct sl_StringSlice a, const char *b);
+
+char *
+slice_to_string(struct sl_StringSlice slice);
+
 uint32_t
 hash(char *str);
 

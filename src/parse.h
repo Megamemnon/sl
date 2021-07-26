@@ -71,6 +71,12 @@ sl_lexer_get_current_token_line(const sl_LexerState *state);
 uint32_t
 sl_lexer_get_current_token_column(const sl_LexerState *state);
 
+struct sl_StringSlice
+sl_lexer_get_current_token_source(const sl_LexerState *state);
+
+int
+sl_lexer_clear_unused(sl_LexerState *state);
+
 #include "lex.h"
 
 enum sl_ASTNodeType
@@ -79,6 +85,8 @@ enum sl_ASTNodeType
   sl_ASTNodeType_Namespace,
   sl_ASTNodeType_Use,
   sl_ASTNodeType_Type,
+  sl_ASTNodeType_AtomicFlag,
+  sl_ASTNodeType_BindsFlag,
   sl_ASTNodeType_ConstantDeclaration,
   sl_ASTNodeType_Expression,
   sl_ASTNodeType_Axiom,
@@ -99,6 +107,7 @@ enum sl_ASTNodeType
   sl_ASTNodeType_Variable,
   sl_ASTNodeType_Placeholder,
   sl_ASTNodeType_TheoremReference,
+  sl_ASTNodeType_ArgumentList,
   sl_ASTNodeType_CompositionArgumentList,
   sl_ASTNodeType_Path,
   sl_ASTNodeType_PathSegment
@@ -142,7 +151,7 @@ void
 copy_tree(sl_ASTNode *dst, const sl_ASTNode *src);
 
 void
-print_tree(const sl_ASTNode *root);
+sl_print_tree(const sl_ASTNode *root);
 
 sl_ASTNode *
 new_child(sl_ASTNode *parent);
@@ -184,6 +193,9 @@ while (0);
 
 int
 parse_root(struct ParserState *state);
+
+sl_ASTNode *
+sl_parse_input(sl_LexerState *input);
 
 extern int verbose;
 

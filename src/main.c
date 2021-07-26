@@ -94,7 +94,13 @@ main(int argc, char **argv)
   for (size_t i = 0; i < ARRAY_LENGTH(cl.arguments); ++i)
   {
     const char *path = *ARRAY_GET(cl.arguments, char *, i);
-    sl_verify(state, path, output);
+    //sl_verify(state, path, output);
+    FILE *f = fopen(path, "r");
+    sl_LexerState *lexer = sl_lexer_new_state_from_file(f);
+    sl_ASTNode *ast = sl_parse_input(lexer);
+    sl_print_tree(ast);
+    sl_lexer_free_state(lexer);
+    fclose(f);
   }
 
   if (latex_opt.argument != NULL)

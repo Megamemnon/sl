@@ -93,6 +93,26 @@ namespace propositional_calculus
     step modus_ponens(implies(not($phi), not(F)), implies(F, $phi));
   }
 
+  theorem
+  implies_true_formula(phi : Formula, psi : Formula)
+  {
+    assume $psi;
+
+    infer implies($phi, $psi);
+
+    step simplification($psi, $phi);
+    step modus_ponens($psi, implies($phi, $psi));
+  }
+
+  theorem
+  implies_true(phi : Formula)
+  {
+    infer implies($phi, T);
+
+    step true();
+    step implies_true_formula($phi, T);
+  }
+
   /*
 
   Common theorems of propositional calculus, based on the list given in
@@ -348,6 +368,26 @@ namespace propositional_calculus
     step modus_ponens(implies($phi, $psi), implies($phi, $chi));
   }
 
+  /* Some more common theorems. */
+  /* TODO: prove this as a tautology first? */
+  theorem
+  triple_antecedent_introduction_meta(phi : Formula, psi : Formula,
+    chi : Formula, theta : Formula)
+  {
+    assume implies($phi, implies($psi, $chi));
+
+    infer implies(implies($theta, $phi),
+      implies(implies($theta, $psi), implies($theta, $chi)));
+
+    step hypothetical_syllogism($theta, $phi, implies($psi, $chi));
+    step modus_ponens(implies($phi, implies($psi, $chi)),
+      implies(implies($theta, $phi), implies($theta, implies($psi, $chi))));
+    step distributive($theta, $psi, $chi);
+    step hypothetical_syllogism_meta(implies($theta, $phi),
+      implies($theta, implies($psi, $chi)),
+      implies(implies($theta, $psi), implies($theta, $chi)));
+  }
+
   /* Extend the system to include the other connectives we use and prove common
      theorems. */
   /* TODO: Instead of explicitly adding these connectives and their properties
@@ -363,6 +403,17 @@ namespace propositional_calculus
   conjunction_introduction(phi : Formula, psi : Formula)
   {
     infer implies($phi, implies($psi, and($phi, $psi)));
+  }
+
+  theorem
+  hypothetical_conjunction_introduction(phi : Formula,
+    psi : Formula, chi : Formula)
+  {
+    infer implies(implies($phi, $psi), implies(implies($phi, $chi),
+      implies($phi, and($psi, $chi))));
+
+    step conjunction_introduction($psi, $chi);
+    step triple_antecedent_introduction_meta($psi, $chi, and($psi, $chi), $phi);
   }
 
   theorem
@@ -433,6 +484,33 @@ namespace propositional_calculus
     step transposition_2(and($psi, $phi), $phi);
     step modus_ponens(implies(and($psi, $phi), $phi),
       implies(not($phi), not(and($psi, $phi))));
+  }
+
+  theorem
+  conjunction_implication_distributive(phi : Formula, psi : Formula,
+    chi : Formula)
+  {
+    infer implies(and(implies($phi, $psi), implies($phi, $chi)),
+      implies($phi, and($psi, $chi)));
+
+    step hypothetical_conjunction_introduction($phi, $psi, $chi);
+    step conjunction_elimination_left(implies($phi, $psi),
+      implies($phi, $chi));
+    step conjunction_elimination_right(implies($phi, $psi),
+      implies($phi, $chi));
+    step hypothetical_syllogism_meta(and(implies($phi, $psi),
+      implies($phi, $chi)), implies($phi, $psi),
+      implies(implies($phi, $chi), implies($phi, and($psi, $chi))));
+    step distributive(and(implies($phi, $psi), implies($phi, $chi)),
+      implies($phi, $chi), implies($phi, and($psi, $chi)));
+    step modus_ponens(implies(and(implies($phi, $psi), implies($phi, $chi)),
+      implies(implies($phi, $chi), implies($phi, and($psi, $chi)))),
+      implies(implies(and(implies($phi, $psi), implies($phi, $chi)),
+      implies($phi, $chi)), implies(and(implies($phi, $psi),
+      implies($phi, $chi)), implies($phi, and($psi, $chi)))));
+    step modus_ponens(implies(and(implies($phi, $psi), implies($phi, $chi)),
+      implies($phi, $chi)), implies(and(implies($phi, $psi),
+      implies($phi, $chi)), implies($phi, and($psi, $chi))));
   }
 
   expr Formula
@@ -760,7 +838,7 @@ namespace predicate_calculus
   use propositional_calculus;
 
   type Term;
-  type Variable atomic;
+  type Variable atomic binds;
 
   namespace vars
   {
@@ -841,7 +919,6 @@ namespace predicate_calculus
     infer implies(any($x, $phi), $phi_0);
   }
 
-  /* TODO: this can be proven. */
   axiom
   quantified_implication(x : Variable, phi : Formula, psi : Formula)
   {
@@ -866,11 +943,35 @@ namespace predicate_calculus
   }
 
   theorem
+  quantified_implication_meta(x : Variable, phi : Formula, psi : Formula)
+  {
+    assume implies($phi, $psi);
+
+    infer implies(any($x, $phi), any($x, $psi));
+
+    step generalization($x, implies($phi, $psi));
+    step quantified_implication($x, $phi, $psi);
+    step modus_ponens(any($x, implies($phi, $psi)),
+      implies(any($x, $phi), any($x, $psi)));
+  }
+
+  theorem
   instantiation_elimination(x : Variable, phi : Formula)
   {
     infer implies(any($x, $phi), $phi);
 
     step instantiation($x, $phi, t($x), $phi);
+  }
+
+  theorem
+  instantiation_elimination_meta(x : Variable, phi : Formula)
+  {
+    assume any($x, $phi);
+
+    infer $phi;
+
+    step instantiation_elimination($x, $phi);
+    step modus_ponens(any($x, $phi), $phi);
   }
 
   theorem
@@ -884,6 +985,52 @@ namespace predicate_calculus
     step quantified_implication($x, $phi, $psi);
     step modus_ponens(any($x, implies($phi, $psi)),
       implies(any($x, $phi), any($x, $psi)));
+  }
+
+  theorem
+  quantified_conjunction(x : Variable, phi : Formula,
+    psi : Formula)
+  {
+    infer implies(and(any($x, $phi), any($x, $psi)), any($x, and($phi, $psi)));
+
+    step conjunction_elimination_left(any($x, $phi), any($x, $psi));
+    step conjunction_elimination_right(any($x, $phi), any($x, $psi));
+    step instantiation_elimination($x, $phi);
+    step instantiation_elimination($x, $psi);
+    step hypothetical_syllogism_meta(and(any($x, $phi), any($x, $psi)),
+      any($x, $phi), $phi);
+    step hypothetical_syllogism_meta(and(any($x, $phi), any($x, $psi)),
+      any($x, $psi), $psi);
+    step hypothetical_conjunction_introduction(and(any($x, $phi),
+      any($x, $psi)), $phi, $psi);
+    step modus_ponens(implies(and(any($x, $phi), any($x, $psi)), $phi),
+      implies(implies(and(any($x, $phi), any($x, $psi)), $psi),
+      implies(and(any($x, $phi), any($x, $psi)), and($phi, $psi))));
+    step modus_ponens(implies(and(any($x, $phi), any($x, $psi)), $psi),
+      implies(and(any($x, $phi), any($x, $psi)), and($phi, $psi)));
+    step quantified_implication_meta($x, and(any($x, $phi), any($x, $psi)),
+      and($phi, $psi));
+    step bound_generalization($x, and(any($x, $phi), any($x, $psi)));
+    step hypothetical_syllogism_meta(and(any($x, $phi), any($x, $psi)),
+      any($x, and(any($x, $phi), any($x, $psi))),
+      any($x, and($phi, $psi)));
+  }
+
+  /* TODO: prove this as a tautology (quantifying over the antecedent
+     as well, or, equivalently, requiring the x not free in
+     the antecedent). */
+  theorem
+  quantified_conjunction_implication_meta(x : Variable, phi : Formula,
+    psi : Formula, chi : Formula)
+  {
+    assume implies(and($phi, $psi), $chi);
+
+    infer implies(and(any($x, $phi), any($x, $psi)), any($x, $chi));
+
+    step quantified_implication_meta($x, and($phi, $psi), $chi);
+    step quantified_conjunction($x, $phi, $psi);
+    step hypothetical_syllogism_meta(and(any($x, $phi), any($x, $psi)),
+      any($x, and($phi, $psi)), any($x, $chi));
   }
 
   expr Formula
@@ -1205,6 +1352,24 @@ namespace zfc
       iff(eval_p2(in, t(vars.y), t(vars.x)), $phi))));
   }
 
+  theorem
+  test(phi : Formula)
+  {
+    /*infer any(vars.x, any(vars.y, implies(and(
+      any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.x)), $phi)),
+      any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.y)), $phi))),
+      eq(t(vars.x), t(vars.y)))));*/
+
+    step extensionality();
+    step instantiation_elimination_meta(vars.x,
+      any(vars.y, implies(
+      any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.x)),
+      eval_p2(in, t(vars.z), t(vars.y)))), eq(t(vars.x), t(vars.y)))));
+    step instantiation_elimination_meta(vars.y,
+      implies(any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.x)),
+      eval_p2(in, t(vars.z), t(vars.y)))), eq(t(vars.x), t(vars.y))));
+  }
+
   axiom
   regularity()
   {
@@ -1457,12 +1622,12 @@ namespace zfc
 
   const ordered_pair : Function2
   {
-    latex "\\left( \\cdot_1 , \\cdot_2 \\right)";
+    latex "\\cdot_1 , \\cdot_2";
   }
 
   const cartesian_product : Function2
   {
-    latex "\\left( \\cdot_1 \\times \\cdot_2 \\right)";
+    latex "\\cdot_1 \\times \\cdot_2";
   }
 
   axiom
@@ -1489,5 +1654,160 @@ namespace zfc
       exists_unique(vars.y, and(eval_p2(in, t(vars.y), t(vars.Y)),
       eval_p2(in, eval_f2(ordered_pair, t(vars.x), t(vars.y)),
       t(vars.f))))))))));
+  }
+
+  const eval_map : Function2
+  {
+    latex "\\cdot_1 \\left( \\cdot_2 \\right)";
+  }
+}
+
+namespace algebra
+{
+  use propositional_calculus;
+  use predicate_calculus;
+  use zfc;
+
+  const binary : Predicate2
+  {
+    latex "\\cdot_1 : \\cdot_2 \\times \\cdot_2 \\to \\cdot_2";
+  }
+
+  theorem
+  binary_operation()
+  {
+    infer any(vars.f, any(vars.X, iff(eval_p2(binary, t(vars.f), t(vars.X)),
+      eval_p3(map, t(vars.f), eval_f2(cartesian_product, t(vars.X), t(vars.X)),
+      t(vars.X)))));
+
+    step extend_predicate2(binary, eval_p3(map, t(vars.f),
+      eval_f2(cartesian_product, t(vars.X), t(vars.X)), t(vars.X)),
+      vars.f, vars.X);
+  }
+
+  const binary_commutative : Predicate2
+  {
+    latex "\\mathrm{comm} \\left( \\cdot_1 : \\cdot_2 \\times \\cdot_2 \\to \\cdot_2 \\right)";
+  }
+
+  theorem
+  binary_operation_commutative()
+  {
+    infer any(vars.f, any(vars.X, iff(eval_p2(binary_commutative, t(vars.f),
+      t(vars.X)), and(eval_p2(binary, t(vars.f), t(vars.X)),
+      any(vars.x, any(vars.y, implies(eval_p2(in,
+      eval_f2(ordered_pair, t(vars.x), t(vars.y)),
+      eval_f2(cartesian_product, t(vars.X), t(vars.X))), eq(
+      eval_f2(eval_map, t(vars.f), eval_f2(ordered_pair, t(vars.x), t(vars.y))),
+      eval_f2(eval_map, t(vars.f), eval_f2(ordered_pair, t(vars.y),
+      t(vars.x)))))))))));
+
+    step extend_predicate2(binary_commutative,
+      and(eval_p2(binary, t(vars.f), t(vars.X)),
+      any(vars.x, any(vars.y, implies(eval_p2(in,
+      eval_f2(ordered_pair, t(vars.x), t(vars.y)),
+      eval_f2(cartesian_product, t(vars.X), t(vars.X))), eq(
+      eval_f2(eval_map, t(vars.f), eval_f2(ordered_pair, t(vars.x), t(vars.y))),
+      eval_f2(eval_map, t(vars.f), eval_f2(ordered_pair, t(vars.y),
+      t(vars.x)))))))), vars.f, vars.X);
+  }
+
+  const binary_associative : Predicate2
+  {
+    latex "\\mathrm{assoc} \\left( \\cdot_1 : \\cdot_2 \\times \\cdot_2 \\to \\cdot_2 \\right)";
+  }
+
+  theorem
+  binary_operation_associative()
+  {
+    infer any(vars.f, any(vars.X, iff(eval_p2(binary_associative, t(vars.f),
+      t(vars.X)), any(vars.x, any(vars.y, any(vars.z, implies(and(
+      eval_p2(in, t(vars.x), t(vars.X)), and(
+      eval_p2(in, t(vars.y), t(vars.X)), eval_p2(in, t(vars.z), t(vars.X)))),
+      eq(eval_f2(eval_map, t(vars.f), eval_f2(ordered_pair, eval_f2(eval_map,
+      t(vars.f), eval_f2(ordered_pair, t(vars.x), t(vars.y))),
+      t(vars.z))),
+      eval_f2(eval_map, t(vars.f), eval_f2(ordered_pair, t(vars.x),
+      eval_f2(eval_map, t(vars.f), eval_f2(ordered_pair, t(vars.y),
+      t(vars.z)))))))))))));
+
+    step extend_predicate2(binary_associative,
+      any(vars.x, any(vars.y, any(vars.z, implies(and(
+      eval_p2(in, t(vars.x), t(vars.X)), and(
+      eval_p2(in, t(vars.y), t(vars.X)), eval_p2(in, t(vars.z), t(vars.X)))),
+      eq(eval_f2(eval_map, t(vars.f), eval_f2(ordered_pair, eval_f2(eval_map,
+      t(vars.f), eval_f2(ordered_pair, t(vars.x), t(vars.y))),
+      t(vars.z))),
+      eval_f2(eval_map, t(vars.f), eval_f2(ordered_pair, t(vars.x),
+      eval_f2(eval_map, t(vars.f), eval_f2(ordered_pair, t(vars.y),
+      t(vars.z)))))))))), vars.f, vars.X);
+  }
+
+  const binary_has_left_identity : Predicate2
+  {
+    latex "1_{\\mathrm{L}} \\left( \\cdot_1 : \\cdot_2 \\times \\cdot_2 \\to \\cdot_2 \\right)";
+  }
+
+  theorem
+  binary_operation_has_left_identity()
+  {
+    infer any(vars.f, any(vars.X, iff(eval_p2(binary_has_left_identity,
+      t(vars.f), t(vars.X)), and(eval_p2(binary, t(vars.f), t(vars.X)),
+      exists(vars.e, any(vars.x, implies(eval_p2(in, t(vars.x), t(vars.X)),
+      eq(eval_f2(eval_map, t(vars.f),
+      eval_f2(ordered_pair, t(vars.e), t(vars.x))), t(vars.x)))))))));
+
+    step extend_predicate2(binary_has_left_identity,
+      and(eval_p2(binary, t(vars.f), t(vars.X)),
+      exists(vars.e, any(vars.x, implies(eval_p2(in, t(vars.x), t(vars.X)),
+      eq(eval_f2(eval_map, t(vars.f),
+      eval_f2(ordered_pair, t(vars.e), t(vars.x))), t(vars.x)))))),
+      vars.f, vars.X);
+  }
+
+  const binary_has_right_identity : Predicate2
+  {
+    latex "1_{\\mathrm{R}} \\left( \\cdot_1 : \\cdot_2 \\times \\cdot_2 \\to \\cdot_2 \\right)";
+  }
+
+  theorem
+  binary_operation_has_right_identity()
+  {
+    infer any(vars.f, any(vars.X, iff(eval_p2(binary_has_right_identity,
+      t(vars.f), t(vars.X)), and(eval_p2(binary, t(vars.f), t(vars.X)),
+      exists(vars.e, any(vars.x, implies(eval_p2(in, t(vars.x), t(vars.X)),
+      eq(eval_f2(eval_map, t(vars.f),
+      eval_f2(ordered_pair, t(vars.x), t(vars.e))), t(vars.x)))))))));
+
+    step extend_predicate2(binary_has_right_identity,
+      and(eval_p2(binary, t(vars.f), t(vars.X)),
+      exists(vars.e, any(vars.x, implies(eval_p2(in, t(vars.x), t(vars.X)),
+      eq(eval_f2(eval_map, t(vars.f),
+      eval_f2(ordered_pair, t(vars.x), t(vars.e))), t(vars.x)))))),
+      vars.f, vars.X);
+  }
+
+  const binary_has_identity : Predicate2
+  {
+    latex "1 \\left( \\cdot_1 : \\cdot_2 \\times \\cdot_2 \\to \\cdot_2 \\right)";
+  }
+
+  theorem
+  binary_operation_has_identity()
+  {
+    infer any(vars.f, any(vars.X, iff(eval_p2(binary_has_identity,
+      t(vars.f), t(vars.X)), and(eval_p2(binary_has_left_identity,
+      t(vars.f), t(vars.X)), eval_p2(binary_has_right_identity,
+      t(vars.f), t(vars.X))))));
+
+    step extend_predicate2(binary_has_identity,
+      and(eval_p2(binary_has_left_identity,
+      t(vars.f), t(vars.X)), eval_p2(binary_has_right_identity,
+      t(vars.f), t(vars.X))), vars.f, vars.X);
+  }
+
+  const is_group : Predicate2
+  {
+    latex "\\mathrm{grp} \\left( \\cdot_1 , \\cdot_2 \\right)";
   }
 }

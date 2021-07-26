@@ -2,6 +2,37 @@
 #include <stdio.h>
 #include <string.h>
 
+int
+strslicecmp(const struct sl_StringSlice a, const struct sl_StringSlice b)
+{
+  if (a.length > b.length)
+    return 1;
+  if (b.length > a.length)
+    return -1;
+  return strncmp(a.begin, b.begin, a.length);
+}
+
+int
+strslicecmp2(const struct sl_StringSlice a, const char *b)
+{
+  if (a.length > strlen(b))
+    return 1;
+  if (strlen(b) > a.length)
+    return -1;
+  return strncmp(a.begin, b, a.length);
+}
+
+char *
+slice_to_string(struct sl_StringSlice slice)
+{
+  char *str = malloc(slice.length + 1);
+  if (str == NULL)
+    return NULL;
+  strncpy(str, slice.begin, slice.length);
+  str[slice.length] = '\0';
+  return str;
+}
+
 /* From http://www.cse.yorku.ca/~oz/hash.html */
 uint32_t
 hash(char *str)
