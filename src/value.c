@@ -29,7 +29,6 @@ copy_value_to(Value *dst, const Value *src)
 {
   dst->value_type = src->value_type;
   dst->type = src->type;
-  dst->bound = src->bound;
   if (src->value_type == ValueTypeVariable)
   {
     dst->variable_name = strdup(src->variable_name);
@@ -46,6 +45,7 @@ copy_value_to(Value *dst, const Value *src)
     {
       const struct Value *arg = *ARR_GET(src->arguments, i);
       struct Value *arg_copy = copy_value(arg);
+      arg_copy->parent = dst;
       ARR_APPEND(dst->arguments, arg_copy);
     }
   }
@@ -55,6 +55,7 @@ Value *
 copy_value(const Value *value)
 {
   Value *v = malloc(sizeof(Value));
+  v->parent = NULL;
   copy_value_to(v, value);
   return v;
 }
@@ -62,7 +63,6 @@ copy_value(const Value *value)
 bool
 values_equal(const Value *a, const Value *b)
 {
-  /* DO NOT compare `bound`. */
   if (a->value_type != b->value_type)
     return FALSE;
   switch (a->value_type)
@@ -131,15 +131,8 @@ string_from_value(const Value *value)
         if (ARR_LENGTH(value->arguments) == 0)
         {
           size_t len = 3 + strlen(expr_str);
-          if (value->bound)
-            len += 1;
           str = malloc(len);
           char *c = str;
-          if (value->bound)
-          {
-            *c = '!';
-            ++c;
-          }
           strcpy(c, expr_str);
           c += strlen(expr_str);
           strcpy(c, "()");
@@ -150,8 +143,6 @@ string_from_value(const Value *value)
         else
         {
           size_t len = 3 + strlen(expr_str);
-          if (value->bound)
-            len += 1;
           char **args = malloc(sizeof(char *) * ARR_LENGTH(value->arguments));
           for (size_t i = 0; i < ARR_LENGTH(value->arguments); ++i)
           {
@@ -163,11 +154,6 @@ string_from_value(const Value *value)
 
           str = malloc(len);
           char *c = str;
-          if (value->bound)
-          {
-            *c = '!';
-            ++c;
-          }
           strcpy(c, expr_str);
           c += strlen(expr_str);
           *c = '(';
@@ -200,15 +186,8 @@ string_from_value(const Value *value)
       {
         char *const_str = string_from_symbol_path(value->constant->path);
         size_t len = 1 + strlen(const_str);
-        if (value->bound)
-          len += 1;
         char *str = malloc(len);
         char *c = str;
-        if (value->bound)
-        {
-          *c = '!';
-          ++c;
-        }
         strcpy(c, const_str);
         c += strlen(const_str);
         *c = '\0';
@@ -219,15 +198,8 @@ string_from_value(const Value *value)
     case ValueTypeVariable:
       {
         size_t len = 2 + strlen(value->variable_name);
-        if (value->bound)
-          len += 1;
         char *str = malloc(len);
         char *c = str;
-        if (value->bound)
-        {
-          *c = '!';
-          ++c;
-        }
         *c = '$';
         ++c;
         strcpy(c, value->variable_name);
@@ -258,8 +230,7 @@ enumerate_value_occurrences(const Value *target, const Value *search_in,
 }
 
 Value *
-instantiate_value(struct sl_LogicState *state, const Value *src,
-  ArgumentArray args)
+instantiate_value(const Value *src, ArgumentArray args)
 {
   switch (src->value_type)
   {
@@ -282,9 +253,9 @@ instantiate_value(struct sl_LogicState *state, const Value *src,
         if (arg == NULL)
         {
           char *value_str = string_from_value(src);
-          LOG_NORMAL(state->log_out,
+          /*LOG_NORMAL(state->log_out,
             "Cannot instantiate value '%s' because there is no matching argument.\n",
-            value_str);
+            value_str);*/
           free(value_str);
           return NULL;
         }
@@ -293,9 +264,9 @@ instantiate_value(struct sl_LogicState *state, const Value *src,
           char *value_str = string_from_value(src);
           char *src_type = string_from_symbol_path(src->type->path);
           char *arg_type = string_from_symbol_path(arg->value->type->path);
-          LOG_NORMAL(state->log_out,
+          /*LOG_NORMAL(state->log_out,
             "Cannot instantiate value '%s' of type '%s' because the variable has type '%s'.\n",
-            value_str, src_type, arg_type);
+            value_str, src_type, arg_type);*/
           free(value_str);
           free(src_type);
           free(arg_type);
@@ -310,11 +281,14 @@ instantiate_value(struct sl_LogicState *state, const Value *src,
         dst->type = src->type;
         dst->value_type = ValueTypeComposition;
         dst->expression = src->expression;
+        dst->parent = NULL;
         ARR_INIT(dst->arguments);
         for (size_t i = 0; i < ARR_LENGTH(src->arguments); ++i)
         {
           const Value *arg = *ARR_GET(src->arguments, i);
-          ARR_APPEND(dst->arguments, instantiate_value(state, arg, args));
+          Value *instantiated_arg = instantiate_value(/*state, */arg, args);
+          instantiated_arg->parent = dst;
+          ARR_APPEND(dst->arguments, instantiated_arg);
         }
         return dst;
       }

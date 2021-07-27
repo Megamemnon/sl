@@ -70,6 +70,7 @@ struct PrototypeType
 {
   SymbolPath *type_path;
   bool atomic;
+  bool binds;
 };
 
 LogicError

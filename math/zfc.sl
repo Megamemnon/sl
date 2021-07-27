@@ -1233,7 +1233,7 @@ namespace predicate_calculus
   axiom
   extend_predicate1(p : Predicate1, phi : Formula, x_1 : Variable)
   {
-    /* require cover_free($x_1, $phi); */
+    require cover_free($x_1, $phi);
 
     infer any($x_1, iff(eval_p1($p, t($x_1)), $phi));
   }
@@ -1243,7 +1243,7 @@ namespace predicate_calculus
     x_2 : Variable)
   {
     require distinct($x_1, $x_2);
-    /* require cover_free($x_1, $x_2, $phi); */
+    require cover_free($x_1, $x_2, $phi);
 
     infer any($x_1, any($x_2, iff(eval_p2($p, t($x_1), t($x_2)), $phi)));
   }
@@ -1253,7 +1253,7 @@ namespace predicate_calculus
     x_2 : Variable, x_3 : Variable)
   {
     require distinct($x_1, $x_2, $x_3);
-    /* require cover_free($x_1, $x_2, $x_3, $phi); */
+    require cover_free($x_1, $x_2, $x_3, $phi);
 
     infer any($x_1, any($x_2, any($x_3,
       iff(eval_p3($p, t($x_1), t($x_2), t($x_3)), $phi))));

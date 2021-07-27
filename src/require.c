@@ -219,84 +219,72 @@ evaluate_distinct(sl_LogicState *state, const struct ProofEnvironment *env,
 }
 
 /* --- Free for --- */
-static void
-make_substitution_in_place(const Value *source, const Value *target,
-  Value *context)
-{
-  if (values_equal(target, context))
-  {
-    copy_value_to(context, source);
-  }
-  else if (context->value_type == ValueTypeComposition)
-  {
-    for (size_t i = 0; i < ARR_LENGTH(context->arguments); ++i)
-    {
-      Value *arg = *ARR_GET(context->arguments, i);
-        make_substitution_in_place(source, target, arg);
-    }
-  }
-}
-
 static bool
-new_bindings_exist(sl_LogicState *state, const Value *context)
+value_gets_bound(const Value *source, const Value *context)
 {
-  if (context->value_type == ValueTypeComposition)
+  switch (source->value_type)
   {
-    ArgumentArray args_array;
-    ARR_INIT(args_array);
-    for (size_t i = 0; i < ARR_LENGTH(context->arguments); ++i)
-    {
-      Value *arg = *ARR_GET(context->arguments, i);
-      bool child_binds = new_bindings_exist(state, arg);
-      if (child_binds)
-        return TRUE;
-
-      const struct Parameter *param =
-        ARR_GET(context->expression->parameters, i);
-      struct Argument argument;
-      argument.name = strdup(param->name);
-      argument.value = copy_value(arg);
-      ARR_APPEND(args_array, argument);
-    }
-
-    /* Look for things to bind. */
-    for (size_t i = 0; i < ARR_LENGTH(context->expression->bindings); ++i)
-    {
-      const Value *binding = *ARR_GET(context->expression->bindings, i);
-      Value *instantiated = instantiate_value(state, binding, args_array);
-
-      ValueArray occurrences;
-      ARR_INIT(occurrences);
-      enumerate_value_occurrences(instantiated, context, &occurrences);
-      for (size_t j = 0; j < ARR_LENGTH(occurrences); ++j)
+    case ValueTypeConstant:
+      /* For a constant, look up through the parents of context. If there is
+         a binding equal to source, or if there is a variable that gets
+         bound, return true. */
+      for (const Value *scope = context->parent; scope != NULL;
+        scope = scope->parent)
       {
-        Value *occurrence = *ARR_GET(occurrences, j);
-        if (occurrence->bound == FALSE)
+        ArgumentArray args_array;
+        ARR_INIT(args_array);
+        for (size_t i = 0; i < ARR_LENGTH(scope->arguments); ++i)
+        {
+          Value *arg = *ARR_GET(scope->arguments, i);
+          const struct Parameter *param =
+            ARR_GET(scope->expression->parameters, i);
+          struct Argument argument;
+          argument.name = strdup(param->name);
+          argument.value = copy_value(arg);
+          ARR_APPEND(args_array, argument);
+        }
+
+        for (size_t i = 0; i < ARR_LENGTH(scope->expression->bindings); ++i)
+        {
+          const Value *binding = *ARR_GET(scope->expression->bindings, i);
+          Value *instantiated_binding = instantiate_value(binding, args_array);
+          if (instantiated_binding->value_type == ValueTypeVariable
+            || values_equal(instantiated_binding, source))
+          {
+            return TRUE;
+            /* TODO: free. */
+          }
+          free_value(instantiated_binding);
+        }
+      }
+      return FALSE;
+      break;
+    case ValueTypeVariable:
+      /* If we have a variable, just assume there is a
+         production that introduces a sub-value that gets bound if context
+         is a child of any binding expressions. */
+      for (const Value *scope = context->parent; scope != NULL;
+        scope = scope->parent)
+      {
+        if (ARR_LENGTH(scope->expression->bindings) > 0)
           return TRUE;
       }
-      ARR_FREE(occurrences);
-
-      free_value(instantiated);
-    }
+      return FALSE;
+      break;
+    case ValueTypeComposition:
+      for (size_t i = 0; i < ARR_LENGTH(source->arguments); ++i)
+      {
+        const Value *arg = *ARR_GET(source->arguments, i);
+        if (value_gets_bound(arg, context))
+          return TRUE;
+      }
+      return FALSE;
+      break;
   }
-  return FALSE;
 }
 
 static bool
-substitution_is_binding(sl_LogicState *state, const Value *source,
-  const Value *target, const Value *context)
-{
-  Value *ctx = copy_value(context);
-
-  /* Make the substitution in place. Then traverse the tree, and at each
-     composition node, try to make new bindings. */
-  make_substitution_in_place(source, target, ctx);
-
-  return new_bindings_exist(state, ctx);
-}
-
-static bool
-free_for_in_env(sl_LogicState *state, const struct ProofEnvironment *env,
+free_for_in_env(const struct ProofEnvironment *env,
   const Value *source, const Value *target, const Value *context)
 {
   /* Special case: anything is always free for itself. */
@@ -319,11 +307,36 @@ free_for_in_env(sl_LogicState *state, const struct ProofEnvironment *env,
     }
   }
 
-  if (!value_terminal(source) || !value_terminal(target)
-    || !value_terminal(context))
-    return FALSE;
-
-  return !substitution_is_binding(state, source, target, context);
+  /* If this is the site of the substitution or a variable, check that
+     the source is free for the target. */
+  /* TODO: is there no sequence of productions that allows a value of type
+     target to be contained as a subexpression of context if context is a
+     variable? For now, just operate on the assumption that such a
+     substitution is possible. */
+  if (values_equal(target, context)
+    || context->value_type == ValueTypeVariable)
+  {
+    /* Then, iterate through the source and look for terms that can
+       be bound. */
+    return !value_gets_bound(source, context);
+  }
+  else if (context->value_type == ValueTypeConstant)
+  {
+    /* Since we didn't match above, we're all good. */
+    return TRUE;
+  }
+  else if (context->value_type == ValueTypeComposition)
+  {
+    /* Check all the children. */
+    for (size_t i = 0; i < ARR_LENGTH(context->arguments); ++i)
+    {
+      const Value *arg = *ARR_GET(context->arguments, i);
+      if (!free_for_in_env(env, source, target, arg))
+        return FALSE;
+    }
+    return TRUE;
+  }
+  return TRUE;
 }
 
 static bool
@@ -341,7 +354,7 @@ evaluate_free_for(struct sl_LogicState *state,
   target = *ARR_GET(args, 1);
   context = *ARR_GET(args, 2);
 
-  return free_for_in_env(state, env, source, target, context);
+  return free_for_in_env(env, source, target, context);
 }
 
 /* --- Not Free --- */
@@ -428,6 +441,7 @@ static bool
 evaluate_not_bound(struct sl_LogicState *state,
   const struct ProofEnvironment *env, ValueArray args)
 {
+  #if 0
   const Value *target, *context;
   if (ARR_LENGTH(args) != 2)
   {
@@ -459,6 +473,8 @@ evaluate_not_bound(struct sl_LogicState *state,
 
     return not_free;
   }
+  #endif
+  return TRUE;
 }
 
 /* --- Free --- */
@@ -508,6 +524,8 @@ cover_free_in_env(const struct ProofEnvironment *env, ValueArray covering,
     const struct Requirement *req = ARR_GET(env->requirements, i);
     if (req->type == RequirementTypeCoverFree)
     {
+      /* TODO: we only need to show that covering is a subset of the
+         covering set in the other requirement. */
       const Value *r_context;
       bool can_match = TRUE;
       if (ARR_LENGTH(covering) != ARR_LENGTH(req->arguments) - 1)
@@ -531,18 +549,18 @@ cover_free_in_env(const struct ProofEnvironment *env, ValueArray covering,
     }
   }
 
-  if (context->bound)
+  for (size_t i = 0; i < ARR_LENGTH(covering); ++i)
   {
-    return TRUE;
+    const Value *cover = *ARR_GET(covering, i);
+    if (values_equal(cover, context))
+      return TRUE;
   }
-  else
+
+  if (context->value_type == ValueTypeConstant
+    || context->value_type == ValueTypeVariable)
   {
-    for (size_t i = 0; i < ARR_LENGTH(covering); ++i)
-    {
-      const Value *cover = *ARR_GET(covering, i);
-      if (values_equal(cover, context))
-        return TRUE;
-    }
+    if (value_gets_bound(context, context))
+      return TRUE;
   }
 
   if (context->value_type == ValueTypeComposition)
@@ -555,7 +573,13 @@ cover_free_in_env(const struct ProofEnvironment *env, ValueArray covering,
     }
     return TRUE;
   }
-  printf("aw %s\n", string_from_value(context));
+  else if (context->value_type == ValueTypeConstant)
+  {
+    if (!context->type->binds)
+      return TRUE;
+  }
+
+  //printf("aw %s\n", string_from_value(context));
   return FALSE;
 }
 
@@ -577,9 +601,7 @@ evaluate_cover_free(sl_LogicState *state,
   {
     ARR_APPEND(covering, *ARR_GET(args, i));
   }
-
   context = *ARR_GET(args, ARR_LENGTH(args) - 1);
-
   return cover_free_in_env(env, covering, context);
 }
 
@@ -766,7 +788,7 @@ evaluate_requirement(sl_LogicState *state, const struct Requirement *req,
   for (size_t j = 0; j < ARR_LENGTH(req->arguments); ++j)
   {
     const Value *arg = *ARR_GET(req->arguments, j);
-    Value *instantiated = instantiate_value(state, arg, environment_args);
+    Value *instantiated = instantiate_value(arg, environment_args);
     ARR_APPEND(instantiated_args, instantiated);
   }
 

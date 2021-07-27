@@ -381,6 +381,7 @@ add_type(sl_LogicState *state, struct PrototypeType proto)
   t->id = state->next_id;
   ++state->next_id;
   t->atomic = proto.atomic;
+  t->binds = proto.binds;
 
   struct Symbol sym;
   sym.path = copy_symbol_path(proto.type_path);
@@ -604,7 +605,7 @@ new_variable_value(sl_LogicState *state, const char *name, const SymbolPath *typ
 
   value->variable_name = strdup(name);
   value->value_type = ValueTypeVariable;
-  value->bound = FALSE;
+  value->parent = NULL;
   struct Symbol *type_symbol = locate_symbol_with_type(state,
     type, SymbolTypeType);
   if (type_symbol == NULL)
@@ -628,7 +629,7 @@ new_constant_value(sl_LogicState *state, const SymbolPath *constant)
   Value *value = malloc(sizeof(Value));
 
   value->value_type = ValueTypeConstant;
-  value->bound = FALSE;
+  value->parent = NULL;
   struct Symbol *constant_symbol = locate_symbol_with_type(state,
     constant, SymbolTypeConstant);
   if (constant_symbol == NULL)
@@ -653,7 +654,7 @@ new_composition_value(sl_LogicState *state, const SymbolPath *expr_path,
   Value *value = malloc(sizeof(Value));
 
   value->value_type = ValueTypeComposition;
-  value->bound = FALSE;
+  value->parent = NULL;
   struct Symbol *expr_symbol = locate_symbol_with_type(state,
     expr_path, SymbolTypeExpression);
   if (expr_symbol == NULL)
@@ -673,7 +674,9 @@ new_composition_value(sl_LogicState *state, const SymbolPath *expr_path,
   for (Value * const *arg = args;
     *arg != NULL; ++arg)
   {
-    ARR_APPEND(value->arguments, copy_value(*arg));
+    Value *arg_copy = copy_value(*arg);
+    arg_copy->parent = value;
+    ARR_APPEND(value->arguments, arg_copy);
   }
 
   /* Make sure that the arguments match the types of the parameters of
@@ -708,26 +711,6 @@ new_composition_value(sl_LogicState *state, const SymbolPath *expr_path,
       free_value(value);
       return NULL;
     }
-  }
-
-  /* Look for things to bind. */
-  /* TODO: things are getting bound that should be free, like constants. */
-  for (size_t i = 0; i < ARR_LENGTH(value->expression->bindings); ++i)
-  {
-    const Value *binding = *ARR_GET(value->expression->bindings, i);
-    Value *instantiated = instantiate_value(state, binding, args_array);
-
-    ValueArray occurrences;
-    ARR_INIT(occurrences);
-    enumerate_value_occurrences(instantiated, value, &occurrences);
-    for (size_t j = 0; j < ARR_LENGTH(occurrences); ++j)
-    {
-      Value *occurrence = *ARR_GET(occurrences, j);
-      occurrence->bound = TRUE;
-    }
-    ARR_FREE(occurrences);
-
-    free_value(instantiated);
   }
 
   return value;
@@ -894,7 +877,7 @@ instantiate_theorem_in_env(struct sl_LogicState *state, const struct Theorem *sr
     for (size_t i = 0; i < ARR_LENGTH(src->assumptions); ++i)
     {
       const Value *assumption = *ARR_GET(src->assumptions, i);
-      Value *instantiated = instantiate_value(state, assumption, args);
+      Value *instantiated = instantiate_value(assumption, args);
       if (instantiated == NULL)
         return 1;
       ARR_APPEND(instantiated_assumptions, instantiated);
@@ -924,7 +907,7 @@ instantiate_theorem_in_env(struct sl_LogicState *state, const struct Theorem *sr
   for (size_t i = 0; i < ARR_LENGTH(src->inferences); ++i)
   {
     const Value *inference = *ARR_GET(src->inferences, i);
-    Value *instantiated = instantiate_value(state, inference, args);
+    Value *instantiated = instantiate_value(inference, args);
     if (instantiated == NULL)
       return 1;
     ARR_APPEND(env->proven, instantiated);

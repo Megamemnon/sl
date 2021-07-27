@@ -117,13 +117,14 @@ validate_type(struct ValidationState *state,
   push_symbol_path(proto.type_path, sl_node_get_name(type));
 
   proto.atomic = FALSE;
-  //proto.binds = FALSE;
+  proto.binds = FALSE;
   for (size_t i = 0; i < sl_node_get_child_count(type); ++i)
   {
     const sl_ASTNode *child = sl_node_get_child(type, i);
     if (sl_node_get_type(child) == sl_ASTNodeType_AtomicFlag)
       proto.atomic = TRUE;
-    /* TODO: search for binds flag. */
+    else if (sl_node_get_type(child) == sl_ASTNodeType_BindsFlag)
+      proto.binds = TRUE;
   }
 
   err = add_type(state->logic, proto);

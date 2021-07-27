@@ -35,6 +35,7 @@ struct Type
   const SymbolPath *path;
 
   bool atomic;
+  bool binds;
 };
 
 struct LatexFormatSegment
@@ -88,9 +89,9 @@ struct Value
   /* TODO: use a union? */
   char *variable_name;
   const struct Constant *constant;
-  bool bound;
   const struct Expression *expression;
   ValueArray arguments;
+  Value *parent;
 };
 
 struct Argument
@@ -109,7 +110,7 @@ enumerate_value_occurrences(const Value *target, const Value *search_in,
   ValueArray *occurrences);
 
 Value *
-instantiate_value(struct sl_LogicState *state, const Value *src, ArgumentArray args);
+instantiate_value(const Value *src, ArgumentArray args);
 
 enum RequirementType
 {
