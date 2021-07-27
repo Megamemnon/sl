@@ -137,19 +137,25 @@ run_test_lexer(struct TestState *state)
   fputs(test_string, f);
   fclose(f);
 
-  f = fopen(TEST_FILENAME, "r");
-  lex_state = sl_lexer_new_state_from_file(f);
-  err = lex_test_string(lex_state);
-  if (err != 0)
-    return err;
-  sl_lexer_free_state(lex_state);
-  fclose(f);
+  {
+    sl_TextInput *input = sl_input_from_file(TEST_FILENAME);
+    lex_state = sl_lexer_new_state_with_input(input);
+    err = lex_test_string(lex_state);
+    if (err != 0)
+      return err;
+    sl_lexer_free_state(lex_state);
+    sl_input_free(input);
+  }
 
-  lex_state = sl_lexer_new_state_from_string(test_string);
-  err = lex_test_string(lex_state);
-  if (err != 0)
-    return err;
-  sl_lexer_free_state(lex_state);
+  {
+    sl_TextInput *input = sl_input_from_string(test_string);
+    lex_state = sl_lexer_new_state_with_input(input);
+    err = lex_test_string(lex_state);
+    if (err != 0)
+      return err;
+    sl_lexer_free_state(lex_state);
+    sl_input_free(input);
+  }
 
   remove(TEST_FILENAME);
   return 0;

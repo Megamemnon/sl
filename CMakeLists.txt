@@ -8,7 +8,7 @@ set(CMAKE_BUILD_TYPE Debug)
 add_library(sl
   src/arg.c
   src/common.c
-  src/_lex.c
+  src/input.c
   src/lex.c
   src/logic.c
   src/parse.c

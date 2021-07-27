@@ -2,51 +2,16 @@
 #include "parse.h"
 #include <string.h>
 
-const char *sl_keywords[] = {
-  "namespace",
-
-  "atomic",
-
-  "use",
-  "type",
-  "const",
-  "expr",
-  "axiom",
-  "theorem",
-
-  "latex",
-  "bind",
-  "assume",
-  "require",
-  "infer",
-  "step",
-  "def",
-  NULL
-};
-
-const char *sl_symbols[] = {
-  "(", ")",
-  "[", "]",
-  "{", "}",
-  "+",
-  ".", ",", ";",
-  "%", "$", "=",
-  "/*", "*/",
-  "//",
-  NULL
-};
-
 struct ValidationState
 {
   bool valid;
-  FILE *out;
 
-  struct CompilationUnit *unit;
-  const struct ParserState *input;
+  sl_TextInput *text;
+  const sl_ASTNode *ast;
 
   sl_LogicState *logic;
   SymbolPath *prefix_path;
-  Array search_paths;
+  ARR(SymbolPath *) search_paths;
 };
 
 static SymbolPath *
@@ -78,8 +43,9 @@ extract_path(struct ValidationState *state, const sl_ASTNode *path)
 {
   if (sl_node_get_type(path) != sl_ASTNodeType_Path)
   {
-    add_error(state->unit, sl_node_get_location(path),
-      "expected a path but found the wrong type of node.");
+    sl_node_show_message(state->text, path,
+      "expected a path but found the wrong type of node.",
+      sl_MessageType_Error);
     state->valid = FALSE;
     return NULL;
   }
@@ -90,9 +56,11 @@ extract_path(struct ValidationState *state, const sl_ASTNode *path)
     const sl_ASTNode *seg = sl_node_get_child(path, i);
     if (sl_node_get_type(seg) != sl_ASTNodeType_PathSegment)
     {
-      add_error(state->unit, sl_node_get_location(seg),
-        "expected a path segment but found the wrong type of node.");
+      sl_node_show_message(state->text, seg,
+        "expected a path segment but found the wrong type of node.",
+        sl_MessageType_Error);
       state->valid = FALSE;
+      free_symbol_path(dst);
       return NULL;
     }
     else
@@ -109,17 +77,20 @@ extract_use(struct ValidationState *state, const sl_ASTNode *use)
 {
   if (sl_node_get_type(use) != sl_ASTNodeType_Use)
   {
-    add_error(state->unit, sl_node_get_location(use),
-      "expected a use but found the wrong type of node.");
+    sl_node_show_message(state->text, use,
+      "expected a use but found the wrong type of node.",
+      sl_MessageType_Error);
     state->valid = FALSE;
     return NULL;
   }
 
   if (sl_node_get_child_count(use) != 1)
   {
-    add_error(state->unit, sl_node_get_location(use),
-      "a use node must have a single child, containing a path");
+    sl_node_show_message(state->text, use,
+      "a use node must have a single child, containing a path.",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    return NULL;
   }
 
   const sl_ASTNode *path = sl_node_get_child(use, 0);
@@ -131,25 +102,36 @@ static int
 validate_type(struct ValidationState *state,
   const sl_ASTNode *type)
 {
+  struct PrototypeType proto;
+  LogicError err;
+
   if (sl_node_get_type(type) != sl_ASTNodeType_Type)
   {
-    add_error(state->unit, sl_node_get_location(type),
-      "expected a type declaration but found the wrong type of node.");
+    sl_node_show_message(state->text, type,
+      "expected a type declaration but found the wrong type of node.",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    return 0;
+  }
+  proto.type_path = copy_symbol_path(state->prefix_path);
+  push_symbol_path(proto.type_path, sl_node_get_name(type));
+
+  proto.atomic = FALSE;
+  //proto.binds = FALSE;
+  for (size_t i = 0; i < sl_node_get_child_count(type); ++i)
+  {
+    const sl_ASTNode *child = sl_node_get_child(type, i);
+    if (sl_node_get_type(child) == sl_ASTNodeType_AtomicFlag)
+      proto.atomic = TRUE;
+    /* TODO: search for binds flag. */
   }
 
-  struct PrototypeType proto;
-
-  proto.type_path = copy_symbol_path(state->prefix_path);
-  push_symbol_path(proto.type_path, sl_node_get_typename(type));
-
-  proto.atomic = sl_node_get_atomic(type);
-
-  LogicError err = add_type(state->logic, proto);
+  err = add_type(state->logic, proto);
   if (err == LogicErrorSymbolAlreadyExists)
   {
-    add_error(state->unit, sl_node_get_location(type),
-      "symbol already exists when declaring type.");
+    sl_node_show_message(state->text, type,
+      "symbol already exists when declaring type.",
+      sl_MessageType_Error);
     state->valid = FALSE;
   }
 
@@ -174,27 +156,27 @@ free_definition(struct Definition *def)
 
 struct TheoremEnvironment
 {
-  Array parameters;
-  Array definitions;
+  ARR(struct PrototypeParameter) parameters;
+  ARR(struct Definition) definitions;
 };
 
 static void
 init_theorem_environment(struct TheoremEnvironment *thm)
 {
-  ARRAY_INIT(thm->parameters, struct PrototypeParameter);
-  ARRAY_INIT(thm->definitions, struct Definition);
+  ARR_INIT(thm->parameters);
+  ARR_INIT(thm->definitions);
 }
 
 static void
 free_theorem_environment(struct TheoremEnvironment *thm)
 {
-  ARRAY_FREE(thm->parameters);
-  for (size_t i = 0; i < ARRAY_LENGTH(thm->definitions); ++i)
+  ARR_FREE(thm->parameters);
+  for (size_t i = 0; i < ARR_LENGTH(thm->definitions); ++i)
   {
-    struct Definition *def = ARRAY_GET(thm->definitions, struct Definition, i);
+    struct Definition *def = ARR_GET(thm->definitions, i);
     free_definition(def);
   }
-  ARRAY_FREE(thm->definitions);
+  ARR_FREE(thm->definitions);
 }
 
 static Value *
@@ -205,25 +187,34 @@ extract_value(struct ValidationState *state,
   {
     /* Locate the corresponding expression, and verify that the types of
        the arguments match. */
+    const sl_ASTNode *expr, *args_node;
+    SymbolPath *expr_path;
+    Value *v;
     if (sl_node_get_child_count(value) != 2)
     {
-      add_error(state->unit, sl_node_get_location(value),
-        "a composition node must have two children, the path to the expression and a list of arguments.");
+      sl_node_show_message(state->text, value,
+        "a composition node must have two children, the path to the expression and a list of arguments.",
+        sl_MessageType_Error);
       state->valid = FALSE;
+      return NULL;
     }
 
-    const sl_ASTNode *expr = sl_node_get_child(value, 0);
-    const sl_ASTNode *args_node = sl_node_get_child(value, 1);
-
-    SymbolPath *local_path = extract_path(state, expr);
-    SymbolPath *expr_path = lookup_symbol(state, local_path);
-    free_symbol_path(local_path);
-
-    if (sl_node_get_type(args_node) != sl_ASTNodeType_CompositionArgumentList)
+    expr = sl_node_get_child(value, 0);
+    args_node = sl_node_get_child(value, 1);
     {
-      add_error(state->unit, sl_node_get_location(args_node),
-        "expected a composition arguments node, but found the wrong type of node.");
+      SymbolPath *local_path = extract_path(state, expr);
+      expr_path = lookup_symbol(state, local_path);
+      free_symbol_path(local_path);
+    }
+
+    if (sl_node_get_type(args_node) != sl_ASTNodeType_ArgumentList)
+    {
+      sl_node_show_message(state->text, args_node,
+        "expected a composition arguments node, but found the wrong type of node.",
+        sl_MessageType_Error);
       state->valid = FALSE;
+      free_symbol_path(expr_path);
+      return NULL;
     }
     Value **args =
       malloc(sizeof(Value *) * (sl_node_get_child_count(args_node) + 1));
@@ -239,7 +230,7 @@ extract_value(struct ValidationState *state,
     }
     args[sl_node_get_child_count(args_node)] = NULL;
 
-    Value *v = new_composition_value(state->logic, expr_path, args);
+    v = new_composition_value(state->logic, expr_path, args);
 
     for (size_t i = 0; i < sl_node_get_child_count(args_node); ++i)
     {
@@ -252,21 +243,26 @@ extract_value(struct ValidationState *state,
   }
   else if (sl_node_get_type(value) == sl_ASTNodeType_Constant)
   {
+    const sl_ASTNode *path;
+    SymbolPath *const_path;
+    Value *v;
     if (sl_node_get_child_count(value) != 1)
     {
-      add_error(state->unit, sl_node_get_location(value),
-        "a constant node must have a single child, the path to the constant.");
+      sl_node_show_message(state->text, value,
+        "a constant node must have a single child, the path to the constant.",
+        sl_MessageType_Error);
       state->valid = FALSE;
+      return NULL;
     }
 
-    const sl_ASTNode *path = sl_node_get_child(value, 0);
+    path = sl_node_get_child(value, 0);
+    {
+      SymbolPath *local_path = extract_path(state, path);
+      const_path = lookup_symbol(state, local_path);
+      free_symbol_path(local_path);
+    }
 
-    SymbolPath *local_path = extract_path(state, path);
-    SymbolPath *const_path = lookup_symbol(state, local_path);
-    free_symbol_path(local_path);
-
-    Value *v = new_constant_value(state->logic, const_path);
-
+    v = new_constant_value(state->logic, const_path);
     free_symbol_path(const_path);
 
     return v;
@@ -276,10 +272,9 @@ extract_value(struct ValidationState *state,
     /* Check that this corresponds to a parameter, and copy the corresponding
        type. */
     const struct PrototypeParameter *param = NULL;
-    for (size_t i = 0; i < ARRAY_LENGTH(env->parameters); ++i)
+    for (size_t i = 0; i < ARR_LENGTH(env->parameters); ++i)
     {
-      const struct PrototypeParameter *p =
-        ARRAY_GET(env->parameters, struct PrototypeParameter, i);
+      const struct PrototypeParameter *p = ARR_GET(env->parameters, i);
       if (strcmp(p->name, sl_node_get_name(value)) == 0)
       {
         param = p;
@@ -289,8 +284,9 @@ extract_value(struct ValidationState *state,
 
     if (param == NULL)
     {
-      add_error(state->unit, sl_node_get_location(value),
-        "variable does not correspond to any parameter.");
+      sl_node_show_message(state->text, value,
+        "variable does not correspond to any parameter.",
+        sl_MessageType_Error);
       state->valid = FALSE;
       return NULL;
     }
@@ -301,10 +297,9 @@ extract_value(struct ValidationState *state,
   {
     /* Look up the corresponding definition. */
     const struct Definition *def = NULL;
-    for (size_t i = 0; i < ARRAY_LENGTH(env->definitions); ++i)
+    for (size_t i = 0; i < ARR_LENGTH(env->definitions); ++i)
     {
-      const struct Definition *d =
-        ARRAY_GET(env->definitions, struct Definition, i);
+      const struct Definition *d = ARR_GET(env->definitions, i);
       if (strcmp(d->name, sl_node_get_name(value)) == 0)
       {
         def = d;
@@ -314,8 +309,9 @@ extract_value(struct ValidationState *state,
 
     if (def == NULL)
     {
-      add_error(state->unit, sl_node_get_location(value),
-        "placeholder does not correspond to any definition.");
+      sl_node_show_message(state->text, value,
+        "placeholder does not correspond to any definition.",
+        sl_MessageType_Error);
       state->valid = FALSE;
       return NULL;
     }
@@ -324,8 +320,9 @@ extract_value(struct ValidationState *state,
   }
   else
   {
-    add_error(state->unit, sl_node_get_location(value),
-      "expected a composition, constant, variable, or placeholder but found the wrong type of node.");
+    sl_node_show_message(state->text, value,
+      "expected a composition, constant, variable, or placeholder but found the wrong type of node.",
+      sl_MessageType_Error);
     state->valid = FALSE;
     return NULL;
   }
@@ -338,9 +335,11 @@ extract_latex_format(struct ValidationState *state,
 {
   if (sl_node_get_type(latex) != sl_ASTNodeType_Latex)
   {
-    add_error(state->unit, sl_node_get_location(latex),
-      "expected a latex format but found the wrong type of node.");
+    sl_node_show_message(state->text, latex,
+      "expected a latex format but found the wrong type of node.",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    return 0;
   }
 
   dst->segments = malloc(sizeof(struct PrototypeLatexFormatSegment *)
@@ -374,34 +373,41 @@ extract_latex_format(struct ValidationState *state,
 static int
 validate_constant(struct ValidationState *state, const sl_ASTNode *constant)
 {
+  struct PrototypeConstant proto;
+  const sl_ASTNode *type;
+  struct TheoremEnvironment env;
+  LogicError err;
   if (sl_node_get_type(constant) != sl_ASTNodeType_ConstantDeclaration)
   {
-    add_error(state->unit, sl_node_get_location(constant),
-      "expected a constant declaration but found the wrong type of node.");
+    sl_node_show_message(state->text, constant,
+      "expected a constant declaration but found the wrong type of node.",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    return 0;
   }
-
-  struct PrototypeConstant proto;
 
   proto.constant_path = copy_symbol_path(state->prefix_path);
   push_symbol_path(proto.constant_path, sl_node_get_name(constant));
 
   if (sl_node_get_child_count(constant) < 1)
   {
-    add_error(state->unit, sl_node_get_location(constant),
-      "a constant node must have at least a single child, containing the path to the constant's type");
+    sl_node_show_message(state->text, constant,
+      "a constant node must have at least a single child, containing the path to the constant's type",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    free(proto.constant_path);
+    return 0;
   }
-  const sl_ASTNode *type = sl_node_get_child(constant, 0);
+  type = sl_node_get_child(constant, 0);
 
-  SymbolPath *local_path = extract_path(state, type);
-
-  proto.type_path = lookup_symbol(state, local_path);
-  free_symbol_path(local_path);
-  proto.latex.segments = NULL;
+  {
+    SymbolPath *local_path = extract_path(state, type);
+    proto.type_path = lookup_symbol(state, local_path);
+    free_symbol_path(local_path);
+  }
 
   /* Look for latex. */
-  struct TheoremEnvironment env;
+  proto.latex.segments = NULL;
   init_theorem_environment(&env);
   for (size_t i = 0; i < sl_node_get_child_count(constant); ++i)
   {
@@ -414,17 +420,17 @@ validate_constant(struct ValidationState *state, const sl_ASTNode *constant)
   }
   free_theorem_environment(&env);
 
-  LogicError err = add_constant(state->logic, proto);
+  err = add_constant(state->logic, proto);
   if (err != LogicErrorNone)
   {
-    add_error(state->unit, sl_node_get_location(constant),
-      "cannot add constant.");
+    sl_node_show_message(state->text, constant,
+      "cannot add constant.",
+      sl_MessageType_Error);
     state->valid = FALSE;
   }
 
   free_symbol_path(proto.constant_path);
   free_symbol_path(proto.type_path);
-
   return 0;
 }
 
@@ -432,27 +438,33 @@ static int
 extract_parameter(struct ValidationState *state,
   const sl_ASTNode *parameter, struct PrototypeParameter *dst)
 {
+  const sl_ASTNode *type;
   if (sl_node_get_type(parameter) != sl_ASTNodeType_Parameter)
   {
-    add_error(state->unit, sl_node_get_location(parameter),
-      "expected a parameter but found the wrong type of node.");
+    sl_node_show_message(state->text, parameter,
+      "expected a parameter but found the wrong type of node.",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    return 0;
   }
   dst->name = strdup(sl_node_get_name(parameter));
 
   if (sl_node_get_child_count(parameter) != 1)
   {
-    add_error(state->unit, sl_node_get_location(parameter),
-      "a parameter node must have a single child, containing the path to the parameter's type");
+    sl_node_show_message(state->text, parameter,
+      "a parameter node must have a single child, containing the path to the parameter's type",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    free(dst->name);
+    return 0;
   }
-  const sl_ASTNode *type = sl_node_get_child(parameter, 0);
+  type = sl_node_get_child(parameter, 0);
 
-  SymbolPath *local_path = extract_path(state, type);
-
-  dst->type = lookup_symbol(state, local_path);
-  free_symbol_path(local_path);
-
+  {
+    SymbolPath *local_path = extract_path(state, type);
+    dst->type = lookup_symbol(state, local_path);
+    free_symbol_path(local_path);
+  }
   return 0;
 }
 
@@ -460,58 +472,69 @@ static int
 validate_expression(struct ValidationState *state,
   const sl_ASTNode *expression)
 {
+  struct PrototypeExpression proto;
+  const sl_ASTNode *type, *param_list;
+  struct TheoremEnvironment env;
+  size_t args_n, binds_n;
+  LogicError err;
   if (sl_node_get_type(expression) != sl_ASTNodeType_Expression)
   {
-    add_error(state->unit, sl_node_get_location(expression),
-      "expected an expression declaration but found the wrong type of node.");
+    sl_node_show_message(state->text, expression,
+      "expected an expression declaration but found the wrong type of node.",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    return 0;
   }
 
   /* Construct a prototype expression, then try adding it to the logical
      state. */
-  struct PrototypeExpression proto;
   proto.expression_path = copy_symbol_path(state->prefix_path);
   push_symbol_path(proto.expression_path, sl_node_get_name(expression));
-
   if (sl_node_get_child_count(expression) < 2)
   {
-    add_error(state->unit, sl_node_get_location(expression),
-      "an expression node must have at least two children, the path to the expression's type and the list of parameters.");
+    sl_node_show_message(state->text, expression,
+      "an expression node must have at least two children, the path to the expression's type and the list of parameters.",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    free_symbol_path(proto.expression_path);
+    return 0;
   }
-  const sl_ASTNode *type = sl_node_get_child(expression, 0);
+  type = sl_node_get_child(expression, 0);
 
-  SymbolPath *local_path = extract_path(state, type);
-  proto.expression_type = lookup_symbol(state, local_path);
-  free_symbol_path(local_path);
+  {
+    SymbolPath *local_path = extract_path(state, type);
+    proto.expression_type = lookup_symbol(state, local_path);
+    free_symbol_path(local_path);
+  }
 
   /* TODO: This should be its own function. */
-  struct TheoremEnvironment env;
   init_theorem_environment(&env);
-
-  const sl_ASTNode *param_list = sl_node_get_child(expression, 1);
+  param_list = sl_node_get_child(expression, 1);
   if (sl_node_get_type(param_list) != sl_ASTNodeType_ParameterList)
   {
-    add_error(state->unit, sl_node_get_location(param_list),
-      "expected a parameter list but found the wrong type of node.");
+    sl_node_show_message(state->text, param_list,
+      "expected a parameter list but found the wrong type of node.",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    free_symbol_path(proto.expression_path);
+    free_symbol_path(proto.expression_type);
+    return 0;
   }
 
-  size_t args_n = sl_node_get_child_count(param_list);
+  args_n = sl_node_get_child_count(param_list);
   proto.parameters = malloc(sizeof(struct PrototypeParameter *) * (args_n + 1));
   for (size_t i = 0; i < args_n; ++i)
   {
     const sl_ASTNode *param = sl_node_get_child(param_list, i);
     proto.parameters[i] = malloc(sizeof(struct PrototypeParameter));
     int err = extract_parameter(state, param, proto.parameters[i]);
-    ARRAY_APPEND(env.parameters, struct PrototypeParameter,
-      *proto.parameters[i]);
-    PROPAGATE_ERROR(err);
+    ARR_APPEND(env.parameters, *proto.parameters[i]);
+    PROPAGATE_ERROR(err); /* TODO: free in case of error. */
   }
   proto.parameters[args_n] = NULL;
 
   /* If there are bindings, extract them. */
-  size_t binds_n = 0;
+  binds_n = 0;
   for (size_t i = 0; i < sl_node_get_child_count(expression); ++i)
   {
     const sl_ASTNode *child = sl_node_get_child(expression, i);
@@ -551,11 +574,12 @@ validate_expression(struct ValidationState *state,
     }
   }
 
-  LogicError err = add_expression(state->logic, proto);
+  err = add_expression(state->logic, proto);
   if (err != LogicErrorNone)
   {
-    add_error(state->unit, sl_node_get_location(expression),
-      "cannot add expression to logic state.");
+    sl_node_show_message(state->text, expression,
+      "cannot add expression to logic state.",
+      sl_MessageType_Error);
     state->valid = FALSE;
   }
 
@@ -585,24 +609,36 @@ extract_require(struct ValidationState *state,
 {
   struct PrototypeRequirement *dst =
     malloc(sizeof(struct PrototypeRequirement));
+  const sl_ASTNode *args;
   if (sl_node_get_type(require) != sl_ASTNodeType_Require)
   {
-    add_error(state->unit, sl_node_get_location(require),
-      "expected a requirement but found the wrong type of node.");
+    sl_node_show_message(state->text, require,
+      "expected a requirement but found the wrong type of node.",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    free(dst);
+    return NULL;
+  }
+  if (sl_node_get_child_count(require) != 1)
+  {
+    sl_node_show_message(state->text, require,
+      "a requirement node should have exactly one child, its list of arguments.",
+      sl_MessageType_Error);
+    state->valid = FALSE;
+    free(dst);
+    return NULL;
   }
 
   dst->require = strdup(sl_node_get_name(require));
+  args = sl_node_get_child(require, 0);
   dst->arguments =
-    malloc(sizeof(Value *) * (sl_node_get_child_count(require) + 1));
-
-  for (size_t i = 0; i < sl_node_get_child_count(require); ++i)
+    malloc(sizeof(Value *) * (sl_node_get_child_count(args) + 1));
+  for (size_t i = 0; i < sl_node_get_child_count(args); ++i)
   {
-    const sl_ASTNode *child = sl_node_get_child(require, i);
+    const sl_ASTNode *child = sl_node_get_child(args, i);
     dst->arguments[i] = extract_value(state, child, env);
   }
-
-  dst->arguments[sl_node_get_child_count(require)] = NULL;
+  dst->arguments[sl_node_get_child_count(args)] = NULL;
 
   return dst;
 }
@@ -611,30 +647,36 @@ static int
 extract_definition(struct ValidationState *state,
   const sl_ASTNode *definition, struct TheoremEnvironment *env)
 {
+  const sl_ASTNode *value_node;
+  struct Definition def;
   if (sl_node_get_type(definition) != sl_ASTNodeType_Def)
   {
-    add_error(state->unit, sl_node_get_location(definition),
-      "expected a definition but found the wrong type of node.");
+    sl_node_show_message(state->text, definition,
+      "expected a definition but found the wrong type of node.",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    return 0;
   }
 
   if (sl_node_get_child_count(definition) != 1)
   {
-    add_error(state->unit, sl_node_get_location(definition),
-      "expected a single child of the definition node to contain the value.");
+    sl_node_show_message(state->text, definition,
+      "expected a single child of the definition node to contain the value.",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    return 0;
   }
 
-  const sl_ASTNode *value_node = sl_node_get_child(definition, 0);
-
-  struct Definition def;
+  value_node = sl_node_get_child(definition, 0);
   def.name = strdup(sl_node_get_name(definition));
   def.value = extract_value(state, value_node, env);
-
   if (def.value == NULL)
+  {
+    free(def.name);
     return 1;
+  }
 
-  ARRAY_APPEND(env->definitions, struct Definition, def);
+  ARR_APPEND(env->definitions, def);
 
   return 0;
 }
@@ -643,21 +685,26 @@ static Value *
 extract_assumption(struct ValidationState *state,
   const sl_ASTNode *assumption, struct TheoremEnvironment *env)
 {
+  const sl_ASTNode *value_node;
   if (sl_node_get_type(assumption) != sl_ASTNodeType_Assume)
   {
-    add_error(state->unit, sl_node_get_location(assumption),
-      "expected an assumption declaration but found the wrong type of node.");
+    sl_node_show_message(state->text, assumption,
+      "expected an assumption declaration but found the wrong type of node.",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    return NULL;
   }
 
   if (sl_node_get_child_count(assumption) != 1)
   {
-    add_error(state->unit, sl_node_get_location(assumption),
-      "expected a single child of the assumption node to contain the value.");
+    sl_node_show_message(state->text, assumption,
+      "expected a single child of the assumption node to contain the value.",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    return NULL;
   }
 
-  const sl_ASTNode *value_node = sl_node_get_child(assumption, 0);
+  value_node = sl_node_get_child(assumption, 0);
   return extract_value(state, value_node, env);
 }
 
@@ -665,21 +712,26 @@ static Value *
 extract_inference(struct ValidationState *state,
   const sl_ASTNode *inference, struct TheoremEnvironment *env)
 {
+  const sl_ASTNode *value_node;
   if (sl_node_get_type(inference) != sl_ASTNodeType_Infer)
   {
-    add_error(state->unit, sl_node_get_location(inference),
-      "expected an inference declaration but found the wrong type of node.");
+    sl_node_show_message(state->text, inference,
+      "expected an inference declaration but found the wrong type of node.",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    return NULL;
   }
 
   if (sl_node_get_child_count(inference) != 1)
   {
-    add_error(state->unit, sl_node_get_location(inference),
-      "expected a single child of the inference node to contain the value.");
+    sl_node_show_message(state->text, inference,
+      "expected a single child of the inference node to contain the value.",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    return NULL;
   }
 
-  const sl_ASTNode *value_node = sl_node_get_child(inference, 0);
+  value_node = sl_node_get_child(inference, 0);
   return extract_value(state, value_node, env);
 }
 
@@ -687,22 +739,28 @@ static int
 validate_axiom(struct ValidationState *state,
   const sl_ASTNode *axiom)
 {
+  struct PrototypeTheorem proto;
+  size_t requirements_n, assumptions_n, inferences_n, args_n;
+  struct TheoremEnvironment env;
+  const sl_ASTNode *param_list;
+  LogicError err;
   if (sl_node_get_type(axiom) != sl_ASTNodeType_Axiom)
   {
-    add_error(state->unit, sl_node_get_location(axiom),
-      "expected an axiom statement but found the wrong type of node.");
+    sl_node_show_message(state->text, axiom,
+      "expected an axiom statement but found the wrong type of node.",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    return 0;
   }
 
   /* Construct a prototype theorem, then try adding it to the logical
      state. */
-  struct PrototypeTheorem proto;
   proto.theorem_path = copy_symbol_path(state->prefix_path);
   push_symbol_path(proto.theorem_path, sl_node_get_name(axiom));
 
-  size_t requirements_n = 0;
-  size_t assumptions_n = 0;
-  size_t inferences_n = 0;
+  requirements_n = 0;
+  assumptions_n = 0;
+  inferences_n = 0;
   for (size_t i = 0; i < sl_node_get_child_count(axiom); ++i)
   {
     const sl_ASTNode *child = sl_node_get_child(axiom, i);
@@ -720,69 +778,73 @@ validate_axiom(struct ValidationState *state,
   proto.inferences =
     malloc(sizeof(Value *) * (inferences_n + 1));
 
-  struct TheoremEnvironment env;
   init_theorem_environment(&env);
-
-  const sl_ASTNode *param_list = sl_node_get_child(axiom, 0);
+  param_list = sl_node_get_child(axiom, 0);
   if (sl_node_get_type(param_list) != sl_ASTNodeType_ParameterList)
   {
-    add_error(state->unit, sl_node_get_location(param_list),
-      "expected a parameter list but found the wrong type of node.");
+    sl_node_show_message(state->text, param_list,
+      "expected a parameter list but found the wrong type of node.",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    /* TODO: free. */
+    return 0;
   }
 
-  size_t args_n = sl_node_get_child_count(param_list);
+  args_n = sl_node_get_child_count(param_list);
   proto.parameters = malloc(sizeof(struct PrototypeParameter *) * (args_n + 1));
   for (size_t i = 0; i < args_n; ++i)
   {
     const sl_ASTNode *param = sl_node_get_child(param_list, i);
     proto.parameters[i] = malloc(sizeof(struct PrototypeParameter));
     int err = extract_parameter(state, param, proto.parameters[i]);
-    ARRAY_APPEND(env.parameters, struct PrototypeParameter,
-      *proto.parameters[i]);
+    ARR_APPEND(env.parameters, *proto.parameters[i]);
     PROPAGATE_ERROR(err);
   }
   proto.parameters[args_n] = NULL;
 
-  size_t require_index = 0;
-  size_t assume_index = 0;
-  size_t infer_index = 0;
-  for (size_t i = 0; i < sl_node_get_child_count(axiom); ++i)
   {
-    const sl_ASTNode *child = sl_node_get_child(axiom, i);
-    if (sl_node_get_type(child) == sl_ASTNodeType_Require)
+    size_t require_index, assume_index, infer_index;
+    require_index = 0;
+    assume_index = 0;
+    infer_index = 0;
+    for (size_t i = 0; i < sl_node_get_child_count(axiom); ++i)
     {
-      proto.requirements[require_index] = extract_require(state, child, &env);
-      ++require_index;
-    }
-    else if (sl_node_get_type(child) == sl_ASTNodeType_Def)
-    {
-      int err = extract_definition(state, child, &env);
-      PROPAGATE_ERROR(err);
-    }
-    else if (sl_node_get_type(child) == sl_ASTNodeType_Assume)
-    {
-      proto.assumptions[assume_index] = extract_assumption(state, child, &env);
-      ++assume_index;
-    }
-    else if (sl_node_get_type(child) == sl_ASTNodeType_Infer)
-    {
-      proto.inferences[infer_index] = extract_inference(state, child, &env);
-      ++infer_index;
+      const sl_ASTNode *child = sl_node_get_child(axiom, i);
+      if (sl_node_get_type(child) == sl_ASTNodeType_Require)
+      {
+        proto.requirements[require_index] = extract_require(state, child, &env);
+        ++require_index;
+      }
+      else if (sl_node_get_type(child) == sl_ASTNodeType_Def)
+      {
+        int err = extract_definition(state, child, &env);
+        PROPAGATE_ERROR(err);
+      }
+      else if (sl_node_get_type(child) == sl_ASTNodeType_Assume)
+      {
+        proto.assumptions[assume_index] =
+          extract_assumption(state, child, &env);
+        ++assume_index;
+      }
+      else if (sl_node_get_type(child) == sl_ASTNodeType_Infer)
+      {
+        proto.inferences[infer_index] = extract_inference(state, child, &env);
+        ++infer_index;
+      }
     }
   }
+  free_theorem_environment(&env);
   proto.parameters[args_n] = NULL;
   proto.requirements[requirements_n] = NULL;
   proto.assumptions[assumptions_n] = NULL;
   proto.inferences[inferences_n] = NULL;
 
-  free_theorem_environment(&env);
-
-  LogicError err = add_axiom(state->logic, proto);
+  err = add_axiom(state->logic, proto);
   if (err != LogicErrorNone)
   {
-    add_error(state->unit, sl_node_get_location(axiom),
-      "cannot add axiom to logic state.");
+    sl_node_show_message(state->text, axiom,
+      "cannot add axiom to logic state.",
+      sl_MessageType_Error);
     state->valid = FALSE;
   }
 
@@ -815,7 +877,6 @@ validate_axiom(struct ValidationState *state,
   free(proto.requirements);
   free(proto.assumptions);
   free(proto.inferences);
-
   return 0;
 }
 
@@ -823,49 +884,71 @@ static struct PrototypeProofStep *
 extract_step(struct ValidationState *state, const sl_ASTNode *step,
   struct TheoremEnvironment *env)
 {
-  struct PrototypeProofStep *dst = malloc(sizeof(struct PrototypeProofStep));
-
+  struct PrototypeProofStep *dst;
+  const sl_ASTNode *thm_ref, *thm_ref_path, *arg_list;
   /* Find the theorem that is being referenced here. */
   if (sl_node_get_type(step) != sl_ASTNodeType_Step)
   {
-    add_error(state->unit, sl_node_get_location(step),
-      "expected a proof step but found the wrong type of node.");
+    sl_node_show_message(state->text, step,
+      "expected a proof step but found the wrong type of node.",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    return NULL;
   }
   if (sl_node_get_child_count(step) != 1)
   {
-    add_error(state->unit, sl_node_get_location(step),
-      "a step node must have exactly one child, the theorem reference.");
+    sl_node_show_message(state->text, step,
+      "a step node must have exactly one child, the theorem reference.",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    return NULL;
   }
 
-  const sl_ASTNode *thm_ref = sl_node_get_child(step, 0);
+  thm_ref = sl_node_get_child(step, 0);
   if (sl_node_get_type(thm_ref) != sl_ASTNodeType_TheoremReference)
   {
-    add_error(state->unit, sl_node_get_location(thm_ref),
-      "expected a theorem reference but found the wrong type of node.");
+    sl_node_show_message(state->text, thm_ref,
+      "expected a theorem reference but found the wrong type of node.",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    return NULL;
   }
-  if (sl_node_get_child_count(thm_ref) == 0)
+  if (sl_node_get_child_count(thm_ref) < 2)
   {
-    add_error(state->unit, sl_node_get_location(thm_ref),
-      "a theorem reference must have at least one child, the path to the theorem.");
+    sl_node_show_message(state->text, step,
+      "a theorem reference must have at least two children, the path to the theorem and the list of arguments.",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    return 0;
   }
 
-  const sl_ASTNode *thm_path_node = sl_node_get_child(thm_ref, 0);
-  SymbolPath *local_path = extract_path(state, thm_path_node);
-  dst->theorem_path = lookup_symbol(state, local_path);
-  free_symbol_path(local_path);
-  dst->arguments = malloc(sizeof(Value *) * (sl_node_get_child_count(thm_ref)));
+  thm_ref_path = sl_node_get_child(thm_ref, 0);
+  dst = SL_NEW(struct PrototypeProofStep);
+  {
+    SymbolPath *local_path = extract_path(state, thm_ref_path);
+    dst->theorem_path = lookup_symbol(state, local_path);
+    free_symbol_path(local_path);
+  }
 
   /* Next, extract all the arguments being passed to the theorem. */
-  for (size_t i = 0; i < sl_node_get_child_count(thm_ref) - 1; ++i)
+  arg_list = sl_node_get_child(thm_ref, 1);
+  dst->arguments = malloc(sizeof(Value *) *
+    (sl_node_get_child_count(arg_list) + 1));
+  if (sl_node_get_type(arg_list) != sl_ASTNodeType_ArgumentList)
   {
-    const sl_ASTNode *arg = sl_node_get_child(thm_ref, i + 1);
+    sl_node_show_message(state->text, arg_list,
+      "expected an argument list but found the wrong type of node.",
+      sl_MessageType_Error);
+    state->valid = FALSE;
+    /* TODO: free. */
+    return NULL;
+  }
+  for (size_t i = 0; i < sl_node_get_child_count(arg_list); ++i)
+  {
+    const sl_ASTNode *arg = sl_node_get_child(arg_list, i);
     dst->arguments[i] = extract_value(state, arg, env);
   }
-  dst->arguments[sl_node_get_child_count(thm_ref) - 1] = NULL;
+  dst->arguments[sl_node_get_child_count(arg_list)] = NULL;
 
   return dst;
 }
@@ -874,23 +957,29 @@ static int
 validate_theorem(struct ValidationState *state,
   const sl_ASTNode *theorem)
 {
+  struct PrototypeTheorem proto;
+  size_t requirements_n, assumptions_n, inferences_n, steps_n, args_n;
+  struct TheoremEnvironment env;
+  const sl_ASTNode *param_list;
+  LogicError err;
   if (sl_node_get_type(theorem) != sl_ASTNodeType_Theorem)
   {
-    add_error(state->unit, sl_node_get_location(theorem),
-      "expected a theorem statement but found the wrong type of node.");
+    sl_node_show_message(state->text, theorem,
+      "expected a theorem statement but found the wrong type of node.",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    return 0;
   }
 
   /* Construct a prototype theorem, then try adding it to the logical
      state. */
-  struct PrototypeTheorem proto;
   proto.theorem_path = copy_symbol_path(state->prefix_path);
   push_symbol_path(proto.theorem_path, sl_node_get_name(theorem));
 
-  size_t requirements_n = 0;
-  size_t assumptions_n = 0;
-  size_t inferences_n = 0;
-  size_t steps_n = 0;
+  requirements_n = 0;
+  assumptions_n = 0;
+  inferences_n = 0;
+  steps_n = 0;
   for (size_t i = 0; i < sl_node_get_child_count(theorem); ++i)
   {
     const sl_ASTNode *child = sl_node_get_child(theorem, i);
@@ -912,78 +1001,81 @@ validate_theorem(struct ValidationState *state,
   proto.steps =
     malloc(sizeof(struct PrototypeProofStep) * (steps_n + 1));
 
-  struct TheoremEnvironment env;
+  param_list = sl_node_get_child(theorem, 0);
   init_theorem_environment(&env);
-
-  const sl_ASTNode *param_list = sl_node_get_child(theorem, 0);
   if (sl_node_get_type(param_list) != sl_ASTNodeType_ParameterList)
   {
-    add_error(state->unit, sl_node_get_location(param_list),
-      "expected a parameter list but found the wrong type of node.");
+    sl_node_show_message(state->text, theorem,
+      "expected a parameter list but found the wrong type of node.",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    /* TODO: free. */
+    return 0;
   }
 
-  size_t args_n = sl_node_get_child_count(param_list);
+  args_n = sl_node_get_child_count(param_list);
   proto.parameters = malloc(sizeof(struct PrototypeParameter *) * (args_n + 1));
   for (size_t i = 0; i < args_n; ++i)
   {
     const sl_ASTNode *param = sl_node_get_child(param_list, i);
     proto.parameters[i] = malloc(sizeof(struct PrototypeParameter));
     int err = extract_parameter(state, param, proto.parameters[i]);
-    ARRAY_APPEND(env.parameters, struct PrototypeParameter,
-      *proto.parameters[i]);
+    ARR_APPEND(env.parameters, *proto.parameters[i]);
     PROPAGATE_ERROR(err);
   }
   proto.parameters[args_n] = NULL;
 
-  size_t require_index = 0;
-  size_t assume_index = 0;
-  size_t infer_index = 0;
-  size_t step_index = 0;
-  for (size_t i = 0; i < sl_node_get_child_count(theorem); ++i)
   {
-    const sl_ASTNode *child = sl_node_get_child(theorem, i);
-    if (sl_node_get_type(child) == sl_ASTNodeType_Require)
+    size_t require_index, assume_index, infer_index, step_index;
+    require_index = 0;
+    assume_index = 0;
+    infer_index = 0;
+    step_index = 0;
+    for (size_t i = 0; i < sl_node_get_child_count(theorem); ++i)
     {
-      proto.requirements[require_index] = extract_require(state, child, &env);
-      ++require_index;
-    }
-    else if (sl_node_get_type(child) == sl_ASTNodeType_Def)
-    {
-      int err = extract_definition(state, child, &env);
-      PROPAGATE_ERROR(err);
-    }
-    else if (sl_node_get_type(child) == sl_ASTNodeType_Assume)
-    {
-      proto.assumptions[assume_index] = extract_assumption(state, child, &env);
-      char *str = string_from_value(proto.assumptions[assume_index]);
-      free(str);
-      ++assume_index;
-    }
-    else if (sl_node_get_type(child) == sl_ASTNodeType_Infer)
-    {
-      proto.inferences[infer_index] = extract_inference(state, child, &env);
-      ++infer_index;
-    }
-    else if (sl_node_get_type(child) == sl_ASTNodeType_Step)
-    {
-      proto.steps[step_index] = extract_step(state, child, &env);
-      ++step_index;
+      const sl_ASTNode *child = sl_node_get_child(theorem, i);
+      if (sl_node_get_type(child) == sl_ASTNodeType_Require)
+      {
+        proto.requirements[require_index] = extract_require(state, child, &env);
+        ++require_index;
+      }
+      else if (sl_node_get_type(child) == sl_ASTNodeType_Def)
+      {
+        int err = extract_definition(state, child, &env);
+        PROPAGATE_ERROR(err);
+      }
+      else if (sl_node_get_type(child) == sl_ASTNodeType_Assume)
+      {
+        proto.assumptions[assume_index] = extract_assumption(state, child, &env);
+        char *str = string_from_value(proto.assumptions[assume_index]);
+        free(str);
+        ++assume_index;
+      }
+      else if (sl_node_get_type(child) == sl_ASTNodeType_Infer)
+      {
+        proto.inferences[infer_index] = extract_inference(state, child, &env);
+        ++infer_index;
+      }
+      else if (sl_node_get_type(child) == sl_ASTNodeType_Step)
+      {
+        proto.steps[step_index] = extract_step(state, child, &env);
+        ++step_index;
+      }
     }
   }
+  free_theorem_environment(&env);
   proto.parameters[args_n] = NULL;
   proto.requirements[requirements_n] = NULL;
   proto.assumptions[assumptions_n] = NULL;
   proto.inferences[inferences_n] = NULL;
   proto.steps[steps_n] = NULL;
 
-  free_theorem_environment(&env);
-
-  LogicError err = add_theorem(state->logic, proto);
+  err = add_theorem(state->logic, proto);
   if (err != LogicErrorNone)
   {
-    add_error(state->unit, sl_node_get_location(theorem),
-      "cannot add theorem to logic state.");
+    sl_node_show_message(state->text, theorem,
+      "cannot add theorem to logic state.",
+      sl_MessageType_Error);
     state->valid = FALSE;
   }
 
@@ -1034,22 +1126,22 @@ validate_namespace(struct ValidationState *state,
 {
   if (sl_node_get_type(namespace) != sl_ASTNodeType_Namespace)
   {
-    add_error(state->unit, sl_node_get_location(namespace),
-      "expected a namespace but found the wrong type of node.");
+    sl_node_show_message(state->text, namespace,
+      "expected a namespace but found the wrong type of node.",
+      sl_MessageType_Error);
     state->valid = FALSE;
+    return 0;
   }
 
   if (sl_node_get_name(namespace) != NULL)
-  {
     push_symbol_path(state->prefix_path, sl_node_get_name(namespace));
-  }
 
   SymbolPath *search_path = copy_symbol_path(state->prefix_path);
-  ARRAY_APPEND(state->search_paths, SymbolPath *, search_path);
+  ARR_APPEND(state->search_paths, search_path);
 
   /* Validate all the objects contained in this namespace. */
-  Array using_paths;
-  ARRAY_INIT(using_paths, SymbolPath *);
+  ARR(SymbolPath *) using_paths;
+  ARR_INIT(using_paths);
   for (size_t i = 0; i < sl_node_get_child_count(namespace); ++i)
   {
     const sl_ASTNode *child = sl_node_get_child(namespace, i);
@@ -1063,8 +1155,8 @@ validate_namespace(struct ValidationState *state,
       case sl_ASTNodeType_Use:
         {
           SymbolPath *use_path = extract_use(state, child);
-          ARRAY_APPEND(using_paths, SymbolPath *, use_path);
-          ARRAY_APPEND(state->search_paths, SymbolPath *, use_path);
+          ARR_APPEND(using_paths, use_path);
+          ARR_APPEND(state->search_paths, use_path);
         }
         break;
       case sl_ASTNodeType_Type:
@@ -1088,22 +1180,22 @@ validate_namespace(struct ValidationState *state,
         PROPAGATE_ERROR(err);
         break;
       default:
-        add_error(state->unit, sl_node_get_location(child),
-          "expected a namespace, use, type, constant, expression, axiom, or theorem, but found the wrong type of node.");
+        sl_node_show_message(state->text, child,
+          "expected a namespace, use, type, constant, expression, axiom, or theorem, but found the wrong type of node.",
+          sl_MessageType_Error);
         state->valid = FALSE;
         break;
     }
   }
 
-  for (size_t i = 0; i < ARRAY_LENGTH(using_paths); ++i)
+  for (size_t i = 0; i < ARR_LENGTH(using_paths); ++i)
   {
-    SymbolPath *path = *ARRAY_GET(using_paths, SymbolPath *, i);
+    SymbolPath *path = *ARR_GET(using_paths, i);
     free_symbol_path(path);
-    ARRAY_POP(state->search_paths);
+    ARR_POP(state->search_paths);
   }
-  ARRAY_FREE(using_paths);
-
-  ARRAY_POP(state->search_paths);
+  ARR_FREE(using_paths);
+  ARR_POP(state->search_paths);
   free_symbol_path(search_path);
 
   if (sl_node_get_name(namespace) != NULL)
@@ -1117,98 +1209,70 @@ validate_namespace(struct ValidationState *state,
 static int
 validate(struct ValidationState *state)
 {
-  //state->logic = new_logic_state(state->out);
+  const sl_ASTNode *root;
+  state->valid = TRUE;
   state->prefix_path = init_symbol_path();
-  ARRAY_INIT(state->search_paths, SymbolPath *);
+  ARR_INIT(state->search_paths);
 
-  /* The root node should have a child that is the root namespace. */
-  const sl_ASTNode *root_node = state->input->ast_root;
-  if (sl_node_get_child_count(root_node) == 0)
-  {
-    add_error(state->unit, NULL,
-      "No root namespace provided.");
-    state->valid = FALSE;
-    return 1;
-  }
+  /* The root of the AST is simply a namespace. */
+  root = state->ast;
+  int err = validate_namespace(state, root);
 
-  const sl_ASTNode *root_namespace = sl_node_get_child(root_node, 0);
-  int err = validate_namespace(state, root_namespace);
-  PROPAGATE_ERROR(err);
-
-  //free_logic_state(state->logic);
   free_symbol_path(state->prefix_path);
-  ARRAY_FREE(state->search_paths);
-  return 0;
+  ARR_FREE(state->search_paths);
+  return err;
 }
 
 int
-sl_verify(sl_LogicState *logic_state, const char *input_path, FILE *out)
+sl_verify_and_add_file(const char *path, sl_LogicState *logic)
 {
-  /* Open the file. */
-  LOG_NORMAL(out, "Validating sl file '%s'.\n", input_path);
-  struct CompilationUnit unit = {};
-  open_compilation_unit(&unit, input_path);
+  sl_TextInput *input;
+  sl_LexerState *lex;
+  sl_ASTNode *ast;
+  struct ValidationState state;
 
-  /* Lex the file */
-  LOG_VERBOSE(out, "Tokenizing.\n");
-  struct LexState lex_out = {};
+  if (path == NULL)
+    return 1;
+  if (logic == NULL)
+    return 1;
 
-  init_lex_state(&lex_out);
-  file_to_lines(&lex_out, &unit);
-  tokenize_strings(&lex_out, '"');
-  remove_whitespace(&lex_out);
-  separate_symbols(&lex_out);
-  identify_symbols(&lex_out, sl_symbols);
-  remove_block_comments(&lex_out, "/*", "*/");
-  remove_line_comments(&lex_out, "//");
-  separate_identifiers(&lex_out);
-  identify_keywords(&lex_out, sl_keywords);
-  remove_line_ends(&lex_out);
-
-  /* Parse the file */
-  LOG_VERBOSE(out, "Parsing.\n");
-  struct ParserState parse_out = {};
-  parse_out.unit = &unit;
-  parse_out.input = &lex_out;
-
-  int err = parse_root(&parse_out);
-  if (err)
+  input = sl_input_from_file(path);
+  if (input == NULL)
   {
-    print_errors(&unit);
+    /* TODO: report error. */
     return 1;
   }
-  PROPAGATE_ERROR(err);
-  //print_tree(&parse_out.ast_root, &print_ast_node);
 
-  /* Validate the file. */
-  LOG_VERBOSE(out, "Validating.\n");
-  struct ValidationState validation_out = {};
-  validation_out.valid = TRUE;
-  validation_out.out = out;
-  validation_out.unit = &unit;
-  validation_out.input = &parse_out;
-  validation_out.logic = logic_state;
-
-  err = validate(&validation_out);
-  if (err || !validation_out.valid)
-    print_errors(&unit);
-
-  if (validation_out.valid)
+  lex = sl_lexer_new_state_with_input(input);
+  if (lex == NULL)
   {
-    LOG_NORMAL(out, "Valid.\n");
-  }
-  else
-  {
-    LOG_NORMAL(out, "Invalid.\n");
+    /* TODO: report error. */
+    sl_input_free(input);
+    return 1;
   }
 
-  /* Free the AST. */
-  LOG_VERBOSE(out, "Done.\n");
-  free_tree(parse_out.ast_root);
-  PROPAGATE_ERROR(err);
+  ast = sl_parse_input(lex);
+  if (ast == NULL)
+  {
+    /* TODO: report error. */
+    sl_input_free(input);
+    sl_lexer_free_state(lex);
+    return 1;
+  }
+  //sl_print_tree(ast);
 
-  free_lex_state(&lex_out);
-  close_compilation_unit(&unit);
+  state.text = input;
+  state.ast = ast;
+  state.logic = logic;
+  int result = validate(&state);
 
-  return 0;
+  sl_input_free(input);
+  sl_lexer_free_state(lex);
+  sl_node_free(ast);
+
+  if (result == 0)
+  {
+    return state.valid ? 0 : 1;
+  }
+  return result;
 }

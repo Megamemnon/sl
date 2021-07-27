@@ -4,12 +4,6 @@
 
 #define BUFFER_SIZE 16384
 
-enum InputType
-{
-  InputTypeFile,
-  InputTypeString
-};
-
 struct SymbolToken
 {
   const char *string;
@@ -37,17 +31,9 @@ static const struct SymbolToken symbols[] = {
   { "$", sl_LexerTokenType_DollarSign }
 };
 
-struct TextInput
-{
-  void *data;
-
-  bool (* at_end)(void *);
-  char * (* gets)(char *, size_t, void *);
-};
-
 struct sl_LexerState
 {
-  struct TextInput input;
+  sl_TextInput *input;
 
   char *buffer;
   char *overflow_buffer;
@@ -64,122 +50,18 @@ struct sl_LexerState
 #define CURRENT_CHAR(state) ((state)->read_buffer[(state)->cursor_offset])
 #define CURRENT_PTR(state) (&(state)->read_buffer[(state)->cursor_offset])
 
-static bool
-file_at_end(void *data)
-{
-  FILE *f = (FILE *)data;
-  if (feof(f) == 0)
-    return FALSE;
-  return TRUE;
-}
-
-static char *
-file_gets(char *dst, size_t n, void *data)
-{
-  FILE *f = (FILE *)data;
-  return fgets(dst, n, f);
-}
-
 sl_LexerState *
-sl_lexer_new_state_from_file(FILE *input)
+sl_lexer_new_state_with_input(sl_TextInput *input)
 {
   if (input == NULL)
     return NULL;
-  sl_LexerState *state = malloc(sizeof(sl_LexerState));
+  sl_LexerState *state = SL_NEW(sl_LexerState);
   if (state == NULL)
     return NULL;
-  state->input.data = input;
-  state->input.at_end = &file_at_end;
-  state->input.gets = &file_gets;
+  state->input = input;
   state->buffer = malloc(BUFFER_SIZE);
   if (state->buffer == NULL)
   {
-    free(state);
-    return NULL;
-  }
-  state->buffer[0] = '\0';
-  state->overflow_buffer = NULL;
-  state->read_buffer = NULL;
-  state->line_number = 0;
-  state->cursor_offset = 0;
-  state->token_type = sl_LexerTokenType_None;
-  state->token_begin = NULL;
-  state->token_length = 0;
-  return state;
-}
-
-struct StringInputData
-{
-  const char *str;
-  size_t at;
-  bool reached_end;
-};
-
-static bool
-string_at_end(void *data)
-{
-  struct StringInputData *input = (struct StringInputData *)data;
-  if (input->reached_end)
-    return TRUE;
-  return input->reached_end;
-}
-
-static char *
-string_gets(char *dst, size_t n, void *data)
-{
-  struct StringInputData *input = (struct StringInputData *)data;
-  size_t end;
-  char *result;
-  if (input == NULL)
-    return NULL;
-  if (input->str[input->at] == '\0')
-  {
-    input->reached_end = TRUE;
-    return NULL;
-  }
-  /* Iterate and try to find a line break in [at, at + n - 1]. */
-  for (end = input->at; end < input->at + n; ++end)
-  {
-    if (input->str[end] == '\n')
-      break;
-    else if (input->str[end] == '\0')
-      break;
-  }
-  /* Copy the data, add a NULL at the end, and then advance the pointer. */
-  result = strncpy(dst, &input->str[input->at], end - input->at + 1);
-  if (result != NULL)
-    result[(end - input->at) + 1] = '\0';
-  input->at += (end - input->at) + 1;
-  return result;
-}
-
-sl_LexerState *
-sl_lexer_new_state_from_string(const char *input)
-{
-  if (input == NULL)
-    return NULL;
-  sl_LexerState *state = malloc(sizeof(sl_LexerState));
-  if (state == NULL)
-    return NULL;
-  {
-    struct StringInputData *string_data =
-      malloc(sizeof(struct StringInputData));
-    if (string_data == NULL)
-    {
-      free(state);
-      return NULL;
-    }
-    string_data->str = input;
-    string_data->at = 0;
-    string_data->reached_end = FALSE;
-    state->input.data = string_data;
-  }
-  state->input.at_end = &string_at_end;
-  state->input.gets = &string_gets;
-  state->buffer = malloc(BUFFER_SIZE);
-  if (state->buffer == NULL)
-  {
-    free(state->input.data);
     free(state);
     return NULL;
   }
@@ -206,38 +88,18 @@ sl_lexer_free_state(sl_LexerState *state)
   free(state);
 }
 
-static bool
-input_at_end(sl_LexerState *state)
-{
-  if (state->input.at_end == NULL)
-    return TRUE;
-  if (state->input.data == NULL)
-    return TRUE;
-  return state->input.at_end(state->input.data);
-}
-
-static char *
-input_gets(char *dst, size_t n, sl_LexerState *state)
-{
-  if (state->input.gets == NULL)
-    return NULL;
-  if (state->input.data == NULL)
-    return NULL;
-  return state->input.gets(dst, n, state->input.data);
-}
-
 static int
 fetch_next_line(sl_LexerState *state)
 {
   char *result;
   if (state->overflow_buffer != NULL)
     free(state->overflow_buffer);
-  if (input_at_end(state))
+  if (sl_input_at_end(state->input))
   {
     state->read_buffer = NULL;
     return 0;
   }
-  result = input_gets(state->buffer, BUFFER_SIZE, state);
+  result = sl_input_gets(state->buffer, BUFFER_SIZE, state->input);
   state->cursor_offset = 0;
   if (result == NULL)
   {
@@ -257,7 +119,7 @@ fetch_next_line(sl_LexerState *state)
     }
     do {
       char *reallocated;
-      result = input_gets(state->buffer, BUFFER_SIZE, state);
+      result = sl_input_gets(state->buffer, BUFFER_SIZE, state->input);
       if (result == NULL)
       {
         free(state->overflow_buffer);
@@ -298,7 +160,7 @@ int
 sl_lexer_advance(sl_LexerState *state)
 {
   /* If we're at the end of the file, return 1. */
-  if (input_at_end(state) != 0)
+  if (sl_input_at_end(state->input) != 0)
     return 1;
   if (state->read_buffer == NULL)
   {

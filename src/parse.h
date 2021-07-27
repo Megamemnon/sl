@@ -7,6 +7,37 @@
 #include <stdio.h>
 #include <stdint.h>
 
+/* --- Text Input Interface --- */
+typedef struct sl_TextInput sl_TextInput;
+
+enum sl_MessageType
+{
+  sl_MessageType_Error,
+  sl_MessageType_Warning,
+  sl_MessageType_Note
+};
+typedef enum sl_MessageType sl_MessageType;
+
+bool
+sl_input_at_end(sl_TextInput *input);
+
+char *
+sl_input_gets(char *dst, size_t n, sl_TextInput *input);
+
+sl_TextInput *
+sl_input_from_file(const char *file_path);
+
+sl_TextInput *
+sl_input_from_string(const char *string);
+
+void
+sl_input_free(sl_TextInput *input);
+
+void
+sl_input_show_message(sl_TextInput *input, size_t line, size_t column,
+  const char *message, sl_MessageType type);
+
+/* --- Lexer --- */
 typedef struct sl_LexerState sl_LexerState;
 
 enum sl_LexerTokenType
@@ -45,10 +76,7 @@ struct sl_LexerNumber
 };
 
 sl_LexerState *
-sl_lexer_new_state_from_file(FILE *input);
-
-sl_LexerState *
-sl_lexer_new_state_from_string(const char *input);
+sl_lexer_new_state_with_input(sl_TextInput *input);
 
 void
 sl_lexer_free_state(sl_LexerState *state);
@@ -71,14 +99,17 @@ sl_lexer_get_current_token_line(const sl_LexerState *state);
 uint32_t
 sl_lexer_get_current_token_column(const sl_LexerState *state);
 
+void
+sl_lexer_show_message_at_current_token(size_t line,
+  size_t column, const char *message, sl_MessageType type);
+
 struct sl_StringSlice
 sl_lexer_get_current_token_source(const sl_LexerState *state);
 
 int
 sl_lexer_clear_unused(sl_LexerState *state);
 
-#include "lex.h"
-
+/* --- Parser --- */
 enum sl_ASTNodeType
 {
   sl_ASTNodeType_None = 0,
@@ -129,77 +160,29 @@ sl_node_get_child(const sl_ASTNode *node, size_t index);
 sl_ASTNodeType
 sl_node_get_type(const sl_ASTNode *node);
 
-const struct Token *
-sl_node_get_location(const sl_ASTNode *node);
-
 const char *
 sl_node_get_name(const sl_ASTNode *node);
-
-const char *
-sl_node_get_typename(const sl_ASTNode *node);
-
-bool
-sl_node_get_atomic(const sl_ASTNode *node);
 
 sl_ASTNode *
 sl_node_new();
 
 void
-free_tree(sl_ASTNode *root);
-
-void
-copy_tree(sl_ASTNode *dst, const sl_ASTNode *src);
+sl_node_free(sl_ASTNode *node);
 
 void
 sl_print_tree(const sl_ASTNode *root);
 
-sl_ASTNode *
-new_child(sl_ASTNode *parent);
-
-typedef void (* traverse_node_callback_t)(const sl_ASTNode *, void *);
-
 void
-traverse_tree(const sl_ASTNode *root, traverse_node_callback_t node_callback,
-  void *user_data);
-
-struct ParserError
-{
-  char *error_msg;
-  const struct Token *error_location;
-};
-
-struct ParserState
-{
-  struct CompilationUnit *unit;
-  struct LexState *input;
-  size_t token_index;
-
-  sl_ASTNode *ast_root;
-  sl_ASTNode *ast_current;
-};
-
-#define LOG_NORMAL(out, ...) \
-do { \
-  fprintf(out, __VA_ARGS__); \
-} \
-while (0);
-
-#define LOG_VERBOSE(out, ...) \
-do { \
-  if (verbose) \
-    fprintf(out, __VA_ARGS__); \
-} \
-while (0);
-
-int
-parse_root(struct ParserState *state);
+sl_node_show_message(sl_TextInput *input, const sl_ASTNode *node,
+  const char *message, sl_MessageType type);
 
 sl_ASTNode *
 sl_parse_input(sl_LexerState *input);
 
+/* --- Verifier --- */
 extern int verbose;
 
 int
-sl_verify(sl_LogicState *logic_state, const char *input_path, FILE *out);
+sl_verify_and_add_file(const char *path, sl_LogicState *logic);
 
 #endif
