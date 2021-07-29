@@ -788,7 +788,8 @@ evaluate_requirement(sl_LogicState *state, const struct Requirement *req,
   for (size_t j = 0; j < ARR_LENGTH(req->arguments); ++j)
   {
     const Value *arg = *ARR_GET(req->arguments, j);
-    Value *instantiated = instantiate_value(arg, environment_args);
+    Value *instantiated_0 = instantiate_value(arg, environment_args);
+    Value *instantiated = reduce_expressions(instantiated_0);
     ARR_APPEND(instantiated_args, instantiated);
   }
 

@@ -749,6 +749,25 @@ _parse_latex(struct _ParserState *state,
 }
 
 static int
+_parse_value(struct _ParserState *state,
+  union _ParserStepUserData user_data);
+
+static int
+parse_as(struct _ParserState *state,
+  union _ParserStepUserData user_data)
+{
+  _add_step_to_stack(state, &_ascend, _user_data_none());
+  _add_step_to_stack(state, &_consume_symbol,
+    _user_data_token_type(sl_LexerTokenType_Semicolon));
+  _add_step_to_stack(state, &_parse_value, _user_data_none());
+  _add_step_to_stack(state, &_consume_keyword, _user_data_str("as"));
+  _add_step_to_stack(state, &set_node_location, _user_data_none());
+  _add_step_to_stack(state, &_descend,
+    _user_data_node_type(sl_ASTNodeType_ExpressionAs));
+  return 0;
+}
+
+static int
 _parse_expr_item(struct _ParserState *state,
   union _ParserStepUserData user_data)
 {
@@ -758,6 +777,8 @@ _parse_expr_item(struct _ParserState *state,
     exec = &_parse_bind;
   else if (_next_is_keyword(state, "latex"))
     exec = &_parse_latex;
+  else if (_next_is_keyword(state, "as"))
+    exec = &parse_as;
   if (exec != NULL)
   {
     _add_step_to_stack(state, &_parse_expr_item, _user_data_none());
@@ -894,10 +915,6 @@ _parse_argument_separator(struct _ParserState *state,
   }
   return 0;
 }
-
-static int
-_parse_value(struct _ParserState *state,
-  union _ParserStepUserData user_data);
 
 static int
 _parse_argument(struct _ParserState *state,

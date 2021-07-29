@@ -566,6 +566,11 @@ add_expression(sl_LogicState *state, struct PrototypeExpression proto)
     }
   }
 
+  /* Check to see if the expression is defined in terms of something else. */
+  e->replace_with = NULL;
+  if (proto.replace_with != NULL)
+    e->replace_with = copy_value(proto.replace_with);
+
   struct Symbol sym;
   sym.path = copy_symbol_path(proto.expression_path);
   sym.type = SymbolTypeExpression;
@@ -877,7 +882,8 @@ instantiate_theorem_in_env(struct sl_LogicState *state, const struct Theorem *sr
     for (size_t i = 0; i < ARR_LENGTH(src->assumptions); ++i)
     {
       const Value *assumption = *ARR_GET(src->assumptions, i);
-      Value *instantiated = instantiate_value(assumption, args);
+      Value *instantiated_0 = instantiate_value(assumption, args);
+      Value *instantiated = reduce_expressions(instantiated_0);
       if (instantiated == NULL)
         return 1;
       ARR_APPEND(instantiated_assumptions, instantiated);
@@ -907,7 +913,8 @@ instantiate_theorem_in_env(struct sl_LogicState *state, const struct Theorem *sr
   for (size_t i = 0; i < ARR_LENGTH(src->inferences); ++i)
   {
     const Value *inference = *ARR_GET(src->inferences, i);
-    Value *instantiated = instantiate_value(inference, args);
+    Value *instantiated_0 = instantiate_value(inference, args);
+    Value *instantiated = reduce_expressions(instantiated_0);
     if (instantiated == NULL)
       return 1;
     ARR_APPEND(env->proven, instantiated);
@@ -1000,7 +1007,8 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
     *assume != NULL; ++assume)
   {
     ARR_APPEND(a->assumptions, copy_value(*assume));
-    ARR_APPEND(env->proven, copy_value(*assume));
+    Value *reduced = reduce_expressions(*assume);
+    ARR_APPEND(env->proven, reduced);
   }
   for (Value **infer = proto.inferences;
     *infer != NULL; ++infer)
@@ -1080,7 +1088,10 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
   for (size_t i = 0; i < ARR_LENGTH(a->inferences); ++i)
   {
     Value *infer = *ARR_GET(a->inferences, i);
-    if (!statement_proven(infer, env))
+    Value *reduced = reduce_expressions(infer);
+    char *s = string_from_value(reduced);
+    printf("%s\n", s);
+    if (!statement_proven(reduced, env))
     {
       LOG_NORMAL(state->log_out,
         "Cannot add theorem because an inference was not proven.\n");

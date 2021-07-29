@@ -111,6 +111,7 @@ struct PrototypeExpression
   sl_SymbolPath *expression_path;
   sl_SymbolPath *expression_type;
   struct PrototypeParameter **parameters; /* NULL-terminated list. */
+  Value *replace_with; /* Optional - use NULL for an atomic expression. */ 
   Value **bindings; /* NULL-terminated list. */
   struct PrototypeLatexFormat latex;
 };

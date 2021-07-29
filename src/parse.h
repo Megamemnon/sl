@@ -121,6 +121,7 @@ enum sl_ASTNodeType
   sl_ASTNodeType_BindsFlag,
   sl_ASTNodeType_ConstantDeclaration,
   sl_ASTNodeType_Expression,
+  sl_ASTNodeType_ExpressionAs,
   sl_ASTNodeType_Axiom,
   sl_ASTNodeType_Theorem,
   sl_ASTNodeType_ParameterList,

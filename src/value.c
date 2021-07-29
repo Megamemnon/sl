@@ -229,6 +229,111 @@ enumerate_value_occurrences(const Value *target, const Value *search_in,
   }
 }
 
+static bool
+value_is_irreducible(const Value *value)
+{
+  switch (value->value_type)
+  {
+    case ValueTypeConstant:
+      return TRUE;
+      break;
+    case ValueTypeVariable:
+      return TRUE;
+      break;
+    case ValueTypeComposition:
+      if (value->expression->replace_with != NULL)
+        return FALSE;
+      for (size_t i = 0; i < ARR_LENGTH(value->arguments); ++i)
+      {
+        const Value *arg = *ARR_GET(value->arguments, i);
+        if (!value_is_irreducible(arg))
+          return FALSE;
+      }
+      return TRUE;
+      break;
+  }
+}
+
+static Value *
+do_reduction_step(const Value *value)
+{
+  switch (value->value_type)
+  {
+    case ValueTypeConstant:
+      return copy_value(value);
+      break;
+    case ValueTypeVariable:
+      return copy_value(value);
+      break;
+    case ValueTypeComposition:
+      /* TODO: check that types and number of arguments match. Probably best
+         to do this here as well as in the expression creation function. */
+      if (value->expression->replace_with == NULL)
+      {
+        Value *new = malloc(sizeof(Value));
+        new->value_type = ValueTypeComposition;
+        new->parent = NULL;
+        new->expression = value->expression;
+        new->type = value->type;
+        ARR_INIT(new->arguments);
+        for (size_t i = 0; i < ARR_LENGTH(value->arguments); ++i)
+        {
+          const Value *arg = *ARR_GET(value->arguments, i);
+          Value *reduced = do_reduction_step(arg);
+          char *s1 = string_from_value(arg);
+          char *s2 = string_from_value(reduced);
+          reduced->parent = new;
+          ARR_APPEND(new->arguments, reduced);
+        }
+        return new;
+      }
+      else
+      {
+        Value *new;
+        if (value->expression->replace_with->value_type
+          == ValueTypeComposition)
+        {
+          ArgumentArray args;
+          ARR_INIT(args);
+          for (size_t i = 0; i < ARR_LENGTH(value->arguments); ++i)
+          {
+            struct Argument arg;
+            const struct Parameter *param;
+            Value *old_value =
+              do_reduction_step(*ARR_GET(value->arguments, i));
+            param = ARR_GET(value->expression->parameters, i);
+            arg.name = strdup(param->name);
+            arg.value = copy_value(old_value);
+            ARR_APPEND(args, arg);
+          }
+          new = instantiate_value(value->expression->replace_with, args);
+          ARR_FREE(args);
+          return new;
+        }
+        else
+        {
+          return copy_value(value->expression->replace_with);
+        }
+      }
+      break;
+  }
+}
+
+Value *
+reduce_expressions(const Value *value)
+{
+  Value *reduced = copy_value(value);
+  while (!value_is_irreducible(reduced))
+  {
+    Value *tmp = do_reduction_step(reduced);
+    free_value(reduced);
+    reduced = tmp;
+  }
+  char *s1 = string_from_value(value);
+  char *s2 = string_from_value(reduced);
+  return reduced;
+}
+
 Value *
 instantiate_value(const Value *src, ArgumentArray args)
 {

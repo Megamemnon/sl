@@ -396,6 +396,7 @@ namespace propositional_calculus
   expr Formula
   and(phi : Formula, psi : Formula)
   {
+    /* as not(implies($phi, not($psi))); */
     latex "\\left( " + $phi + " \\land " + $psi + " \\right)";
   }
 
@@ -532,6 +533,7 @@ namespace propositional_calculus
   expr Formula
   or(phi : Formula, psi : Formula)
   {
+    /* as implies(not($phi), $psi)); */
     latex "\\left( " + $phi + " \\lor " + $psi + " \\right)";
   }
 
@@ -597,14 +599,17 @@ namespace propositional_calculus
   expr Formula
   iff(phi : Formula, psi : Formula)
   {
+    as and(implies($phi, $psi), implies($psi, $phi));
     latex "\\left( " + $phi + " \\iff " + $psi + " \\right)";
   }
 
-  axiom
+  theorem
   biconditional_introduction(phi : Formula, psi : Formula)
   {
     infer implies(and(implies($phi, $psi), implies($psi, $phi)),
       iff($phi, $psi));
+
+    step identity(iff($phi, $psi));
   }
 
   theorem
@@ -622,10 +627,13 @@ namespace propositional_calculus
       iff($phi, $psi));
   }
 
-  axiom
+  theorem
   biconditional_elimination_left(phi : Formula, psi : Formula)
   {
     infer implies(iff($phi, $psi), implies($psi, $phi));
+
+    step conjunction_elimination_right(implies($phi, $psi),
+      implies($psi, $phi));
   }
 
   theorem
@@ -639,10 +647,13 @@ namespace propositional_calculus
     step modus_ponens(iff($phi, $psi), implies($psi, $phi));
   }
 
-  axiom
+  theorem
   biconditional_elimination_right(phi : Formula, psi : Formula)
   {
     infer implies(iff($phi, $psi), implies($phi, $psi));
+
+    step conjunction_elimination_left(implies($phi, $psi),
+      implies($psi, $phi));
   }
 
   theorem

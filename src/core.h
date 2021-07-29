@@ -67,6 +67,7 @@ struct Expression
   const struct Type *type;
   ARR(struct Parameter) parameters;
   ARR(Value *) bindings;
+  Value *replace_with;
 
   bool has_latex;
   struct LatexFormat latex;
@@ -108,6 +109,9 @@ copy_value_to(Value *dst, const Value *src);
 void
 enumerate_value_occurrences(const Value *target, const Value *search_in,
   ValueArray *occurrences);
+
+Value *
+reduce_expressions(const Value *value);
 
 Value *
 instantiate_value(const Value *src, ArgumentArray args);

@@ -572,6 +572,26 @@ validate_expression(struct ValidationState *state,
     proto.bindings[binds_n] = NULL;
   }
 
+  /* Is this expression atomic, or defined in terms of another expression? */
+  proto.replace_with = NULL;
+  for (size_t i = 0; i < sl_node_get_child_count(expression); ++i)
+  {
+    const sl_ASTNode *child = sl_node_get_child(expression, i);
+    if (sl_node_get_type(child) == sl_ASTNodeType_ExpressionAs)
+    {
+      if (sl_node_get_child_count(child) != 1)
+      {
+        sl_node_show_message(state->text, child,
+          "Expression 'as' node should have a single child, the value it abbreviates.",
+          sl_MessageType_Error);
+        state->valid = FALSE;
+      }
+
+      proto.replace_with =
+        extract_value(state, sl_node_get_child(child, 0), &env);
+    }
+  }
+
   /* Look for latex. */
   proto.latex.segments = NULL;
   for (size_t i = 0; i < sl_node_get_child_count(expression); ++i)
