@@ -18,7 +18,7 @@ do { \
 } \
 while (0);
 
-struct SymbolPath
+struct sl_SymbolPath
 {
   ARR(char *) segments;
 };
@@ -32,7 +32,7 @@ struct Parameter
 struct Type
 {
   uint32_t id;
-  const SymbolPath *path;
+  const sl_SymbolPath *path;
 
   bool atomic;
   bool binds;
@@ -52,7 +52,7 @@ struct LatexFormat
 struct Constant
 {
   uint32_t id;
-  const SymbolPath *path;
+  const sl_SymbolPath *path;
   const struct Type *type;
 
   bool has_latex;
@@ -62,7 +62,7 @@ struct Constant
 struct Expression
 {
   uint32_t id;
-  const SymbolPath *path;
+  const sl_SymbolPath *path;
 
   const struct Type *type;
   ARR(struct Parameter) parameters;
@@ -143,7 +143,7 @@ struct TheoremReference
 struct Theorem
 {
   uint32_t id;
-  const SymbolPath *path;
+  const sl_SymbolPath *path;
   bool is_axiom;
 
   ARR(struct Parameter) parameters;
@@ -176,7 +176,7 @@ enum SymbolType
 
 struct Symbol
 {
-  SymbolPath *path;
+  sl_SymbolPath *path;
   enum SymbolType type;
   void *object;
 };

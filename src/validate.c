@@ -2,34 +2,43 @@
 #include "parse.h"
 #include <string.h>
 
+#if defined(__APPLE__) || defined(__linux__)
+#include <stdlib.h>
+#include <libgen.h>
+#include <limits.h>
+#endif
+
 struct ValidationState
 {
   bool valid;
 
+  char *prefix;
+  ARR(char *) files_opened;
   sl_TextInput *text;
-  const sl_ASTNode *ast;
-
   sl_LogicState *logic;
-  SymbolPath *prefix_path;
-  ARR(SymbolPath *) search_paths;
+  sl_SymbolPath *prefix_path;
+  ARR(sl_SymbolPath *) search_paths;
 };
 
-static SymbolPath *
-lookup_symbol(struct ValidationState *state, const SymbolPath *path)
+static int
+validate_import(struct ValidationState *state, const sl_ASTNode *import);
+
+static sl_SymbolPath *
+lookup_symbol(struct ValidationState *state, const sl_SymbolPath *path)
 {
   /* Build a list of candidate absolute paths. */
-  SymbolPath **paths = malloc(sizeof(SymbolPath *) *
+  sl_SymbolPath **paths = malloc(sizeof(sl_SymbolPath *) *
     (ARRAY_LENGTH(state->search_paths) + 1));
   for (size_t i = 0; i < ARRAY_LENGTH(state->search_paths); ++i)
   {
-    const SymbolPath *search_in =
-      *ARRAY_GET(state->search_paths, SymbolPath *, i);
+    const sl_SymbolPath *search_in =
+      *ARRAY_GET(state->search_paths, sl_SymbolPath *, i);
     paths[i] = copy_symbol_path(search_in);
     append_symbol_path(paths[i], path);
   }
   paths[ARRAY_LENGTH(state->search_paths)] = NULL;
 
-  SymbolPath *result = find_first_occupied_path(state->logic, paths);
+  sl_SymbolPath *result = find_first_occupied_path(state->logic, paths);
 
   for (size_t i = 0; i < ARRAY_LENGTH(state->search_paths); ++i)
     free_symbol_path(paths[i]);
@@ -38,7 +47,7 @@ lookup_symbol(struct ValidationState *state, const SymbolPath *path)
   return result;
 }
 
-static SymbolPath *
+static sl_SymbolPath *
 extract_path(struct ValidationState *state, const sl_ASTNode *path)
 {
   if (sl_node_get_type(path) != sl_ASTNodeType_Path)
@@ -50,7 +59,7 @@ extract_path(struct ValidationState *state, const sl_ASTNode *path)
     return NULL;
   }
 
-  SymbolPath *dst = init_symbol_path();
+  sl_SymbolPath *dst = init_symbol_path();
   for (size_t i = 0; i < sl_node_get_child_count(path); ++i)
   {
     const sl_ASTNode *seg = sl_node_get_child(path, i);
@@ -72,7 +81,7 @@ extract_path(struct ValidationState *state, const sl_ASTNode *path)
   return dst;
 }
 
-static SymbolPath *
+static sl_SymbolPath *
 extract_use(struct ValidationState *state, const sl_ASTNode *use)
 {
   if (sl_node_get_type(use) != sl_ASTNodeType_Use)
@@ -189,7 +198,7 @@ extract_value(struct ValidationState *state,
     /* Locate the corresponding expression, and verify that the types of
        the arguments match. */
     const sl_ASTNode *expr, *args_node;
-    SymbolPath *expr_path;
+    sl_SymbolPath *expr_path;
     Value *v;
     if (sl_node_get_child_count(value) != 2)
     {
@@ -203,7 +212,7 @@ extract_value(struct ValidationState *state,
     expr = sl_node_get_child(value, 0);
     args_node = sl_node_get_child(value, 1);
     {
-      SymbolPath *local_path = extract_path(state, expr);
+      sl_SymbolPath *local_path = extract_path(state, expr);
       expr_path = lookup_symbol(state, local_path);
       free_symbol_path(local_path);
     }
@@ -245,7 +254,7 @@ extract_value(struct ValidationState *state,
   else if (sl_node_get_type(value) == sl_ASTNodeType_Constant)
   {
     const sl_ASTNode *path;
-    SymbolPath *const_path;
+    sl_SymbolPath *const_path;
     Value *v;
     if (sl_node_get_child_count(value) != 1)
     {
@@ -258,7 +267,7 @@ extract_value(struct ValidationState *state,
 
     path = sl_node_get_child(value, 0);
     {
-      SymbolPath *local_path = extract_path(state, path);
+      sl_SymbolPath *local_path = extract_path(state, path);
       const_path = lookup_symbol(state, local_path);
       free_symbol_path(local_path);
     }
@@ -402,7 +411,7 @@ validate_constant(struct ValidationState *state, const sl_ASTNode *constant)
   type = sl_node_get_child(constant, 0);
 
   {
-    SymbolPath *local_path = extract_path(state, type);
+    sl_SymbolPath *local_path = extract_path(state, type);
     proto.type_path = lookup_symbol(state, local_path);
     free_symbol_path(local_path);
   }
@@ -462,7 +471,7 @@ extract_parameter(struct ValidationState *state,
   type = sl_node_get_child(parameter, 0);
 
   {
-    SymbolPath *local_path = extract_path(state, type);
+    sl_SymbolPath *local_path = extract_path(state, type);
     dst->type = lookup_symbol(state, local_path);
     free_symbol_path(local_path);
   }
@@ -503,7 +512,7 @@ validate_expression(struct ValidationState *state,
   type = sl_node_get_child(expression, 0);
 
   {
-    SymbolPath *local_path = extract_path(state, type);
+    sl_SymbolPath *local_path = extract_path(state, type);
     proto.expression_type = lookup_symbol(state, local_path);
     free_symbol_path(local_path);
   }
@@ -926,7 +935,7 @@ extract_step(struct ValidationState *state, const sl_ASTNode *step,
   thm_ref_path = sl_node_get_child(thm_ref, 0);
   dst = SL_NEW(struct PrototypeProofStep);
   {
-    SymbolPath *local_path = extract_path(state, thm_ref_path);
+    sl_SymbolPath *local_path = extract_path(state, thm_ref_path);
     dst->theorem_path = lookup_symbol(state, local_path);
     free_symbol_path(local_path);
   }
@@ -1137,11 +1146,11 @@ validate_namespace(struct ValidationState *state,
   if (sl_node_get_name(namespace) != NULL)
     push_symbol_path(state->prefix_path, sl_node_get_name(namespace));
 
-  SymbolPath *search_path = copy_symbol_path(state->prefix_path);
+  sl_SymbolPath *search_path = copy_symbol_path(state->prefix_path);
   ARR_APPEND(state->search_paths, search_path);
 
   /* Validate all the objects contained in this namespace. */
-  ARR(SymbolPath *) using_paths;
+  ARR(sl_SymbolPath *) using_paths;
   ARR_INIT(using_paths);
   for (size_t i = 0; i < sl_node_get_child_count(namespace); ++i)
   {
@@ -1153,9 +1162,13 @@ validate_namespace(struct ValidationState *state,
         err = validate_namespace(state, child);
         PROPAGATE_ERROR(err);
         break;
+      case sl_ASTNodeType_Import:
+        err = validate_import(state, child);
+        PROPAGATE_ERROR(err);
+        break;
       case sl_ASTNodeType_Use:
         {
-          SymbolPath *use_path = extract_use(state, child);
+          sl_SymbolPath *use_path = extract_use(state, child);
           ARR_APPEND(using_paths, use_path);
           ARR_APPEND(state->search_paths, use_path);
         }
@@ -1191,7 +1204,7 @@ validate_namespace(struct ValidationState *state,
 
   for (size_t i = 0; i < ARR_LENGTH(using_paths); ++i)
   {
-    SymbolPath *path = *ARR_GET(using_paths, i);
+    sl_SymbolPath *path = *ARR_GET(using_paths, i);
     free_symbol_path(path);
     ARR_POP(state->search_paths);
   }
@@ -1208,40 +1221,54 @@ validate_namespace(struct ValidationState *state,
 }
 
 static int
-validate(struct ValidationState *state)
+load_file_and_validate(struct ValidationState *state, const char *path)
 {
-  const sl_ASTNode *root;
-  state->valid = TRUE;
-  state->prefix_path = init_symbol_path();
-  ARR_INIT(state->search_paths);
-
-  /* The root of the AST is simply a namespace. */
-  root = state->ast;
-  int err = validate_namespace(state, root);
-
-  free_symbol_path(state->prefix_path);
-  ARR_FREE(state->search_paths);
-  return err;
-}
-
-int
-sl_verify_and_add_file(const char *path, sl_LogicState *logic)
-{
+  /* TODO: check that the path is accessible and report this error. */
   sl_TextInput *input;
   sl_LexerState *lex;
   sl_ASTNode *ast;
-  struct ValidationState state;
-
+  char *old_prefix = state->prefix;
+  char *absolute_path;
   if (path == NULL)
-    return 1;
-  if (logic == NULL)
-    return 1;
+  {
+    state->valid = FALSE;
+    return 0;
+  }
 
-  input = sl_input_from_file(path);
+  /* Establish the prefix path by taking the global path of the directory
+     containing the target file. */
+#if defined(__APPLE__) || defined(__linux__)
+  if (state->prefix == NULL)
+  {
+    char full_path[PATH_MAX];
+    if (realpath(path, full_path) == NULL)
+    {
+      /* TODO: error. */
+      return 0;
+    }
+    absolute_path = strdup(full_path);
+  }
+  else
+  {
+    asprintf(&absolute_path, "%s/%s", state->prefix, path);
+
+  }
+  state->prefix = strdup(dirname(absolute_path));
+#endif
+
+  for (size_t i = 0; i < ARR_LENGTH(state->files_opened); ++i)
+  {
+    if (strcmp(absolute_path, *ARR_GET(state->files_opened, i)) == 0)
+      return 0;
+  }
+  ARR_APPEND(state->files_opened, strdup(absolute_path));
+
+  input = sl_input_from_file(absolute_path);
   if (input == NULL)
   {
     /* TODO: report error. */
-    return 1;
+    state->valid = FALSE;
+    return 0;
   }
 
   lex = sl_lexer_new_state_with_input(input);
@@ -1249,7 +1276,8 @@ sl_verify_and_add_file(const char *path, sl_LogicState *logic)
   {
     /* TODO: report error. */
     sl_input_free(input);
-    return 1;
+    state->valid = FALSE;
+    return 0;
   }
 
   ast = sl_parse_input(lex);
@@ -1258,22 +1286,65 @@ sl_verify_and_add_file(const char *path, sl_LogicState *logic)
     /* TODO: report error. */
     sl_input_free(input);
     sl_lexer_free_state(lex);
-    return 1;
+    state->valid = FALSE;
+    return 0;
   }
   //sl_print_tree(ast);
 
-  state.text = input;
-  state.ast = ast;
-  state.logic = logic;
-  int result = validate(&state);
+  {
+    sl_TextInput *old_input = state->text;
+    state->text = input;
+    state->text = old_input;
+  }
+  int result = validate_namespace(state, ast);
 
   sl_input_free(input);
   sl_lexer_free_state(lex);
   sl_node_free(ast);
+  free(absolute_path);
+  free(state->prefix);
+  state->prefix = old_prefix;
 
-  if (result == 0)
-  {
-    return state.valid ? 0 : 1;
-  }
   return result;
+}
+
+static int
+validate_import(struct ValidationState *state, const sl_ASTNode *import)
+{
+  if (sl_node_get_type(import) != sl_ASTNodeType_Import)
+  {
+    sl_node_show_message(state->text, import,
+      "expected an import statement but found the wrong type of node.",
+      sl_MessageType_Error);
+    state->valid = FALSE;
+    return 0;
+  }
+
+  return load_file_and_validate(state, sl_node_get_name(import));
+}
+
+int
+sl_verify_and_add_file(const char *path, sl_LogicState *logic)
+{
+  struct ValidationState state;
+  state.valid = TRUE;
+  state.prefix_path = init_symbol_path();
+  state.logic = logic;
+  state.prefix = NULL;
+  ARR_INIT(state.files_opened);
+  ARR_INIT(state.search_paths);
+
+  int err = load_file_and_validate(&state, path);
+
+  free_symbol_path(state.prefix_path);
+  ARR_FREE(state.search_paths);
+
+  if (err != 0)
+    return err;
+  if (state.prefix != NULL)
+    free(state.prefix);
+  for (size_t i = 0; i < ARR_LENGTH(state.files_opened); ++i)
+    free(*ARR_GET(state.files_opened, i));
+  ARR_FREE(state.files_opened);
+  return state.valid ? 0 : 1;
 }

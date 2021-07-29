@@ -5,41 +5,40 @@
 #include <stdio.h>
 
 /* Methods to manipulate paths. */
-struct SymbolPath;
-typedef struct SymbolPath SymbolPath;
+typedef struct sl_SymbolPath sl_SymbolPath;
 
-SymbolPath *
+sl_SymbolPath *
 init_symbol_path();
 
-SymbolPath *
-copy_symbol_path(const SymbolPath *src);
+sl_SymbolPath *
+copy_symbol_path(const sl_SymbolPath *src);
 
 void
-free_symbol_path(SymbolPath *path);
+free_symbol_path(sl_SymbolPath *path);
 
 int
-length_of_symbol_path(const SymbolPath *path);
+length_of_symbol_path(const sl_SymbolPath *path);
 
 const char *
-get_symbol_path_segment(const SymbolPath *path, size_t index);
+get_symbol_path_segment(const sl_SymbolPath *path, size_t index);
 
 const char *
-get_symbol_path_last_segment(const SymbolPath *path);
+get_symbol_path_last_segment(const sl_SymbolPath *path);
 
 char *
-string_from_symbol_path(const SymbolPath *path);
+string_from_symbol_path(const sl_SymbolPath *path);
 
 void
-push_symbol_path(SymbolPath *path, const char *segment);
+push_symbol_path(sl_SymbolPath *path, const char *segment);
 
 void
-pop_symbol_path(SymbolPath *path);
+pop_symbol_path(sl_SymbolPath *path);
 
 void
-append_symbol_path(SymbolPath *path, const SymbolPath *to_append);
+append_symbol_path(sl_SymbolPath *path, const sl_SymbolPath *to_append);
 
 bool
-symbol_paths_equal(const SymbolPath *a, const SymbolPath *b);
+symbol_paths_equal(const sl_SymbolPath *a, const sl_SymbolPath *b);
 
 /* Functions for manipulating the logic state, which contains all the theorems,
    expressions, etc. that are handled. */
@@ -53,10 +52,10 @@ void
 free_logic_state(sl_LogicState *state);
 
 bool
-logic_state_path_occupied(const sl_LogicState *state, const SymbolPath *path);
+logic_state_path_occupied(const sl_LogicState *state, const sl_SymbolPath *path);
 
-SymbolPath *
-find_first_occupied_path(const sl_LogicState *state, SymbolPath **paths); /* NULL-terminated list. */
+sl_SymbolPath *
+find_first_occupied_path(const sl_LogicState *state, sl_SymbolPath **paths); /* NULL-terminated list. */
 
 enum LogicError
 {
@@ -68,7 +67,7 @@ typedef enum LogicError LogicError;
 /* Types. */
 struct PrototypeType
 {
-  SymbolPath *type_path;
+  sl_SymbolPath *type_path;
   bool atomic;
   bool binds;
 };
@@ -92,8 +91,8 @@ struct PrototypeLatexFormat
 
 struct PrototypeConstant
 {
-  SymbolPath *constant_path;
-  SymbolPath *type_path;
+  sl_SymbolPath *constant_path;
+  sl_SymbolPath *type_path;
   struct PrototypeLatexFormat latex;
 };
 
@@ -104,13 +103,13 @@ add_constant(sl_LogicState *, struct PrototypeConstant proto);
 struct PrototypeParameter
 {
   char *name;
-  SymbolPath *type;
+  sl_SymbolPath *type;
 };
 
 struct PrototypeExpression
 {
-  SymbolPath *expression_path;
-  SymbolPath *expression_type;
+  sl_SymbolPath *expression_path;
+  sl_SymbolPath *expression_type;
   struct PrototypeParameter **parameters; /* NULL-terminated list. */
   Value **bindings; /* NULL-terminated list. */
   struct PrototypeLatexFormat latex;
@@ -139,18 +138,18 @@ char *
 string_from_value(const Value *value);
 
 Value *
-new_variable_value(sl_LogicState *state, const char *name, const SymbolPath *type);
+new_variable_value(sl_LogicState *state, const char *name, const sl_SymbolPath *type);
 
 Value *
-new_constant_value(sl_LogicState *state, const SymbolPath *constant);
+new_constant_value(sl_LogicState *state, const sl_SymbolPath *constant);
 
 Value *
-new_composition_value(sl_LogicState *state, const SymbolPath *expr_path,
+new_composition_value(sl_LogicState *state, const sl_SymbolPath *expr_path,
   Value * const *args); /* `args` is a NULL-terminated list. */
 
 struct PrototypeProofStep
 {
-  SymbolPath *theorem_path;
+  sl_SymbolPath *theorem_path;
   Value **arguments; /* NULL-terminated list. */
 };
 
@@ -162,7 +161,7 @@ struct PrototypeRequirement
 
 struct PrototypeTheorem
 {
-  SymbolPath *theorem_path;
+  sl_SymbolPath *theorem_path;
   struct PrototypeParameter **parameters; /* NULL-terminated list. */
   struct PrototypeRequirement **requirements; /* NULL-terminated list. */
   Value **assumptions; /* NULL-terminated list. */

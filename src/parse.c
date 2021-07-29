@@ -569,6 +569,21 @@ _parse_path(struct _ParserState *state, union _ParserStepUserData user_data)
 }
 
 static int
+parse_import(struct _ParserState *state,
+  union _ParserStepUserData user_data)
+{
+  _add_step_to_stack(state, &_ascend, _user_data_none());
+  _add_step_to_stack(state, &_consume_symbol,
+    _user_data_token_type(sl_LexerTokenType_Semicolon));
+  _add_step_to_stack(state, &_consume_name, _user_data_none());
+  _add_step_to_stack(state, &set_node_location, _user_data_none());
+  _add_step_to_stack(state, &_consume_keyword, _user_data_str("import"));
+  _add_step_to_stack(state, &_descend,
+    _user_data_node_type(sl_ASTNodeType_Import));
+  return 0;
+}
+
+static int
 _parse_use(struct _ParserState *state, union _ParserStepUserData user_data)
 {
   _add_step_to_stack(state, &_ascend, _user_data_none());
@@ -1160,6 +1175,8 @@ _parse_namespace_item(struct _ParserState *state,
   exec = NULL;
   if (_next_is_keyword(state, "namespace"))
     exec = &_parse_namespace;
+  else if (_next_is_keyword(state, "import"))
+    exec = &parse_import;
   else if (_next_is_keyword(state, "use"))
     exec = &_parse_use;
   else if (_next_is_keyword(state, "type"))

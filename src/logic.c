@@ -5,18 +5,18 @@
 #include "core.h"
 
 /* Paths */
-SymbolPath *
+sl_SymbolPath *
 init_symbol_path()
 {
-  SymbolPath *path = malloc(sizeof(SymbolPath));
+  sl_SymbolPath *path = malloc(sizeof(sl_SymbolPath));
   ARR_INIT(path->segments);
   return path;
 }
 
-SymbolPath *
-copy_symbol_path(const SymbolPath *src)
+sl_SymbolPath *
+copy_symbol_path(const sl_SymbolPath *src)
 {
-  SymbolPath *dst = init_symbol_path();
+  sl_SymbolPath *dst = init_symbol_path();
   for (size_t i = 0; i < ARR_LENGTH(src->segments); ++i)
   {
     ARR_APPEND(dst->segments, strdup(*ARRAY_GET(src->segments, char *, i)));
@@ -25,7 +25,7 @@ copy_symbol_path(const SymbolPath *src)
 }
 
 void
-free_symbol_path(SymbolPath *path)
+free_symbol_path(sl_SymbolPath *path)
 {
   for (size_t i = 0; i < ARR_LENGTH(path->segments); ++i)
   {
@@ -36,25 +36,25 @@ free_symbol_path(SymbolPath *path)
 }
 
 int
-length_of_symbol_path(const SymbolPath *path)
+length_of_symbol_path(const sl_SymbolPath *path)
 {
   return ARR_LENGTH(path->segments);
 }
 
 const char *
-get_symbol_path_segment(const SymbolPath *path, size_t index)
+get_symbol_path_segment(const sl_SymbolPath *path, size_t index)
 {
   return *ARR_GET(path->segments, index);
 }
 
 const char *
-get_symbol_path_last_segment(const SymbolPath *path)
+get_symbol_path_last_segment(const sl_SymbolPath *path)
 {
   return get_symbol_path_segment(path, length_of_symbol_path(path) - 1);
 }
 
 char *
-string_from_symbol_path(const SymbolPath *path)
+string_from_symbol_path(const sl_SymbolPath *path)
 {
   if (ARR_LENGTH(path->segments) == 0)
     return strdup("");
@@ -82,20 +82,20 @@ string_from_symbol_path(const SymbolPath *path)
 }
 
 void
-push_symbol_path(SymbolPath *path, const char *segment)
+push_symbol_path(sl_SymbolPath *path, const char *segment)
 {
   ARR_APPEND(path->segments, strdup(segment));
 }
 
 void
-pop_symbol_path(SymbolPath *path)
+pop_symbol_path(sl_SymbolPath *path)
 {
   free(*ARR_GET(path->segments, ARRAY_LENGTH(path->segments) - 1));
   ARR_POP(path->segments);
 }
 
 void
-append_symbol_path(SymbolPath *path, const SymbolPath *to_append)
+append_symbol_path(sl_SymbolPath *path, const sl_SymbolPath *to_append)
 {
   for (size_t i = 0; i < ARR_LENGTH(to_append->segments); ++i)
   {
@@ -105,7 +105,7 @@ append_symbol_path(SymbolPath *path, const SymbolPath *to_append)
 }
 
 bool
-symbol_paths_equal(const SymbolPath *a, const SymbolPath *b)
+symbol_paths_equal(const sl_SymbolPath *a, const sl_SymbolPath *b)
 {
   if (ARR_LENGTH(a->segments) != ARR_LENGTH(b->segments))
     return FALSE;
@@ -313,7 +313,7 @@ free_logic_state(sl_LogicState *state)
 }
 
 bool
-logic_state_path_occupied(const sl_LogicState *state, const SymbolPath *path)
+logic_state_path_occupied(const sl_LogicState *state, const sl_SymbolPath *path)
 {
   for (size_t i = 0; i < ARR_LENGTH(state->symbol_table); ++i)
   {
@@ -324,10 +324,10 @@ logic_state_path_occupied(const sl_LogicState *state, const SymbolPath *path)
   return FALSE;
 }
 
-SymbolPath *
-find_first_occupied_path(const sl_LogicState *state, SymbolPath **paths)
+sl_SymbolPath *
+find_first_occupied_path(const sl_LogicState *state, sl_SymbolPath **paths)
 {
-  for (SymbolPath **path = paths; *path != NULL; ++path)
+  for (sl_SymbolPath **path = paths; *path != NULL; ++path)
   {
     if (logic_state_path_occupied(state, *path))
       return copy_symbol_path(*path);
@@ -336,7 +336,7 @@ find_first_occupied_path(const sl_LogicState *state, SymbolPath **paths)
 }
 
 static struct Symbol *
-locate_symbol(sl_LogicState *state, const SymbolPath *path)
+locate_symbol(sl_LogicState *state, const sl_SymbolPath *path)
 {
   for (size_t i = 0; i < ARR_LENGTH(state->symbol_table); ++i)
   {
@@ -348,7 +348,7 @@ locate_symbol(sl_LogicState *state, const SymbolPath *path)
 }
 
 static struct Symbol *
-locate_symbol_with_type(sl_LogicState *state, const SymbolPath *path,
+locate_symbol_with_type(sl_LogicState *state, const sl_SymbolPath *path,
   enum SymbolType type)
 {
   struct Symbol *sym = locate_symbol(state, path);
@@ -599,7 +599,7 @@ add_expression(sl_LogicState *state, struct PrototypeExpression proto)
 
 /* Values */
 Value *
-new_variable_value(sl_LogicState *state, const char *name, const SymbolPath *type)
+new_variable_value(sl_LogicState *state, const char *name, const sl_SymbolPath *type)
 {
   Value *value = malloc(sizeof(Value));
 
@@ -624,7 +624,7 @@ new_variable_value(sl_LogicState *state, const char *name, const SymbolPath *typ
 }
 
 Value *
-new_constant_value(sl_LogicState *state, const SymbolPath *constant)
+new_constant_value(sl_LogicState *state, const sl_SymbolPath *constant)
 {
   Value *value = malloc(sizeof(Value));
 
@@ -648,7 +648,7 @@ new_constant_value(sl_LogicState *state, const SymbolPath *constant)
 }
 
 Value *
-new_composition_value(sl_LogicState *state, const SymbolPath *expr_path,
+new_composition_value(sl_LogicState *state, const sl_SymbolPath *expr_path,
   Value * const *args)
 {
   Value *value = malloc(sizeof(Value));

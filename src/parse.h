@@ -114,6 +114,7 @@ enum sl_ASTNodeType
 {
   sl_ASTNodeType_None = 0,
   sl_ASTNodeType_Namespace,
+  sl_ASTNodeType_Import,
   sl_ASTNodeType_Use,
   sl_ASTNodeType_Type,
   sl_ASTNodeType_AtomicFlag,
@@ -139,7 +140,6 @@ enum sl_ASTNodeType
   sl_ASTNodeType_Placeholder,
   sl_ASTNodeType_TheoremReference,
   sl_ASTNodeType_ArgumentList,
-  sl_ASTNodeType_CompositionArgumentList,
   sl_ASTNodeType_Path,
   sl_ASTNodeType_PathSegment
 };
