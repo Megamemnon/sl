@@ -178,7 +178,7 @@ sl_node_show_message(sl_TextInput *input, const sl_ASTNode *node,
   const char *message, sl_MessageType type);
 
 sl_ASTNode *
-sl_parse_input(sl_LexerState *input);
+sl_parse_input(sl_LexerState *input, int *error);
 
 /* --- Verifier --- */
 extern int verbose;

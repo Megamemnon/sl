@@ -365,38 +365,51 @@ add_symbol(sl_LogicState *state, struct Symbol sym)
   ARR_APPEND(state->symbol_table, sym);
 }
 
-LogicError
-add_type(sl_LogicState *state, struct PrototypeType proto)
+sl_LogicError
+add_type(sl_LogicState *state, const sl_SymbolPath *type_path, bool atomic,
+  bool binds)
 {
-  if (locate_symbol(state, proto.type_path) != NULL)
+  struct Type *t;
+  struct Symbol sym;
+  if (locate_symbol(state, type_path) != NULL)
   {
-    char *type_str = string_from_symbol_path(proto.type_path);
+    char *type_str;
+    type_str = string_from_symbol_path(type_path);
     LOG_NORMAL(state->log_out,
       "Cannot add type '%s' because the path is in use.\n", type_str);
     free(type_str);
-    return LogicErrorSymbolAlreadyExists;
+    return sl_LogicError_SymbolAlreadyExists;
+  }
+  else if (!atomic && binds)
+  {
+    char *type_str;
+    type_str = string_from_symbol_path(type_path);
+    LOG_NORMAL(state->log_out,
+      "Cannot add type '%s' because it binds but is not atomic.\n", type_str);
+    free(type_str);
+    return sl_LogicError_CannotBindNonAtomic;
   }
 
-  struct Type *t = malloc(sizeof(struct Type));
+  t = malloc(sizeof(struct Type));
   t->id = state->next_id;
-  ++state->next_id;
-  t->atomic = proto.atomic;
-  t->binds = proto.binds;
-
-  struct Symbol sym;
-  sym.path = copy_symbol_path(proto.type_path);
+  t->atomic = atomic;
+  t->binds = binds;
+  sym.path = copy_symbol_path(type_path);
   sym.type = SymbolTypeType;
   sym.object = t;
-
   t->path = sym.path;
+  ++state->next_id;
 
   add_symbol(state, sym);
 
-  char *type_str = string_from_symbol_path(proto.type_path);
-  LOG_NORMAL(state->log_out, "Successfully added type '%s'.\n", type_str);
-  free(type_str);
+  {
+    char *type_str;
+    type_str = string_from_symbol_path(type_path);
+    LOG_NORMAL(state->log_out, "Successfully added type '%s'.\n", type_str);
+    free(type_str);
+  }
 
-  return LogicErrorNone;
+  return sl_LogicError_None;
 }
 
 bool
@@ -405,7 +418,7 @@ types_equal(const struct Type *a, const struct Type *b)
   return (a->id == b->id) ? TRUE : FALSE;
 }
 
-LogicError
+sl_LogicError
 add_constant(sl_LogicState *state, struct PrototypeConstant proto)
 {
   if (locate_symbol(state, proto.constant_path) != NULL)
@@ -414,7 +427,7 @@ add_constant(sl_LogicState *state, struct PrototypeConstant proto)
     LOG_NORMAL(state->log_out,
       "Cannot add type '%s' because the path is in use.\n", const_str);
     free(const_str);
-    return LogicErrorSymbolAlreadyExists;
+    return sl_LogicError_SymbolAlreadyExists;
   }
 
   struct Symbol *type_symbol = locate_symbol_with_type(state,
@@ -428,7 +441,7 @@ add_constant(sl_LogicState *state, struct PrototypeConstant proto)
       const_str, type_str);
     free(const_str);
     free(type_str);
-    return LogicErrorSymbolAlreadyExists;
+    return sl_LogicError_SymbolAlreadyExists;
   }
 
   struct Constant *c = malloc(sizeof(struct Constant));
@@ -466,10 +479,10 @@ add_constant(sl_LogicState *state, struct PrototypeConstant proto)
   LOG_NORMAL(state->log_out, "Successfully added constant '%s'.\n", const_str);
   free(const_str);
 
-  return LogicErrorNone;
+  return sl_LogicError_None;
 }
 
-LogicError
+sl_LogicError
 add_expression(sl_LogicState *state, struct PrototypeExpression proto)
 {
   if (locate_symbol(state, proto.expression_path) != NULL)
@@ -478,7 +491,7 @@ add_expression(sl_LogicState *state, struct PrototypeExpression proto)
     LOG_NORMAL(state->log_out,
       "Cannot add expression '%s' because the path is in use.\n", expr_str);
     free(expr_str);
-    return LogicErrorSymbolAlreadyExists;
+    return sl_LogicError_SymbolAlreadyExists;
   }
 
   struct Expression *e = malloc(sizeof(struct Expression));
@@ -497,7 +510,7 @@ add_expression(sl_LogicState *state, struct PrototypeExpression proto)
     free(expr_str);
     free(type_str);
     free(e);
-    return LogicErrorSymbolAlreadyExists;
+    return sl_LogicError_SymbolAlreadyExists;
   }
   e->type = (struct Type *)type_symbol->object;
   if (proto.latex.segments != NULL)
@@ -529,7 +542,7 @@ add_expression(sl_LogicState *state, struct PrototypeExpression proto)
     free(expr_str);
     free(type_str);
     free(e);
-    return LogicErrorSymbolAlreadyExists;
+    return sl_LogicError_SymbolAlreadyExists;
   }
 
   ARR_INIT(e->parameters);
@@ -550,7 +563,7 @@ add_expression(sl_LogicState *state, struct PrototypeExpression proto)
       free(type_str);
       free_expression(e);
       free(e);
-      return LogicErrorSymbolAlreadyExists;
+      return sl_LogicError_SymbolAlreadyExists;
     }
     p.type = (struct Type *)type_symbol->object;
     p.name = strdup((*param)->name);
@@ -599,7 +612,7 @@ add_expression(sl_LogicState *state, struct PrototypeExpression proto)
     }
   }
 
-  return LogicErrorNone;
+  return sl_LogicError_None;
 }
 
 /* Values */
@@ -721,7 +734,7 @@ new_composition_value(sl_LogicState *state, const sl_SymbolPath *expr_path,
   return value;
 }
 
-LogicError
+sl_LogicError
 add_axiom(sl_LogicState *state, struct PrototypeTheorem proto)
 {
   if (locate_symbol(state, proto.theorem_path) != NULL)
@@ -730,7 +743,7 @@ add_axiom(sl_LogicState *state, struct PrototypeTheorem proto)
     LOG_NORMAL(state->log_out,
       "Cannot add axiom '%s' because the path is in use.\n", axiom_str);
     free(axiom_str);
-    return LogicErrorSymbolAlreadyExists;
+    return sl_LogicError_SymbolAlreadyExists;
   }
 
   struct Theorem *a = malloc(sizeof(struct Theorem));
@@ -757,7 +770,7 @@ add_axiom(sl_LogicState *state, struct PrototypeTheorem proto)
       free(type_str);
       //free_expression(e);
       free(a);
-      return LogicErrorSymbolAlreadyExists;
+      return sl_LogicError_SymbolAlreadyExists;
     }
     p.type = (struct Type *)type_symbol->object;
     p.name = strdup((*param)->name);
@@ -823,7 +836,7 @@ add_axiom(sl_LogicState *state, struct PrototypeTheorem proto)
     free(expr_str);*/
   }
 
-  return LogicErrorNone;
+  return sl_LogicError_None;
 }
 
 struct ProofEnvironment *
@@ -938,7 +951,7 @@ list_proven(sl_LogicState *state, const struct ProofEnvironment *env)
 
 /* TODO: The return value should be a struct, or modify the PrototypeTheorem,
    in order to propagate errors with full detail. */
-LogicError
+sl_LogicError
 add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
 {
   if (locate_symbol(state, proto.theorem_path) != NULL)
@@ -947,7 +960,7 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
     LOG_NORMAL(state->log_out,
       "Cannot add theorem '%s' because the path is in use.\n", axiom_str);
     free(axiom_str);
-    return LogicErrorSymbolAlreadyExists;
+    return sl_LogicError_SymbolAlreadyExists;
   }
 
   struct Theorem *a = malloc(sizeof(struct Theorem));
@@ -977,7 +990,7 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
       free(type_str);
       //free_expression(e);
       free(a);
-      return LogicErrorSymbolAlreadyExists;
+      return sl_LogicError_SymbolAlreadyExists;
     }
     p.type = (struct Type *)type_symbol->object;
     p.name = strdup((*param)->name);
@@ -1029,7 +1042,7 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
     {
       LOG_NORMAL(state->log_out,
         "Cannot add theorem because an axiom/theorem referenced in proof does not exist.\n");
-      return LogicErrorSymbolAlreadyExists;
+      return sl_LogicError_SymbolAlreadyExists;
     }
     ref.theorem = (struct Theorem *)thm_symbol->object;
 
@@ -1041,7 +1054,7 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
     {
       LOG_NORMAL(state->log_out,
         "Cannot add theorem because an axiom/theorem referenced received the wrong number of arguments.\n");
-      return LogicErrorSymbolAlreadyExists;
+      return sl_LogicError_SymbolAlreadyExists;
     }
 
     ArgumentArray args;
@@ -1060,7 +1073,7 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
       {
         LOG_NORMAL(state->log_out,
           "Cannot add theorem because an axiom/theorem referenced received an argument with the wrong type.\n");
-        return LogicErrorSymbolAlreadyExists;
+        return sl_LogicError_SymbolAlreadyExists;
       }
 
       ARR_APPEND(args, arg);
@@ -1071,7 +1084,7 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
       LOG_NORMAL(state->log_out,
         "Cannot add theorem because an axiom/theorem referenced could not be instantiated.\n");
       list_proven(state, env);
-      return LogicErrorSymbolAlreadyExists;
+      return sl_LogicError_SymbolAlreadyExists;
     }
 
     for (size_t i = 0; i < args_n; ++i)
@@ -1095,7 +1108,7 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
     {
       LOG_NORMAL(state->log_out,
         "Cannot add theorem because an inference was not proven.\n");
-      return LogicErrorSymbolAlreadyExists;
+      return sl_LogicError_SymbolAlreadyExists;
     }
   }
 
@@ -1134,5 +1147,5 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
   }
 
   free_proof_environment(env);
-  return LogicErrorNone;
+  return sl_LogicError_None;
 }

@@ -111,8 +111,10 @@ static int
 validate_type(struct ValidationState *state,
   const sl_ASTNode *type)
 {
-  struct PrototypeType proto;
-  LogicError err;
+  sl_SymbolPath *type_path;
+  bool atomic;
+  bool binds;
+  sl_LogicError err;
 
   if (sl_node_get_type(type) != sl_ASTNodeType_Type)
   {
@@ -122,22 +124,22 @@ validate_type(struct ValidationState *state,
     state->valid = FALSE;
     return 0;
   }
-  proto.type_path = copy_symbol_path(state->prefix_path);
-  push_symbol_path(proto.type_path, sl_node_get_name(type));
+  type_path = copy_symbol_path(state->prefix_path);
+  push_symbol_path(type_path, sl_node_get_name(type));
 
-  proto.atomic = FALSE;
-  proto.binds = FALSE;
+  atomic = FALSE;
+  binds = FALSE;
   for (size_t i = 0; i < sl_node_get_child_count(type); ++i)
   {
     const sl_ASTNode *child = sl_node_get_child(type, i);
     if (sl_node_get_type(child) == sl_ASTNodeType_AtomicFlag)
-      proto.atomic = TRUE;
+      atomic = TRUE;
     else if (sl_node_get_type(child) == sl_ASTNodeType_BindsFlag)
-      proto.binds = TRUE;
+      binds = TRUE;
   }
 
-  err = add_type(state->logic, proto);
-  if (err == LogicErrorSymbolAlreadyExists)
+  err = add_type(state->logic, type_path, atomic, binds);
+  if (err != sl_LogicError_None)
   {
     sl_node_show_message(state->text, type,
       "symbol already exists when declaring type.",
@@ -145,7 +147,7 @@ validate_type(struct ValidationState *state,
     state->valid = FALSE;
   }
 
-  free_symbol_path(proto.type_path);
+  free_symbol_path(type_path);
 
   return 0;
 }
@@ -386,7 +388,7 @@ validate_constant(struct ValidationState *state, const sl_ASTNode *constant)
   struct PrototypeConstant proto;
   const sl_ASTNode *type;
   struct TheoremEnvironment env;
-  LogicError err;
+  sl_LogicError err;
   if (sl_node_get_type(constant) != sl_ASTNodeType_ConstantDeclaration)
   {
     sl_node_show_message(state->text, constant,
@@ -431,7 +433,7 @@ validate_constant(struct ValidationState *state, const sl_ASTNode *constant)
   free_theorem_environment(&env);
 
   err = add_constant(state->logic, proto);
-  if (err != LogicErrorNone)
+  if (err != sl_LogicError_None)
   {
     sl_node_show_message(state->text, constant,
       "cannot add constant.",
@@ -486,7 +488,7 @@ validate_expression(struct ValidationState *state,
   const sl_ASTNode *type, *param_list;
   struct TheoremEnvironment env;
   size_t args_n, binds_n;
-  LogicError err;
+  sl_LogicError err;
   if (sl_node_get_type(expression) != sl_ASTNodeType_Expression)
   {
     sl_node_show_message(state->text, expression,
@@ -605,7 +607,7 @@ validate_expression(struct ValidationState *state,
   }
 
   err = add_expression(state->logic, proto);
-  if (err != LogicErrorNone)
+  if (err != sl_LogicError_None)
   {
     sl_node_show_message(state->text, expression,
       "cannot add expression to logic state.",
@@ -773,7 +775,7 @@ validate_axiom(struct ValidationState *state,
   size_t requirements_n, assumptions_n, inferences_n, args_n;
   struct TheoremEnvironment env;
   const sl_ASTNode *param_list;
-  LogicError err;
+  sl_LogicError err;
   if (sl_node_get_type(axiom) != sl_ASTNodeType_Axiom)
   {
     sl_node_show_message(state->text, axiom,
@@ -870,7 +872,7 @@ validate_axiom(struct ValidationState *state,
   proto.inferences[inferences_n] = NULL;
 
   err = add_axiom(state->logic, proto);
-  if (err != LogicErrorNone)
+  if (err != sl_LogicError_None)
   {
     sl_node_show_message(state->text, axiom,
       "cannot add axiom to logic state.",
@@ -991,7 +993,7 @@ validate_theorem(struct ValidationState *state,
   size_t requirements_n, assumptions_n, inferences_n, steps_n, args_n;
   struct TheoremEnvironment env;
   const sl_ASTNode *param_list;
-  LogicError err;
+  sl_LogicError err;
   if (sl_node_get_type(theorem) != sl_ASTNodeType_Theorem)
   {
     sl_node_show_message(state->text, theorem,
@@ -1101,7 +1103,7 @@ validate_theorem(struct ValidationState *state,
   proto.steps[steps_n] = NULL;
 
   err = add_theorem(state->logic, proto);
-  if (err != LogicErrorNone)
+  if (err != sl_LogicError_None)
   {
     sl_node_show_message(state->text, theorem,
       "cannot add theorem to logic state.",
@@ -1249,6 +1251,7 @@ load_file_and_validate(struct ValidationState *state, const char *path)
   sl_ASTNode *ast;
   char *old_prefix = state->prefix;
   char *absolute_path;
+  int err;
   if (path == NULL)
   {
     state->valid = FALSE;
@@ -1300,7 +1303,7 @@ load_file_and_validate(struct ValidationState *state, const char *path)
     return 0;
   }
 
-  ast = sl_parse_input(lex);
+  ast = sl_parse_input(lex, &err);
   if (ast == NULL)
   {
     /* TODO: report error. */
@@ -1309,6 +1312,8 @@ load_file_and_validate(struct ValidationState *state, const char *path)
     state->valid = FALSE;
     return 0;
   }
+  if (err != 0)
+    state->valid = FALSE;
   //sl_print_tree(ast);
 
   {

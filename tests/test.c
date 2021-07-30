@@ -6,9 +6,13 @@ int
 main(int argc, char **argv)
 {
   struct TestCase test_cases[] = {
+    test_types,
     test_values,
     test_require,
-    test_lexer
+
+    test_input,
+    test_lexer,
+    test_parser
   };
 
   struct TestState state;
@@ -34,12 +38,12 @@ init_test_state(struct TestState *state)
 void
 run_test_case(struct TestState *state, struct TestCase test_case)
 {
-  printf("Running test \"%s\"...\n", test_case.name);
+  printf("Running test \"%s\"...", test_case.name);
   state->error = test_case.run(state);
   if (state->error == 0)
-    printf("Good.\n");
+    printf(" Good.\n");
   else
-    printf("Failed.\n");
+    printf(" Failed.\n");
 }
 
 void

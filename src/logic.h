@@ -42,7 +42,6 @@ symbol_paths_equal(const sl_SymbolPath *a, const sl_SymbolPath *b);
 
 /* Functions for manipulating the logic state, which contains all the theorems,
    expressions, etc. that are handled. */
-struct sl_LogicState;
 typedef struct sl_LogicState sl_LogicState;
 
 sl_LogicState *
@@ -57,23 +56,25 @@ logic_state_path_occupied(const sl_LogicState *state, const sl_SymbolPath *path)
 sl_SymbolPath *
 find_first_occupied_path(const sl_LogicState *state, sl_SymbolPath **paths); /* NULL-terminated list. */
 
-enum LogicError
+enum sl_LogicError
 {
-  LogicErrorNone = 0,
-  LogicErrorSymbolAlreadyExists
+  sl_LogicError_None = 0,
+  sl_LogicError_SymbolAlreadyExists,
+  sl_LogicError_CannotBindNonAtomic
 };
-typedef enum LogicError LogicError;
+typedef enum sl_LogicError sl_LogicError;
 
 /* Types. */
-struct PrototypeType
+/*struct PrototypeType
 {
   sl_SymbolPath *type_path;
   bool atomic;
   bool binds;
-};
+};*/
 
-LogicError
-add_type(sl_LogicState *state, struct PrototypeType proto);
+sl_LogicError
+add_type(sl_LogicState *state, const sl_SymbolPath *type_path, bool atomic,
+  bool binds);
 
 struct Value;
 typedef struct Value Value;
@@ -96,7 +97,7 @@ struct PrototypeConstant
   struct PrototypeLatexFormat latex;
 };
 
-LogicError
+sl_LogicError
 add_constant(sl_LogicState *, struct PrototypeConstant proto);
 
 /* Expressions. */
@@ -111,14 +112,14 @@ struct PrototypeExpression
   sl_SymbolPath *expression_path;
   sl_SymbolPath *expression_type;
   struct PrototypeParameter **parameters; /* NULL-terminated list. */
-  Value *replace_with; /* Optional - use NULL for an atomic expression. */ 
+  Value *replace_with; /* Optional - use NULL for an atomic expression. */
   Value **bindings; /* NULL-terminated list. */
   struct PrototypeLatexFormat latex;
 };
 
 /* TODO: The return value should be a struct, or modify the PrototypeExpression,
    in order to propagate errors with full detail. */
-LogicError
+sl_LogicError
 add_expression(sl_LogicState *state, struct PrototypeExpression expression);
 
 /* Methods to manipulate values. */
@@ -172,12 +173,12 @@ struct PrototypeTheorem
 
 /* TODO: The return value should be a struct, or modify the PrototypeTheorem,
    in order to propagate errors with full detail. */
-LogicError
+sl_LogicError
 add_axiom(sl_LogicState *state, struct PrototypeTheorem axiom);
 
 /* TODO: The return value should be a struct, or modify the PrototypeTheorem,
    in order to propagate errors with full detail. */
-LogicError
+sl_LogicError
 add_theorem(sl_LogicState *state, struct PrototypeTheorem theorem);
 
 #endif

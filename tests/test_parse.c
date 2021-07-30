@@ -1,6 +1,6 @@
 #include "test_case.h"
 #include <parse.h>
-#include <stdio.h>
+#include <string.h>
 
 #define TEST_FILENAME "./tmp_lex_test.txt"
 
@@ -9,6 +9,14 @@ static const char *test_string =
 "latex \"this is a string literal!\";\n" \
 "latex \"this is a \\\"string literal\\\", \\nbut with escaped \\\'characters\\\'!\";\n" \
 "// this is a line comment!\n";
+
+static const char *lines[] = {
+  "identifier 1234 // /* */( ) {}< > [ ]\t+\t.\n",
+  "\t , ; :    %$\n",
+  "latex \"this is a string literal!\";\n",
+  "latex \"this is a \\\"string literal\\\", \\nbut with escaped \\\'characters\\\'!\";\n",
+  "// this is a line comment!\n"
+};
 
 struct TokenValue
 {
@@ -62,6 +70,59 @@ static const struct TokenValue tokens[] = {
   { sl_LexerTokenType_Unknown, 4, 25, NULL, FALSE, 0 },
   { sl_LexerTokenType_LineEnd, 4, 26, NULL, FALSE, 0 },
 };
+
+static int
+do_input_test(sl_TextInput *input)
+{
+  char buf[2048];
+  for (size_t i = 0; i < sizeof(lines) / sizeof(lines[0]); ++i)
+  {
+    if (sl_input_at_end(input))
+      return 1;
+    const char *line = lines[i];
+    char *result = sl_input_gets(buf, sizeof(buf), input);
+    if (result != buf)
+      return 1;
+    if (strcmp(buf, line) != 0)
+      return 1;
+  }
+  {
+    char *result = sl_input_gets(buf, sizeof(buf), input);
+    if (result != NULL)
+      return 1;
+  }
+  if (!sl_input_at_end(input))
+    return 1;
+  return 0;
+}
+
+static int
+run_test_input(struct TestState *state)
+{
+  int err;
+  FILE *f = fopen(TEST_FILENAME, "w");
+  fputs(test_string, f);
+  fclose(f);
+
+  {
+    sl_TextInput *input = sl_input_from_file(TEST_FILENAME);
+    err = do_input_test(input);
+    if (err != 0)
+      return err;
+    sl_input_free(input);
+  }
+
+  {
+    sl_TextInput *input = sl_input_from_string(test_string);
+    err = do_input_test(input);
+    if (err != 0)
+      return err;
+    sl_input_free(input);
+  }
+
+  remove(TEST_FILENAME);
+  return 0;
+}
 
 static int
 lex_test_string(sl_LexerState *state)
@@ -133,19 +194,6 @@ run_test_lexer(struct TestState *state)
   /* Write the string to a file in order to test reading from files. */
   sl_LexerState *lex_state;
   int err;
-  FILE *f = fopen(TEST_FILENAME, "w");
-  fputs(test_string, f);
-  fclose(f);
-
-  {
-    sl_TextInput *input = sl_input_from_file(TEST_FILENAME);
-    lex_state = sl_lexer_new_state_with_input(input);
-    err = lex_test_string(lex_state);
-    if (err != 0)
-      return err;
-    sl_lexer_free_state(lex_state);
-    sl_input_free(input);
-  }
 
   {
     sl_TextInput *input = sl_input_from_string(test_string);
@@ -157,8 +205,15 @@ run_test_lexer(struct TestState *state)
     sl_input_free(input);
   }
 
-  remove(TEST_FILENAME);
   return 0;
 }
 
+static int
+run_test_parser(struct TestState *state)
+{
+  return 0;
+}
+
+struct TestCase test_input = { "Input", &run_test_input };
 struct TestCase test_lexer = { "Lexer", &run_test_lexer };
+struct TestCase test_parser = { "Parser", &run_test_parser };
