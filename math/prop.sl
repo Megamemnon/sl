@@ -396,7 +396,7 @@ namespace propositional_calculus
   expr Formula
   and(phi : Formula, psi : Formula)
   {
-    /* as not(implies($phi, not($psi))); */
+    as not(implies($phi, not($psi)));
     latex "\\left( " + $phi + " \\land " + $psi + " \\right)";
   }
 
@@ -430,27 +430,18 @@ namespace propositional_calculus
     step modus_ponens($psi, and($phi, $psi));
   }
 
-  axiom
-  conjunction_elimination_left(phi : Formula, psi : Formula)
-  {
-    infer implies(and($phi, $psi), $phi);
-  }
-
   theorem
-  conjunction_elimination_left_meta(phi : Formula, psi : Formula)
-  {
-    assume and($phi, $psi);
-
-    infer $phi;
-
-    step conjunction_elimination_left($phi, $psi);
-    step modus_ponens(and($phi, $psi), $phi);
-  }
-
-  axiom
   conjunction_elimination_right(phi : Formula, psi : Formula)
   {
     infer implies(and($phi, $psi), $psi);
+
+    step simplification(not($psi), $phi);
+    step transposition_2(not($psi), implies($phi, not($psi)));
+    step modus_ponens(implies(not($psi), implies($phi, not($psi))),
+      implies(not(implies($phi, not($psi))), not(not($psi))));
+    step double_negation_left($psi);
+    step hypothetical_syllogism_meta(not(implies($phi, not($psi))),
+      not(not($psi)), $psi);
   }
 
   theorem
@@ -462,6 +453,47 @@ namespace propositional_calculus
 
     step conjunction_elimination_right($phi, $psi);
     step modus_ponens(and($phi, $psi), $psi);
+  }
+
+  theorem
+  conjunction_elimination_left(phi : Formula, psi : Formula)
+  {
+    infer implies(and($phi, $psi), $phi);
+
+    step double_negation_left($psi);
+    step hypothetical_syllogism_2(not(not($psi)), $psi, not($phi));
+    step modus_ponens(implies(not(not($psi)), $psi),
+      implies(implies($psi, not($phi)), implies(not(not($psi)), not($phi))));
+    step transposition_2(implies($psi, not($phi)),
+      implies(not(not($psi)), not($phi)));
+    step modus_ponens(implies(implies($psi, not($phi)),
+      implies(not(not($psi)), not($phi))),
+      implies(not(implies(not(not($psi)), not($phi))),
+      not(implies($psi, not($phi)))));
+    step transposition($phi, not($psi));
+    step transposition_2(implies(not(not($psi)), not($phi)),
+      implies($phi, not($psi)));
+    step modus_ponens(implies(implies(not(not($psi)), not($phi)),
+      implies($phi, not($psi))),
+      implies(not(implies($phi, not($psi))),
+      not(implies(not(not($psi)), not($phi)))));
+    step hypothetical_syllogism_meta(not(implies($phi, not($psi))),
+      not(implies(not(not($psi)), not($phi))),
+      not(implies($psi, not($phi))));
+    step conjunction_elimination_right($psi, $phi);
+    step hypothetical_syllogism_meta(and($phi, $psi),
+      and($psi, $phi), $phi);
+  }
+
+  theorem
+  conjunction_elimination_left_meta(phi : Formula, psi : Formula)
+  {
+    assume and($phi, $psi);
+
+    infer $phi;
+
+    step conjunction_elimination_left($phi, $psi);
+    step modus_ponens(and($phi, $psi), $phi);
   }
 
   theorem
@@ -533,14 +565,18 @@ namespace propositional_calculus
   expr Formula
   or(phi : Formula, psi : Formula)
   {
-    /* as implies(not($phi), $psi)); */
+    as implies(not($phi), $psi);
     latex "\\left( " + $phi + " \\lor " + $psi + " \\right)";
   }
 
-  axiom
+  theorem
   disjunction_introduction_left(phi : Formula, psi : Formula)
   {
     infer implies($phi, or($phi, $psi));
+
+    step simplification($phi, not($psi));
+    step transposition_3($psi, $phi);
+    step hypothetical_syllogism_meta($phi, or($psi, $phi), or($phi, $psi));
   }
 
   theorem
@@ -554,10 +590,12 @@ namespace propositional_calculus
     step modus_ponens($phi, or($phi, $psi));
   }
 
-  axiom
+  theorem
   disjunction_introduction_right(phi : Formula, psi : Formula)
   {
     infer implies($psi, or($phi, $psi));
+
+    step simplification($psi, not($phi));
   }
 
   theorem

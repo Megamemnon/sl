@@ -447,6 +447,57 @@ validate_constant(struct ValidationState *state, const sl_ASTNode *constant)
 }
 
 static int
+validate_constspace(struct ValidationState *state,
+  const sl_ASTNode *constspace)
+{
+  sl_SymbolPath *space_path;
+  sl_SymbolPath *type_path;
+  const sl_ASTNode *type;
+  sl_LogicError err;
+  if (sl_node_get_type(constspace) != sl_ASTNodeType_Constspace)
+  {
+    sl_node_show_message(state->text, constspace,
+      "expected a constspace declaration but found the wrong type of node.",
+      sl_MessageType_Error);
+    state->valid = FALSE;
+    return 0;
+  }
+
+  space_path = copy_symbol_path(state->prefix_path);
+  push_symbol_path(space_path, sl_node_get_name(constspace));
+
+  if (sl_node_get_child_count(constspace) != 1)
+  {
+    sl_node_show_message(state->text, constspace,
+      "a constspace node must have a single child, containing the path to the constspace's type",
+      sl_MessageType_Error);
+    state->valid = FALSE;
+    free_symbol_path(space_path);
+    return 0;
+  }
+  type = sl_node_get_child(constspace, 0);
+
+  {
+    sl_SymbolPath *local_path = extract_path(state, type);
+    type_path = lookup_symbol(state, local_path);
+    free_symbol_path(local_path);
+  }
+
+  err = add_constspace(state->logic, space_path, type_path);
+  if (err != sl_LogicError_None)
+  {
+    sl_node_show_message(state->text, constspace,
+      "cannot add constspace.",
+      sl_MessageType_Error);
+    state->valid = FALSE;
+  }
+
+  free_symbol_path(space_path);
+  free_symbol_path(type_path);
+  return 0;
+}
+
+static int
 extract_parameter(struct ValidationState *state,
   const sl_ASTNode *parameter, struct PrototypeParameter *dst)
 {
@@ -1203,6 +1254,10 @@ validate_namespace(struct ValidationState *state,
         err = validate_constant(state, child);
         PROPAGATE_ERROR(err);
         break;
+      case sl_ASTNodeType_Constspace:
+        err = validate_constspace(state, child);
+        PROPAGATE_ERROR(err);
+        break;
       case sl_ASTNodeType_Expression:
         err = validate_expression(state, child);
         PROPAGATE_ERROR(err);
@@ -1274,9 +1329,12 @@ load_file_and_validate(struct ValidationState *state, const char *path)
   else
   {
     asprintf(&absolute_path, "%s/%s", state->prefix, path);
-
   }
-  state->prefix = strdup(dirname(absolute_path));
+  {
+    char *absolute_path_copy = strdup(absolute_path);
+    state->prefix = strdup(dirname(absolute_path_copy));
+    free(absolute_path_copy);
+  }
 #endif
 
   for (size_t i = 0; i < ARR_LENGTH(state->files_opened); ++i)

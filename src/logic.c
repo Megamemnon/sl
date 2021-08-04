@@ -366,6 +366,13 @@ add_symbol(sl_LogicState *state, struct Symbol sym)
 }
 
 sl_LogicError
+sl_logic_make_namespace(sl_LogicState *state,
+  const sl_SymbolPath *namespace_path)
+{
+
+}
+
+sl_LogicError
 add_type(sl_LogicState *state, const sl_SymbolPath *type_path, bool atomic,
   bool binds)
 {
@@ -479,6 +486,13 @@ add_constant(sl_LogicState *state, struct PrototypeConstant proto)
   LOG_NORMAL(state->log_out, "Successfully added constant '%s'.\n", const_str);
   free(const_str);
 
+  return sl_LogicError_None;
+}
+
+sl_LogicError
+add_constspace(sl_LogicState *state, const sl_SymbolPath *space_path,
+  const sl_SymbolPath *type_path)
+{
   return sl_LogicError_None;
 }
 

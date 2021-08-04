@@ -273,6 +273,7 @@ struct ParserState
   sl_LexerState *input;
   sl_ASTNode *tree;
   sl_ASTNode *current;
+  bool panic;
 
   ARR(struct ParserStep) stack;
 };
@@ -405,7 +406,11 @@ consume_keyword(struct ParserState *state,
   union ParserStepUserData user_data)
 {
   if (!next_is_keyword(state, user_data.user_str))
+  {
+    sl_lexer_show_message_at_current_token(state->input,
+      "Expected a keyword.", sl_MessageType_Error);
     return 1;
+  }
   return advance(state);
 }
 
@@ -422,6 +427,8 @@ consume_name(struct ParserState *state, union ParserStepUserData user_data)
   }
   else
   {
+    sl_lexer_show_message_at_current_token(state->input,
+      "Expected an identifier.", sl_MessageType_Error);
     return 1;
   }
   return advance(state);
@@ -440,6 +447,8 @@ consume_symbol(struct ParserState *state, union ParserStepUserData user_data)
   }
   else
   {
+    sl_lexer_show_message_at_current_token(state->input,
+      "Expected a symbol.", sl_MessageType_Error);
     return 1;
   }
 }
@@ -719,6 +728,9 @@ parse_latex_segment(struct ParserState *state,
   }
   else
   {
+    sl_lexer_show_message_at_current_token(state->input,
+      "Expected a string or a variable in LaTeX expression.",
+      sl_MessageType_Error);
     return 1;
   }
 }
@@ -764,11 +776,22 @@ parse_expr_item(struct ParserState *state,
   parser_step_exec_t exec;
   exec = NULL;
   if (next_is_keyword(state, "bind"))
+  {
     exec = &parse_bind;
+  }
   else if (next_is_keyword(state, "latex"))
+  {
     exec = &parse_latex;
+  }
   else if (next_is_keyword(state, "as"))
+  {
     exec = &parse_as;
+  }
+  else if (!next_is_type(state, sl_LexerTokenType_ClosingBrace))
+  {
+    sl_lexer_show_message_at_current_token(state->input,
+      "Unknown expression in expression body.", sl_MessageType_Error);
+  }
   if (exec != NULL)
   {
     add_step_to_stack(state, &parse_expr_item, user_data_none());
@@ -811,15 +834,18 @@ parse_const_item(struct ParserState *state,
   parser_step_exec_t exec;
   exec = NULL;
   if (next_is_keyword(state, "latex"))
+  {
     exec = &parse_latex;
+  }
+  else if (!next_is_type(state, sl_LexerTokenType_ClosingBrace))
+  {
+    sl_lexer_show_message_at_current_token(state->input,
+      "Unknown expression in constant body.", sl_MessageType_Error);
+  }
   if (exec != NULL)
   {
     add_step_to_stack(state, &parse_expr_item, user_data_none());
     add_step_to_stack(state, exec, user_data_none());
-  }
-  else
-  {
-    return 1;
   }
   return 0;
 }
@@ -858,6 +884,23 @@ parse_const(struct ParserState *state,
   add_step_to_stack(state, &consume_keyword, user_data_str("const"));
   add_step_to_stack(state, &descend,
     user_data_node_type(sl_ASTNodeType_ConstantDeclaration));
+  return 0;
+}
+
+static int
+parse_constspace(struct ParserState *state,
+  union ParserStepUserData user_data)
+{
+  add_step_to_stack(state, &ascend, user_data_none());
+  add_step_to_stack(state, &consume_symbol,
+    user_data_token_type(sl_LexerTokenType_Semicolon));
+  add_step_to_stack(state, &parse_path,
+    user_data_none());
+  add_step_to_stack(state, &consume_name, user_data_none());
+  add_step_to_stack(state, &set_node_location, user_data_none());
+  add_step_to_stack(state, &consume_keyword, user_data_str("constspace"));
+  add_step_to_stack(state, &descend,
+    user_data_node_type(sl_ASTNodeType_Constspace));
   return 0;
 }
 
@@ -1054,13 +1097,26 @@ parse_axiom_item(struct ParserState *state,
   parser_step_exec_t exec;
   exec = NULL;
   if (next_is_keyword(state, "assume"))
+  {
     exec = &parse_assume;
+  }
   else if (next_is_keyword(state, "infer"))
+  {
     exec = &parse_infer;
+  }
   else if (next_is_keyword(state, "require"))
+  {
     exec = &parse_require;
+  }
   else if (next_is_keyword(state, "def"))
+  {
     exec = &parse_def;
+  }
+  else if (!next_is_type(state, sl_LexerTokenType_ClosingBrace))
+  {
+    sl_lexer_show_message_at_current_token(state->input,
+      "Unknown expression in axiom body.", sl_MessageType_Error);
+  }
   if (exec != NULL)
   {
     add_step_to_stack(state, &parse_axiom_item, user_data_none());
@@ -1130,15 +1186,30 @@ parse_theorem_item(struct ParserState *state,
   parser_step_exec_t exec;
   exec = NULL;
   if (next_is_keyword(state, "assume"))
+  {
     exec = &parse_assume;
+  }
   else if (next_is_keyword(state, "infer"))
+  {
     exec = &parse_infer;
+  }
   else if (next_is_keyword(state, "require"))
+  {
     exec = &parse_require;
+  }
   else if (next_is_keyword(state, "def"))
+  {
     exec = &parse_def;
+  }
   else if (next_is_keyword(state, "step"))
+  {
     exec = &parse_step;
+  }
+  else if (!next_is_type(state, sl_LexerTokenType_ClosingBrace))
+  {
+    sl_lexer_show_message_at_current_token(state->input,
+      "Unknown expression in theorem body.", sl_MessageType_Error);
+  }
   if (exec != NULL)
   {
     add_step_to_stack(state, &parse_theorem_item, user_data_none());
@@ -1181,21 +1252,47 @@ parse_namespace_item(struct ParserState *state,
   parser_step_exec_t exec;
   exec = NULL;
   if (next_is_keyword(state, "namespace"))
+  {
     exec = &parse_namespace;
+  }
   else if (next_is_keyword(state, "import"))
+  {
     exec = &parse_import;
+  }
   else if (next_is_keyword(state, "use"))
+  {
     exec = &parse_use;
+  }
   else if (next_is_keyword(state, "type"))
+  {
     exec = &parse_type;
+  }
   else if (next_is_keyword(state, "expr"))
+  {
     exec = &parse_expr;
+  }
   else if (next_is_keyword(state, "const"))
+  {
     exec = &parse_const;
+  }
+  else if (next_is_keyword(state, "constspace"))
+  {
+    exec = &parse_constspace;
+  }
   else if (next_is_keyword(state, "axiom"))
+  {
     exec = &parse_axiom;
+  }
   else if (next_is_keyword(state, "theorem"))
+  {
     exec = &parse_theorem;
+  }
+  else if (!next_is_type(state, sl_LexerTokenType_ClosingBrace) &&
+    !sl_lexer_done(state->input))
+  {
+    sl_lexer_show_message_at_current_token(state->input,
+      "Unknown expression in namespace body.", sl_MessageType_Error);
+  }
   if (exec != NULL)
   {
     add_step_to_stack(state, &parse_namespace_item, user_data_none());
@@ -1232,6 +1329,7 @@ sl_parse_input(sl_LexerState *input, int *error)
     return NULL;
   state.tree->type = sl_ASTNodeType_Namespace;
   state.current = state.tree;
+  state.panic = FALSE;
   ARR_INIT(state.stack);
 
   add_step_to_stack(&state, &parse_namespace_item, user_data_none());
@@ -1250,6 +1348,7 @@ sl_parse_input(sl_LexerState *input, int *error)
     sl_lexer_clear_unused(state.input); /* TODO: handle error. */
     if (err != 0)
     {
+      state.panic = TRUE;
       printf("Error parsing (%zu steps on stack)!\n",
         ARR_LENGTH(state.stack));
       break;

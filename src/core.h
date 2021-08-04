@@ -172,6 +172,7 @@ free_proof_environment(struct ProofEnvironment *env);
 
 enum SymbolType
 {
+  SymbolTypeNamespace,
   SymbolTypeType,
   SymbolTypeConstant,
   SymbolTypeExpression,
@@ -181,6 +182,7 @@ enum SymbolType
 struct Symbol
 {
   sl_SymbolPath *path;
+  uint32_t id;
   enum SymbolType type;
   void *object;
 };

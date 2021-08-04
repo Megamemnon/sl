@@ -248,6 +248,11 @@ sl_lexer_advance(sl_LexerState *state)
   return 0;
 }
 
+bool
+sl_lexer_done(sl_LexerState *state)
+{
+  return sl_input_at_end(state->input);
+}
 
 sl_LexerTokenType
 sl_lexer_get_current_token_type(const sl_LexerState *state)
@@ -321,6 +326,14 @@ uint32_t
 sl_lexer_get_current_token_column(const sl_LexerState *state)
 {
   return state->cursor_offset - state->token_length;
+}
+
+void
+sl_lexer_show_message_at_current_token(const sl_LexerState *state,
+  const char *message, sl_MessageType type)
+{
+  sl_input_show_message(state->input, sl_lexer_get_current_token_line(state),
+    sl_lexer_get_current_token_column(state), message, type);
 }
 
 struct sl_StringSlice

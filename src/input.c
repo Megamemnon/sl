@@ -116,7 +116,8 @@ struct StringInputData
 static void
 string_free(void *data)
 {
-
+  struct StringInputData *input = (struct StringInputData *)data;
+  free(input);
 }
 
 static bool

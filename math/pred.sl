@@ -15,6 +15,8 @@ namespace predicate_calculus
   type Term;
   type Variable atomic binds;
 
+  constspace _vars Variable;
+
   namespace vars
   {
     const a : Variable;

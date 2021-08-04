@@ -84,6 +84,9 @@ sl_lexer_free_state(sl_LexerState *state);
 int
 sl_lexer_advance(sl_LexerState *state);
 
+bool
+sl_lexer_done(sl_LexerState *state);
+
 sl_LexerTokenType
 sl_lexer_get_current_token_type(const sl_LexerState *state);
 
@@ -100,8 +103,8 @@ uint32_t
 sl_lexer_get_current_token_column(const sl_LexerState *state);
 
 void
-sl_lexer_show_message_at_current_token(size_t line,
-  size_t column, const char *message, sl_MessageType type);
+sl_lexer_show_message_at_current_token(const sl_LexerState *state,
+  const char *message, sl_MessageType type);
 
 struct sl_StringSlice
 sl_lexer_get_current_token_source(const sl_LexerState *state);
@@ -120,6 +123,7 @@ enum sl_ASTNodeType
   sl_ASTNodeType_AtomicFlag,
   sl_ASTNodeType_BindsFlag,
   sl_ASTNodeType_ConstantDeclaration,
+  sl_ASTNodeType_Constspace,
   sl_ASTNodeType_Expression,
   sl_ASTNodeType_ExpressionAs,
   sl_ASTNodeType_Axiom,

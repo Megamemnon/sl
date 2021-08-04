@@ -64,6 +64,11 @@ enum sl_LogicError
 };
 typedef enum sl_LogicError sl_LogicError;
 
+/* Namespaces. */
+sl_LogicError
+sl_logic_make_namespace(sl_LogicState *state,
+  const sl_SymbolPath *namespace_path);
+
 /* Types. */
 /*struct PrototypeType
 {
@@ -99,6 +104,10 @@ struct PrototypeConstant
 
 sl_LogicError
 add_constant(sl_LogicState *, struct PrototypeConstant proto);
+
+sl_LogicError
+add_constspace(sl_LogicState *state, const sl_SymbolPath *space_path,
+  const sl_SymbolPath *type_path);
 
 /* Expressions. */
 struct PrototypeParameter
