@@ -263,7 +263,7 @@ latex_render_value(const Value *v)
       if (v->constant->has_latex)
         return latex_render_constant(v->constant);
       else
-        return strdup(get_symbol_path_last_segment(v->constant->path));
+        return strdup(sl_get_symbol_path_last_segment(v->constant->path));
       break;
     case ValueTypeVariable:
       return latex_render_string(v->variable_name);

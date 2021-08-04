@@ -126,7 +126,7 @@ string_from_value(const Value *value)
   {
     case ValueTypeComposition:
       {
-        char *expr_str = string_from_symbol_path(value->expression->path);
+        char *expr_str = sl_string_from_symbol_path(value->expression->path);
         char *str;
         if (ARR_LENGTH(value->arguments) == 0)
         {
@@ -184,7 +184,7 @@ string_from_value(const Value *value)
       break;
     case ValueTypeConstant:
       {
-        char *const_str = string_from_symbol_path(value->constant->path);
+        char *const_str = sl_string_from_symbol_path(value->constant->path);
         size_t len = 1 + strlen(const_str);
         char *str = malloc(len);
         char *c = str;
@@ -367,8 +367,8 @@ instantiate_value(const Value *src, ArgumentArray args)
         if (!types_equal(arg->value->type, src->type))
         {
           char *value_str = string_from_value(src);
-          char *src_type = string_from_symbol_path(src->type->path);
-          char *arg_type = string_from_symbol_path(arg->value->type->path);
+          char *src_type = sl_string_from_symbol_path(src->type->path);
+          char *arg_type = sl_string_from_symbol_path(arg->value->type->path);
           /*LOG_NORMAL(state->log_out,
             "Cannot instantiate value '%s' of type '%s' because the variable has type '%s'.\n",
             value_str, src_type, arg_type);*/

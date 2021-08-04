@@ -8,37 +8,37 @@
 typedef struct sl_SymbolPath sl_SymbolPath;
 
 sl_SymbolPath *
-init_symbol_path();
+sl_new_symbol_path();
 
 sl_SymbolPath *
-copy_symbol_path(const sl_SymbolPath *src);
+sl_copy_symbol_path(const sl_SymbolPath *src);
 
 void
-free_symbol_path(sl_SymbolPath *path);
+sl_free_symbol_path(sl_SymbolPath *path);
 
 int
-length_of_symbol_path(const sl_SymbolPath *path);
+sl_get_symbol_path_length(const sl_SymbolPath *path);
 
 const char *
-get_symbol_path_segment(const sl_SymbolPath *path, size_t index);
+sl_get_symbol_path_segment(const sl_SymbolPath *path, size_t index);
 
 const char *
-get_symbol_path_last_segment(const sl_SymbolPath *path);
+sl_get_symbol_path_last_segment(const sl_SymbolPath *path);
 
 char *
-string_from_symbol_path(const sl_SymbolPath *path);
+sl_string_from_symbol_path(const sl_SymbolPath *path);
 
 void
-push_symbol_path(sl_SymbolPath *path, const char *segment);
+sl_push_symbol_path(sl_SymbolPath *path, const char *segment);
 
 void
-pop_symbol_path(sl_SymbolPath *path);
+sl_pop_symbol_path(sl_SymbolPath *path);
 
 void
-append_symbol_path(sl_SymbolPath *path, const sl_SymbolPath *to_append);
+sl_append_symbol_path(sl_SymbolPath *path, const sl_SymbolPath *to_append);
 
 bool
-symbol_paths_equal(const sl_SymbolPath *a, const sl_SymbolPath *b);
+sl_symbol_paths_equal(const sl_SymbolPath *a, const sl_SymbolPath *b);
 
 /* Functions for manipulating the logic state, which contains all the theorems,
    expressions, etc. that are handled. */

@@ -25,6 +25,8 @@ void
 cleanup_test_state(struct TestState *state);
 
 /* Test cases for core logic. */
+extern struct TestCase test_paths;
+extern struct TestCase test_namespaces;
 extern struct TestCase test_types;
 extern struct TestCase test_values;
 extern struct TestCase test_require;

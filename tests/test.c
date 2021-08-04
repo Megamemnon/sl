@@ -6,6 +6,8 @@ int
 main(int argc, char **argv)
 {
   struct TestCase test_cases[] = {
+    test_paths,
+    test_namespaces,
     test_types,
     test_values,
     test_require,
