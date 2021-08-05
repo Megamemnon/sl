@@ -45,10 +45,10 @@ sl_symbol_paths_equal(const sl_SymbolPath *a, const sl_SymbolPath *b);
 typedef struct sl_LogicState sl_LogicState;
 
 sl_LogicState *
-new_logic_state(FILE *log_out);
+sl_new_logic_state(FILE *log_out);
 
 void
-free_logic_state(sl_LogicState *state);
+sl_free_logic_state(sl_LogicState *state);
 
 bool
 logic_state_path_occupied(const sl_LogicState *state, const sl_SymbolPath *path);
@@ -59,7 +59,9 @@ find_first_occupied_path(const sl_LogicState *state, sl_SymbolPath **paths); /* 
 enum sl_LogicError
 {
   sl_LogicError_None = 0,
+  sl_LogicError_InvalidArgument,
   sl_LogicError_SymbolAlreadyExists,
+  sl_LogicError_NoParent,
   sl_LogicError_CannotBindNonAtomic
 };
 typedef enum sl_LogicError sl_LogicError;
@@ -70,16 +72,9 @@ sl_logic_make_namespace(sl_LogicState *state,
   const sl_SymbolPath *namespace_path);
 
 /* Types. */
-/*struct PrototypeType
-{
-  sl_SymbolPath *type_path;
-  bool atomic;
-  bool binds;
-};*/
-
 sl_LogicError
-add_type(sl_LogicState *state, const sl_SymbolPath *type_path, bool atomic,
-  bool binds);
+sl_logic_make_type(sl_LogicState *state, const sl_SymbolPath *type_path,
+  bool atomic, bool binds);
 
 struct Value;
 typedef struct Value Value;

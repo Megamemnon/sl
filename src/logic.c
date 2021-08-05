@@ -271,6 +271,8 @@ free_theorem(struct Theorem *thm)
 static void
 free_symbol(struct Symbol *sym)
 {
+  if (sym == NULL)
+    return;
   sl_free_symbol_path(sym->path);
   switch (sym->type)
   {
@@ -291,17 +293,24 @@ free_symbol(struct Symbol *sym)
 
 /* Core Logic */
 sl_LogicState *
-new_logic_state(FILE *log_out)
+sl_new_logic_state(FILE *log_out)
 {
-  sl_LogicState *state = malloc(sizeof(sl_LogicState));
+  sl_LogicState *state = SL_NEW(sl_LogicState);
+  if (state == NULL)
+    return NULL;
   ARR_INIT(state->symbol_table);
   state->next_id = 0;
   state->log_out = log_out;
+  {
+    sl_SymbolPath *base = sl_new_symbol_path();
+    sl_logic_make_namespace(state, base);
+    sl_free_symbol_path(base);
+  }
   return state;
 }
 
 void
-free_logic_state(sl_LogicState *state)
+sl_free_logic_state(sl_LogicState *state)
 {
   for (size_t i = 0; i < ARR_LENGTH(state->symbol_table); ++i)
   {
@@ -359,35 +368,71 @@ locate_symbol_with_type(sl_LogicState *state, const sl_SymbolPath *path,
   return sym;
 }
 
-static void
+static sl_LogicError
 add_symbol(sl_LogicState *state, struct Symbol sym)
 {
+  if (locate_symbol(state, sym.path) != NULL)
+  {
+    char *path_str;
+    path_str = sl_string_from_symbol_path(sym.path);
+    LOG_NORMAL(state->log_out,
+      "Cannot add symbol '%s' because the path is in use.\n", path_str);
+    free(path_str);
+    return sl_LogicError_SymbolAlreadyExists;
+  }
+  else if (sl_get_symbol_path_length(sym.path) > 0)
+  {
+    sl_SymbolPath *parent_path;
+    parent_path = sl_copy_symbol_path(sym.path);
+    sl_pop_symbol_path(parent_path);
+    if (locate_symbol_with_type(state, parent_path, SymbolTypeNamespace)
+      == NULL)
+    {
+      char *path_str, *parent_path_str;
+      path_str = sl_string_from_symbol_path(sym.path);
+      parent_path_str = sl_string_from_symbol_path(parent_path);
+      LOG_NORMAL(state->log_out,
+        "Cannot add symbol '%s' because there is no parent namespace '%s'.\n",
+        path_str, parent_path_str);
+      free(path_str);
+      free(parent_path_str);
+      sl_free_symbol_path(parent_path);
+      return sl_LogicError_NoParent;
+    }
+    sl_free_symbol_path(parent_path);
+  }
   ARR_APPEND(state->symbol_table, sym);
+  return sl_LogicError_None;
 }
 
 sl_LogicError
 sl_logic_make_namespace(sl_LogicState *state,
   const sl_SymbolPath *namespace_path)
 {
+  struct Symbol sym;
+  sl_LogicError err;
+  sym.path = sl_copy_symbol_path(namespace_path);
+  sym.id = state->next_id++;
+  sym.type = SymbolTypeNamespace;
+  sym.object = NULL;
 
+  err = add_symbol(state, sym);
+  if (err != sl_LogicError_None)
+  {
+    sl_free_symbol_path(sym.path);
+    return err;
+  }
+  return sl_LogicError_None;
 }
 
 sl_LogicError
-add_type(sl_LogicState *state, const sl_SymbolPath *type_path, bool atomic,
-  bool binds)
+sl_logic_make_type(sl_LogicState *state, const sl_SymbolPath *type_path,
+  bool atomic, bool binds)
 {
   struct Type *t;
   struct Symbol sym;
-  if (locate_symbol(state, type_path) != NULL)
-  {
-    char *type_str;
-    type_str = sl_string_from_symbol_path(type_path);
-    LOG_NORMAL(state->log_out,
-      "Cannot add type '%s' because the path is in use.\n", type_str);
-    free(type_str);
-    return sl_LogicError_SymbolAlreadyExists;
-  }
-  else if (!atomic && binds)
+  sl_LogicError err;
+  if (!atomic && binds)
   {
     char *type_str;
     type_str = sl_string_from_symbol_path(type_path);
@@ -397,25 +442,29 @@ add_type(sl_LogicState *state, const sl_SymbolPath *type_path, bool atomic,
     return sl_LogicError_CannotBindNonAtomic;
   }
 
-  t = malloc(sizeof(struct Type));
-  t->id = state->next_id;
+  t = SL_NEW(struct Type);
+  t->id = state->next_id++;
   t->atomic = atomic;
   t->binds = binds;
   sym.path = sl_copy_symbol_path(type_path);
   sym.type = SymbolTypeType;
   sym.object = t;
   t->path = sym.path;
-  ++state->next_id;
 
-  add_symbol(state, sym);
-
+  err = add_symbol(state, sym);
+  if (err != sl_LogicError_None)
+  {
+    free(t);
+    sl_free_symbol_path(sym.path);
+    return err;
+  }
+  else
   {
     char *type_str;
     type_str = sl_string_from_symbol_path(type_path);
     LOG_NORMAL(state->log_out, "Successfully added type '%s'.\n", type_str);
     free(type_str);
   }
-
   return sl_LogicError_None;
 }
 

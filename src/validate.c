@@ -138,7 +138,7 @@ validate_type(struct ValidationState *state,
       binds = TRUE;
   }
 
-  err = add_type(state->logic, type_path, atomic, binds);
+  err = sl_logic_make_type(state->logic, type_path, atomic, binds);
   if (err != sl_LogicError_None)
   {
     sl_node_show_message(state->text, type,
