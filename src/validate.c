@@ -385,10 +385,11 @@ extract_latex_format(struct ValidationState *state,
 static int
 validate_constant(struct ValidationState *state, const sl_ASTNode *constant)
 {
-  struct PrototypeConstant proto;
   const sl_ASTNode *type;
   struct TheoremEnvironment env;
   sl_LogicError err;
+  sl_SymbolPath *constant_path, *type_path;
+  char *latex;
   if (sl_node_get_type(constant) != sl_ASTNodeType_ConstantDeclaration)
   {
     sl_node_show_message(state->text, constant,
@@ -398,8 +399,8 @@ validate_constant(struct ValidationState *state, const sl_ASTNode *constant)
     return 0;
   }
 
-  proto.constant_path = sl_copy_symbol_path(state->prefix_path);
-  sl_push_symbol_path(proto.constant_path, sl_node_get_name(constant));
+  constant_path = sl_copy_symbol_path(state->prefix_path);
+  sl_push_symbol_path(constant_path, sl_node_get_name(constant));
 
   if (sl_node_get_child_count(constant) < 1)
   {
@@ -407,19 +408,20 @@ validate_constant(struct ValidationState *state, const sl_ASTNode *constant)
       "a constant node must have at least a single child, containing the path to the constant's type",
       sl_MessageType_Error);
     state->valid = FALSE;
-    free(proto.constant_path);
+    free(constant_path);
     return 0;
   }
   type = sl_node_get_child(constant, 0);
 
   {
     sl_SymbolPath *local_path = extract_path(state, type);
-    proto.type_path = lookup_symbol(state, local_path);
+    type_path = lookup_symbol(state, local_path);
     sl_free_symbol_path(local_path);
   }
 
   /* Look for latex. */
-  proto.latex.segments = NULL;
+  latex = NULL;
+  /*proto.latex.segments = NULL;
   init_theorem_environment(&env);
   for (size_t i = 0; i < sl_node_get_child_count(constant); ++i)
   {
@@ -430,9 +432,10 @@ validate_constant(struct ValidationState *state, const sl_ASTNode *constant)
       PROPAGATE_ERROR(err);
     }
   }
-  free_theorem_environment(&env);
+  free_theorem_environment(&env);*/
 
-  err = add_constant(state->logic, proto);
+  err = sl_logic_make_constant(state->logic, constant_path, type_path,
+    latex);
   if (err != sl_LogicError_None)
   {
     sl_node_show_message(state->text, constant,
@@ -441,8 +444,8 @@ validate_constant(struct ValidationState *state, const sl_ASTNode *constant)
     state->valid = FALSE;
   }
 
-  sl_free_symbol_path(proto.constant_path);
-  sl_free_symbol_path(proto.type_path);
+  sl_free_symbol_path(constant_path);
+  sl_free_symbol_path(type_path);
   return 0;
 }
 
@@ -1207,6 +1210,7 @@ static int
 validate_namespace(struct ValidationState *state,
   const sl_ASTNode *namespace)
 {
+  sl_LogicError err;
   if (sl_node_get_type(namespace) != sl_ASTNodeType_Namespace)
   {
     sl_node_show_message(state->text, namespace,
@@ -1217,7 +1221,25 @@ validate_namespace(struct ValidationState *state,
   }
 
   if (sl_node_get_name(namespace) != NULL)
+  {
     sl_push_symbol_path(state->prefix_path, sl_node_get_name(namespace));
+    {
+      /* Try to add to an existing namespace with the same name. Otherwise,
+         we have an issue. */
+      const sl_LogicSymbol *sym = sl_logic_get_symbol(state->logic,
+        state->prefix_path);
+      if (sym == NULL)
+      {
+        err = sl_logic_make_namespace(state->logic, state->prefix_path);
+        if (err != sl_LogicError_None)
+          return 0;
+      }
+      else if (sl_get_symbol_type(sym) != sl_LogicSymbolType_Namespace)
+      {
+        return 0;
+      }
+    }
+  }
 
   sl_SymbolPath *search_path = sl_copy_symbol_path(state->prefix_path);
   ARR_APPEND(state->search_paths, search_path);

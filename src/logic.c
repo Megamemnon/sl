@@ -269,22 +269,22 @@ free_theorem(struct Theorem *thm)
 
 /* Symbols */
 static void
-free_symbol(struct Symbol *sym)
+free_symbol(sl_LogicSymbol *sym)
 {
   if (sym == NULL)
     return;
   sl_free_symbol_path(sym->path);
   switch (sym->type)
   {
-    case SymbolTypeType:
+    case sl_LogicSymbolType_Type:
       free_type((struct Type *)sym->object);
       break;
-    case SymbolTypeConstant:
+    case sl_LogicSymbolType_Constant:
       break;
-    case SymbolTypeExpression:
+    case sl_LogicSymbolType_Expression:
       free_expression((struct Expression *)sym->object);
       break;
-    case SymbolTypeTheorem:
+    case sl_LogicSymbolType_Theorem:
       free_theorem((struct Theorem *)sym->object);
       break;
   }
@@ -314,11 +314,30 @@ sl_free_logic_state(sl_LogicState *state)
 {
   for (size_t i = 0; i < ARR_LENGTH(state->symbol_table); ++i)
   {
-    struct Symbol *sym = ARR_GET(state->symbol_table, i);
+    sl_LogicSymbol *sym = ARR_GET(state->symbol_table, i);
     free_symbol(sym);
   }
   ARR_FREE(state->symbol_table);
   free(state);
+}
+
+sl_LogicSymbol *
+sl_logic_get_symbol(sl_LogicState *state, const sl_SymbolPath *path)
+{
+  /* TODO: Optimize. */
+  for (size_t i = 0; i < ARR_LENGTH(state->symbol_table); ++i)
+  {
+    sl_LogicSymbol *sym = ARR_GET(state->symbol_table, i);
+    if (sl_symbol_paths_equal(sym->path, path))
+      return sym;
+  }
+  return NULL;
+}
+
+sl_LogicSymbolType
+sl_get_symbol_type(const sl_LogicSymbol *symbol)
+{
+  return symbol->type;
 }
 
 bool
@@ -326,7 +345,7 @@ logic_state_path_occupied(const sl_LogicState *state, const sl_SymbolPath *path)
 {
   for (size_t i = 0; i < ARR_LENGTH(state->symbol_table); ++i)
   {
-    struct Symbol *sym = ARR_GET(state->symbol_table, i);
+    sl_LogicSymbol *sym = ARR_GET(state->symbol_table, i);
     if (sl_symbol_paths_equal(sym->path, path))
       return TRUE;
   }
@@ -344,23 +363,23 @@ find_first_occupied_path(const sl_LogicState *state, sl_SymbolPath **paths)
   return NULL;
 }
 
-static struct Symbol *
+static sl_LogicSymbol *
 locate_symbol(sl_LogicState *state, const sl_SymbolPath *path)
 {
   for (size_t i = 0; i < ARR_LENGTH(state->symbol_table); ++i)
   {
-    struct Symbol *sym = ARR_GET(state->symbol_table, i);
+    sl_LogicSymbol *sym = ARR_GET(state->symbol_table, i);
     if (sl_symbol_paths_equal(sym->path, path))
       return sym;
   }
   return NULL;
 }
 
-static struct Symbol *
+static sl_LogicSymbol *
 locate_symbol_with_type(sl_LogicState *state, const sl_SymbolPath *path,
-  enum SymbolType type)
+  sl_LogicSymbolType type)
 {
-  struct Symbol *sym = locate_symbol(state, path);
+  sl_LogicSymbol *sym = locate_symbol(state, path);
   if (sym == NULL)
     return NULL;
   if (sym->type != type)
@@ -369,7 +388,7 @@ locate_symbol_with_type(sl_LogicState *state, const sl_SymbolPath *path,
 }
 
 static sl_LogicError
-add_symbol(sl_LogicState *state, struct Symbol sym)
+add_symbol(sl_LogicState *state, sl_LogicSymbol sym)
 {
   if (locate_symbol(state, sym.path) != NULL)
   {
@@ -385,8 +404,8 @@ add_symbol(sl_LogicState *state, struct Symbol sym)
     sl_SymbolPath *parent_path;
     parent_path = sl_copy_symbol_path(sym.path);
     sl_pop_symbol_path(parent_path);
-    if (locate_symbol_with_type(state, parent_path, SymbolTypeNamespace)
-      == NULL)
+    if (locate_symbol_with_type(state, parent_path,
+      sl_LogicSymbolType_Namespace) == NULL)
     {
       char *path_str, *parent_path_str;
       path_str = sl_string_from_symbol_path(sym.path);
@@ -409,11 +428,11 @@ sl_LogicError
 sl_logic_make_namespace(sl_LogicState *state,
   const sl_SymbolPath *namespace_path)
 {
-  struct Symbol sym;
+  sl_LogicSymbol sym;
   sl_LogicError err;
   sym.path = sl_copy_symbol_path(namespace_path);
   sym.id = state->next_id++;
-  sym.type = SymbolTypeNamespace;
+  sym.type = sl_LogicSymbolType_Namespace;
   sym.object = NULL;
 
   err = add_symbol(state, sym);
@@ -430,7 +449,7 @@ sl_logic_make_type(sl_LogicState *state, const sl_SymbolPath *type_path,
   bool atomic, bool binds)
 {
   struct Type *t;
-  struct Symbol sym;
+  sl_LogicSymbol sym;
   sl_LogicError err;
   if (!atomic && binds)
   {
@@ -447,7 +466,7 @@ sl_logic_make_type(sl_LogicState *state, const sl_SymbolPath *type_path,
   t->atomic = atomic;
   t->binds = binds;
   sym.path = sl_copy_symbol_path(type_path);
-  sym.type = SymbolTypeType;
+  sym.type = sl_LogicSymbolType_Type;
   sym.object = t;
   t->path = sym.path;
 
@@ -475,66 +494,56 @@ types_equal(const struct Type *a, const struct Type *b)
 }
 
 sl_LogicError
-add_constant(sl_LogicState *state, struct PrototypeConstant proto)
+sl_logic_make_constant(sl_LogicState *state, const sl_SymbolPath *constant_path,
+  const sl_SymbolPath *type_path, const char *latex_format)
 {
-  if (locate_symbol(state, proto.constant_path) != NULL)
-  {
-    char *const_str = sl_string_from_symbol_path(proto.constant_path);
-    LOG_NORMAL(state->log_out,
-      "Cannot add type '%s' because the path is in use.\n", const_str);
-    free(const_str);
-    return sl_LogicError_SymbolAlreadyExists;
-  }
-
-  struct Symbol *type_symbol = locate_symbol_with_type(state,
-    proto.type_path, SymbolTypeType);
+  sl_LogicSymbol *type_symbol;
+  struct Constant *c;
+  sl_LogicSymbol sym;
+  sl_LogicError err;
+  type_symbol = locate_symbol_with_type(state, type_path,
+    sl_LogicSymbolType_Type);
   if (type_symbol == NULL)
   {
-    char *const_str = sl_string_from_symbol_path(proto.constant_path);
-    char *type_str = sl_string_from_symbol_path(proto.type_path);
+    char *const_str, *type_str;
+    const_str = sl_string_from_symbol_path(constant_path);
+    type_str = sl_string_from_symbol_path(type_path);
     LOG_NORMAL(state->log_out,
-      "Cannot add expression '%s' because there is no such type '%s'.\n",
+      "Cannot add constant '%s' because there is no such type '%s'.\n",
       const_str, type_str);
     free(const_str);
     free(type_str);
-    return sl_LogicError_SymbolAlreadyExists;
+    return sl_LogicError_NoType;
   }
 
-  struct Constant *c = malloc(sizeof(struct Constant));
-  c->id = state->next_id;
-  ++state->next_id;
+  c = SL_NEW(struct Constant);
+  c->id = state->next_id++;
   c->type = (struct Type *)type_symbol->object;
-  if (proto.latex.segments != NULL)
-  {
-    c->has_latex = TRUE;
-    ARR_INIT(c->latex.segments);
-    for (struct PrototypeLatexFormatSegment **seg = proto.latex.segments;
-      *seg != NULL; ++seg)
-    {
-      struct LatexFormatSegment new_seg;
-      new_seg.is_variable = (*seg)->is_variable;
-      new_seg.string = strdup((*seg)->string);
-      ARR_APPEND(c->latex.segments, new_seg);
-    }
-  }
+  if (latex_format != NULL)
+    c->latex_format = strdup(latex_format);
   else
-  {
-    c->has_latex = FALSE;
-  }
-
-  struct Symbol sym;
-  sym.path = sl_copy_symbol_path(proto.constant_path);
-  sym.type = SymbolTypeConstant;
+    c->latex_format = NULL;
+  sym.path = sl_copy_symbol_path(constant_path);
+  sym.type = sl_LogicSymbolType_Constant;
   sym.object = c;
 
   c->path = sym.path;
 
-  add_symbol(state, sym);
-
-  char *const_str = sl_string_from_symbol_path(sym.path);
-  LOG_NORMAL(state->log_out, "Successfully added constant '%s'.\n", const_str);
-  free(const_str);
-
+  err = add_symbol(state, sym);
+  if (err != sl_LogicError_None)
+  {
+    free(c);
+    sl_free_symbol_path(sym.path);
+    return err;
+  }
+  else
+  {
+    char *const_str;
+    const_str = sl_string_from_symbol_path(sym.path);
+    LOG_NORMAL(state->log_out, "Successfully added constant '%s'.\n",
+      const_str);
+    free(const_str);
+  }
   return sl_LogicError_None;
 }
 
@@ -561,8 +570,8 @@ add_expression(sl_LogicState *state, struct PrototypeExpression proto)
   e->id = state->next_id;
   ++state->next_id;
 
-  struct Symbol *type_symbol = locate_symbol_with_type(state,
-    proto.expression_type, SymbolTypeType);
+  sl_LogicSymbol *type_symbol = locate_symbol_with_type(state,
+    proto.expression_type, sl_LogicSymbolType_Type);
   if (type_symbol == NULL)
   {
     char *expr_str = sl_string_from_symbol_path(proto.expression_path);
@@ -614,7 +623,7 @@ add_expression(sl_LogicState *state, struct PrototypeExpression proto)
   {
     struct Parameter p;
     type_symbol = locate_symbol_with_type(state,
-      (*param)->type, SymbolTypeType);
+      (*param)->type, sl_LogicSymbolType_Type);
     if (type_symbol == NULL)
     {
       char *expr_str = sl_string_from_symbol_path(proto.expression_path);
@@ -647,9 +656,9 @@ add_expression(sl_LogicState *state, struct PrototypeExpression proto)
   if (proto.replace_with != NULL)
     e->replace_with = copy_value(proto.replace_with);
 
-  struct Symbol sym;
+  sl_LogicSymbol sym;
   sym.path = sl_copy_symbol_path(proto.expression_path);
-  sym.type = SymbolTypeExpression;
+  sym.type = sl_LogicSymbolType_Expression;
   sym.object = e;
 
   e->path = sym.path;
@@ -687,8 +696,8 @@ new_variable_value(sl_LogicState *state, const char *name, const sl_SymbolPath *
   value->variable_name = strdup(name);
   value->value_type = ValueTypeVariable;
   value->parent = NULL;
-  struct Symbol *type_symbol = locate_symbol_with_type(state,
-    type, SymbolTypeType);
+  sl_LogicSymbol *type_symbol = locate_symbol_with_type(state,
+    type, sl_LogicSymbolType_Type);
   if (type_symbol == NULL)
   {
     char *type_str = sl_string_from_symbol_path(type);
@@ -711,8 +720,8 @@ new_constant_value(sl_LogicState *state, const sl_SymbolPath *constant)
 
   value->value_type = ValueTypeConstant;
   value->parent = NULL;
-  struct Symbol *constant_symbol = locate_symbol_with_type(state,
-    constant, SymbolTypeConstant);
+  sl_LogicSymbol *constant_symbol = locate_symbol_with_type(state,
+    constant, sl_LogicSymbolType_Constant);
   if (constant_symbol == NULL)
   {
     char *const_str = sl_string_from_symbol_path(constant);
@@ -736,8 +745,8 @@ new_composition_value(sl_LogicState *state, const sl_SymbolPath *expr_path,
 
   value->value_type = ValueTypeComposition;
   value->parent = NULL;
-  struct Symbol *expr_symbol = locate_symbol_with_type(state,
-    expr_path, SymbolTypeExpression);
+  sl_LogicSymbol *expr_symbol = locate_symbol_with_type(state,
+    expr_path, sl_LogicSymbolType_Expression);
   if (expr_symbol == NULL)
   {
     char *expr_str = sl_string_from_symbol_path(expr_path);
@@ -820,8 +829,8 @@ add_axiom(sl_LogicState *state, struct PrototypeTheorem proto)
     *param != NULL; ++param)
   {
     struct Parameter p;
-    const struct Symbol *type_symbol = locate_symbol_with_type(state,
-      (*param)->type, SymbolTypeType);
+    const sl_LogicSymbol *type_symbol = locate_symbol_with_type(state,
+      (*param)->type, sl_LogicSymbolType_Type);
     if (type_symbol == NULL)
     {
       char *axiom_str = sl_string_from_symbol_path(proto.theorem_path);
@@ -866,9 +875,9 @@ add_axiom(sl_LogicState *state, struct PrototypeTheorem proto)
     ARR_APPEND(a->inferences, copy_value(*infer));
   }
 
-  struct Symbol sym;
+  sl_LogicSymbol sym;
   sym.path = sl_copy_symbol_path(proto.theorem_path);
-  sym.type = SymbolTypeTheorem;
+  sym.type = sl_LogicSymbolType_Theorem;
   sym.object = a;
 
   a->path = sym.path;
@@ -1040,8 +1049,8 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
     *param != NULL; ++param)
   {
     struct Parameter p;
-    const struct Symbol *type_symbol = locate_symbol_with_type(state,
-      (*param)->type, SymbolTypeType);
+    const sl_LogicSymbol *type_symbol = locate_symbol_with_type(state,
+      (*param)->type, sl_LogicSymbolType_Type);
     if (type_symbol == NULL)
     {
       char *axiom_str = sl_string_from_symbol_path(proto.theorem_path);
@@ -1099,8 +1108,8 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
   {
     struct TheoremReference ref;
     ARR_INIT(ref.arguments);
-    const struct Symbol *thm_symbol = locate_symbol_with_type(state,
-      (*step)->theorem_path, SymbolTypeTheorem);
+    const sl_LogicSymbol *thm_symbol = locate_symbol_with_type(state,
+      (*step)->theorem_path, sl_LogicSymbolType_Theorem);
     if (thm_symbol == NULL)
     {
       LOG_NORMAL(state->log_out,
@@ -1176,9 +1185,9 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
   }
 
   /* Free all the statements that we've proven. */
-  struct Symbol sym;
+  sl_LogicSymbol sym;
   sym.path = sl_copy_symbol_path(proto.theorem_path);
-  sym.type = SymbolTypeTheorem;
+  sym.type = sl_LogicSymbolType_Theorem;
   sym.object = a;
 
   a->path = sym.path;

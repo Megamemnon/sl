@@ -54,9 +54,7 @@ struct Constant
   uint32_t id;
   const sl_SymbolPath *path;
   const struct Type *type;
-
-  bool has_latex;
-  struct LatexFormat latex;
+  char *latex_format;
 };
 
 struct Expression
@@ -170,26 +168,17 @@ new_proof_environment();
 void
 free_proof_environment(struct ProofEnvironment *env);
 
-enum SymbolType
-{
-  SymbolTypeNamespace,
-  SymbolTypeType,
-  SymbolTypeConstant,
-  SymbolTypeExpression,
-  SymbolTypeTheorem
-};
-
-struct Symbol
+struct sl_LogicSymbol
 {
   sl_SymbolPath *path;
   uint32_t id;
-  enum SymbolType type;
+  sl_LogicSymbolType type;
   void *object;
 };
 
 struct sl_LogicState
 {
-  ARR(struct Symbol) symbol_table;
+  ARR(sl_LogicSymbol) symbol_table;
   uint32_t next_id;
 
   FILE *log_out;

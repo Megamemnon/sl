@@ -152,7 +152,7 @@ html_render_constant(const struct Constant *constant, FILE *f)
     free(const_type);
     free(type_label);
   }
-  if (constant->has_latex)
+  if (constant->latex_format != NULL)
   {
     char *latex = latex_render_constant(constant);
     char *latex_label;
@@ -343,14 +343,14 @@ html_render_index_page(const sl_LogicState *state, const char *filepath)
   /* Print out all the symbols. */
   for (size_t i = 0; i < ARR_LENGTH(state->symbol_table); ++i)
   {
-    const struct Symbol *sym = ARR_GET(state->symbol_table, i);
-    if (sym->type == SymbolTypeType)
+    const sl_LogicSymbol *sym = ARR_GET(state->symbol_table, i);
+    if (sym->type == sl_LogicSymbolType_Type)
       html_render_type((struct Type *)sym->object, f);
-    else if (sym->type == SymbolTypeConstant)
+    else if (sym->type == sl_LogicSymbolType_Constant)
       html_render_constant((struct Constant *)sym->object, f);
-    else if (sym->type == SymbolTypeExpression)
+    else if (sym->type == sl_LogicSymbolType_Expression)
       html_render_expression((struct Expression *)sym->object, f);
-    else if (sym->type == SymbolTypeTheorem)
+    else if (sym->type == sl_LogicSymbolType_Theorem)
       html_render_theorem((struct Theorem *)sym->object, f);
   }
 
@@ -547,9 +547,9 @@ render_html(const sl_LogicState *state, const char *output_dir)
   }
   for (size_t i = 0; i < ARR_LENGTH(state->symbol_table); ++i)
   {
-    const struct Symbol *sym = ARR_GET(state->symbol_table, i);
+    const sl_LogicSymbol *sym = ARR_GET(state->symbol_table, i);
     char page_path[1024];
-    if (sym->type == SymbolTypeTheorem)
+    if (sym->type == sl_LogicSymbolType_Theorem)
     {
       const struct Theorem *thm = (struct Theorem *)sym->object;
       snprintf(page_path, 1024, "%s/symbols/theorem-%zu.html",

@@ -62,9 +62,30 @@ enum sl_LogicError
   sl_LogicError_InvalidArgument,
   sl_LogicError_SymbolAlreadyExists,
   sl_LogicError_NoParent,
-  sl_LogicError_CannotBindNonAtomic
+  sl_LogicError_CannotBindNonAtomic,
+  sl_LogicError_NoType
 };
 typedef enum sl_LogicError sl_LogicError;
+
+/* Symbols. */
+typedef struct sl_LogicSymbol sl_LogicSymbol;
+
+enum sl_LogicSymbolType
+{
+  sl_LogicSymbolType_Namespace,
+  sl_LogicSymbolType_Type,
+  sl_LogicSymbolType_Constant,
+  sl_LogicSymbolType_Constspace,
+  sl_LogicSymbolType_Expression,
+  sl_LogicSymbolType_Theorem
+};
+typedef enum sl_LogicSymbolType sl_LogicSymbolType;
+
+sl_LogicSymbol *
+sl_logic_get_symbol(sl_LogicState *state, const sl_SymbolPath *path);
+
+sl_LogicSymbolType
+sl_get_symbol_type(const sl_LogicSymbol *symbol);
 
 /* Namespaces. */
 sl_LogicError
@@ -75,6 +96,11 @@ sl_logic_make_namespace(sl_LogicState *state,
 sl_LogicError
 sl_logic_make_type(sl_LogicState *state, const sl_SymbolPath *type_path,
   bool atomic, bool binds);
+
+/* Constants. */
+sl_LogicError
+sl_logic_make_constant(sl_LogicState *state, const sl_SymbolPath *constant_path,
+  const sl_SymbolPath *type_path, const char *latex_format);
 
 struct Value;
 typedef struct Value Value;
@@ -89,16 +115,6 @@ struct PrototypeLatexFormat
 {
   struct PrototypeLatexFormatSegment **segments; /* NULL-terminated list. */
 };
-
-struct PrototypeConstant
-{
-  sl_SymbolPath *constant_path;
-  sl_SymbolPath *type_path;
-  struct PrototypeLatexFormat latex;
-};
-
-sl_LogicError
-add_constant(sl_LogicState *, struct PrototypeConstant proto);
 
 sl_LogicError
 add_constspace(sl_LogicState *state, const sl_SymbolPath *space_path,

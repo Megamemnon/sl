@@ -206,26 +206,9 @@ char *
 latex_render_constant(const struct Constant *c)
 {
   char *result;
-  ARR(char *) segments;
-  ARR_INIT(segments);
-  size_t len = 1;
-  for (size_t i = 0; i < ARR_LENGTH(c->latex.segments); ++i)
-  {
-    const struct LatexFormatSegment *seg = ARR_GET(c->latex.segments, i);
-    char *str = latex_render_string(seg->string);
-    ARR_APPEND(segments, str);
-    len += strlen(str);
-  }
-  result = malloc(len);
-  char *result_ptr = result;
-  for (size_t i = 0; i < ARR_LENGTH(segments); ++i)
-  {
-    char *seg = *ARR_GET(segments, i);
-    strcpy(result_ptr, seg);
-    result_ptr += strlen(seg);
-  }
-  *result_ptr = '\0';
-  return result;
+  if (c->latex_format == NULL)
+    return NULL;
+  return latex_render_string(c->latex_format);
 }
 
 char *
@@ -260,7 +243,7 @@ latex_render_value(const Value *v)
   switch (v->value_type)
   {
     case ValueTypeConstant:
-      if (v->constant->has_latex)
+      if (v->constant->latex_format != NULL)
         return latex_render_constant(v->constant);
       else
         return strdup(sl_get_symbol_path_last_segment(v->constant->path));

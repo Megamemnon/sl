@@ -187,6 +187,49 @@ run_test_types(struct TestState *state)
 }
 
 static int
+run_test_constants(struct TestState *state)
+{
+  sl_LogicState *logic;
+  sl_SymbolPath *type_path;
+  logic = sl_new_logic_state(NULL);
+
+  type_path = sl_new_symbol_path();
+  sl_push_symbol_path(type_path, "type_A");
+  if (sl_logic_make_type(logic, type_path, FALSE, FALSE) != sl_LogicError_None)
+    return 1;
+
+  {
+    sl_SymbolPath *path = sl_new_symbol_path();
+    sl_push_symbol_path(path, "c1");
+    if (sl_logic_make_constant(logic, path, type_path, NULL)
+      != sl_LogicError_None)
+      return 1;
+    if (sl_logic_make_constant(logic, path, type_path, NULL)
+      != sl_LogicError_SymbolAlreadyExists)
+      return 1;
+    sl_free_symbol_path(path);
+  }
+
+  {
+    sl_SymbolPath *type_path2;
+    sl_SymbolPath *path;
+    type_path2 = sl_new_symbol_path();
+    sl_push_symbol_path(type_path2, "fake_type");
+    path = sl_new_symbol_path();
+    sl_push_symbol_path(path, "c2");
+    if (sl_logic_make_constant(logic, path, type_path2, NULL)
+      != sl_LogicError_NoType)
+      return 1;
+    sl_free_symbol_path(type_path2);
+    sl_free_symbol_path(path);
+  }
+
+  sl_free_symbol_path(type_path);
+  sl_free_logic_state(logic);
+  return 0;
+}
+
+static int
 run_test_values(struct TestState *state)
 {
   return 0;
@@ -201,5 +244,6 @@ run_test_require(struct TestState *state)
 struct TestCase test_paths = { "Paths", &run_test_paths };
 struct TestCase test_namespaces = { "Namespaces", &run_test_namespaces };
 struct TestCase test_types = { "Types", &run_test_types };
+struct TestCase test_constants = { "Constants", &run_test_constants };
 struct TestCase test_values = { "Values", &run_test_values };
 struct TestCase test_require = { "Require", &run_test_require };
