@@ -15,64 +15,7 @@ namespace predicate_calculus
   type Term;
   type Variable atomic binds;
 
-  constspace _vars Variable;
-
-  namespace vars
-  {
-    const a : Variable;
-    const b : Variable;
-    const c : Variable;
-    const d : Variable;
-    const e : Variable;
-    const f : Variable;
-    const g : Variable;
-    const h : Variable;
-    const i : Variable;
-    const j : Variable;
-    const k : Variable;
-    const l : Variable;
-    const m : Variable;
-    const n : Variable;
-    const o : Variable;
-    const p : Variable;
-    const q : Variable;
-    const r : Variable;
-    const s : Variable;
-    const t : Variable;
-    const u : Variable;
-    const v : Variable;
-    const w : Variable;
-    const x : Variable;
-    const y : Variable;
-    const z : Variable;
-
-    const A : Variable;
-    const B : Variable;
-    const C : Variable;
-    const D : Variable;
-    const E : Variable;
-    const F : Variable;
-    const G : Variable;
-    const H : Variable;
-    const I : Variable;
-    const J : Variable;
-    const K : Variable;
-    const L : Variable;
-    const M : Variable;
-    const N : Variable;
-    const O : Variable;
-    const P : Variable;
-    const Q : Variable;
-    const R : Variable;
-    const S : Variable;
-    const T : Variable;
-    const U : Variable;
-    const V : Variable;
-    const W : Variable;
-    const X : Variable;
-    const Y : Variable;
-    const Z : Variable;
-  }
+  constspace vars Variable;
 
   expr Term
   t(x : Variable)

@@ -102,6 +102,10 @@ sl_LogicError
 sl_logic_make_constant(sl_LogicState *state, const sl_SymbolPath *constant_path,
   const sl_SymbolPath *type_path, const char *latex_format);
 
+sl_LogicError
+sl_logic_make_constspace(sl_LogicState *state,
+  const sl_SymbolPath *constspace_path, const sl_SymbolPath *type_path);
+
 struct Value;
 typedef struct Value Value;
 
@@ -115,10 +119,6 @@ struct PrototypeLatexFormat
 {
   struct PrototypeLatexFormatSegment **segments; /* NULL-terminated list. */
 };
-
-sl_LogicError
-add_constspace(sl_LogicState *state, const sl_SymbolPath *space_path,
-  const sl_SymbolPath *type_path);
 
 /* Expressions. */
 struct PrototypeParameter

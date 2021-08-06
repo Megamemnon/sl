@@ -57,6 +57,12 @@ struct Constant
   char *latex_format;
 };
 
+struct Constspace
+{
+  uint32_t id;
+  const struct Type *type;
+};
+
 struct Expression
 {
   uint32_t id;
@@ -87,7 +93,7 @@ struct Value
 
   /* TODO: use a union? */
   char *variable_name;
-  const struct Constant *constant;
+  sl_SymbolPath *constant_path;
   const struct Expression *expression;
   ValueArray arguments;
   Value *parent;

@@ -35,7 +35,7 @@ copy_value_to(Value *dst, const Value *src)
   }
   else if (src->value_type == ValueTypeConstant)
   {
-    dst->constant = src->constant;
+    dst->constant_path = sl_copy_symbol_path(src->constant_path);
   }
   else if (src->value_type == ValueTypeComposition)
   {
@@ -68,7 +68,7 @@ values_equal(const Value *a, const Value *b)
   switch (a->value_type)
   {
     case ValueTypeConstant:
-      if (a->constant != b->constant) /* TODO: test for equivalence of constants, not for pointer equality. */
+      if (!sl_symbol_paths_equal(a->constant_path, b->constant_path)) /* TODO: test for equivalence of constants, not for pointer equality. */
         return FALSE;
       break;
     case ValueTypeVariable:
@@ -184,7 +184,7 @@ string_from_value(const Value *value)
       break;
     case ValueTypeConstant:
       {
-        char *const_str = sl_string_from_symbol_path(value->constant->path);
+        char *const_str = sl_string_from_symbol_path(value->constant_path);
         size_t len = 1 + strlen(const_str);
         char *str = malloc(len);
         char *c = str;

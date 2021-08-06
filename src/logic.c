@@ -548,9 +548,50 @@ sl_logic_make_constant(sl_LogicState *state, const sl_SymbolPath *constant_path,
 }
 
 sl_LogicError
-add_constspace(sl_LogicState *state, const sl_SymbolPath *space_path,
-  const sl_SymbolPath *type_path)
+sl_logic_make_constspace(sl_LogicState *state,
+  const sl_SymbolPath *constspace_path, const sl_SymbolPath *type_path)
 {
+  sl_LogicSymbol *type_symbol;
+  struct Constspace *c;
+  sl_LogicSymbol sym;
+  sl_LogicError err;
+  type_symbol = locate_symbol_with_type(state, type_path,
+    sl_LogicSymbolType_Type);
+  if (type_symbol == NULL)
+  {
+    char *constspace_str, *type_str;
+    constspace_str = sl_string_from_symbol_path(constspace_path);
+    type_str = sl_string_from_symbol_path(type_path);
+    LOG_NORMAL(state->log_out,
+      "Cannot add constspace '%s' because there is no such type '%s'.\n",
+      constspace_str, type_str);
+    free(constspace_str);
+    free(type_str);
+    return sl_LogicError_NoType;
+  }
+
+  c = SL_NEW(struct Constspace);
+  c->id = state->next_id++;
+  c->type = (struct Type *)type_symbol->object;
+  sym.path = sl_copy_symbol_path(constspace_path);
+  sym.type = sl_LogicSymbolType_Constspace;
+  sym.object = c;
+
+  err = add_symbol(state, sym);
+  if (err != sl_LogicError_None)
+  {
+    free(c);
+    sl_free_symbol_path(sym.path);
+    return err;
+  }
+  else
+  {
+    char *constspace_str;
+    constspace_str = sl_string_from_symbol_path(sym.path);
+    LOG_NORMAL(state->log_out, "Successfully created constspace '%s'.\n",
+      constspace_str);
+    free(constspace_str);
+  }
   return sl_LogicError_None;
 }
 
@@ -716,10 +757,31 @@ new_variable_value(sl_LogicState *state, const char *name, const sl_SymbolPath *
 Value *
 new_constant_value(sl_LogicState *state, const sl_SymbolPath *constant)
 {
-  Value *value = malloc(sizeof(Value));
-
+  Value *value;
+  value = SL_NEW(Value);
   value->value_type = ValueTypeConstant;
   value->parent = NULL;
+
+  /* Is this a member of a constspace or a is it an individually declared
+     constant? */
+  if (sl_get_symbol_path_length(constant) >= 2)
+  {
+    sl_SymbolPath *container_path;
+    const sl_LogicSymbol *constspace;
+    container_path = sl_copy_symbol_path(constant);
+    sl_pop_symbol_path(container_path);
+    constspace = locate_symbol_with_type(state, container_path,
+      sl_LogicSymbolType_Constspace);
+    sl_free_symbol_path(container_path);
+    if (constspace != NULL)
+    {
+      const struct Constspace *constspace_obj;
+      constspace_obj = (struct Constspace *)constspace->object;
+      value->type = constspace_obj->type;
+      value->constant_path = sl_copy_symbol_path(constant);
+      return value;
+    }
+  }
   sl_LogicSymbol *constant_symbol = locate_symbol_with_type(state,
     constant, sl_LogicSymbolType_Constant);
   if (constant_symbol == NULL)
@@ -731,8 +793,11 @@ new_constant_value(sl_LogicState *state, const sl_SymbolPath *constant)
     free(value);
     return NULL;
   }
-  value->constant = (struct Constant *)constant_symbol->object;
-  value->type = value->constant->type;
+  const struct Constant *constant_obj =
+    (struct Constant *)constant_symbol->object;
+  //value->constant = (struct Constant *)constant_symbol->object;
+  value->constant_path = sl_copy_symbol_path(constant_obj->path);
+  value->type = constant_obj->type;
 
   return value;
 }

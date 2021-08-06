@@ -273,6 +273,22 @@ extract_value(struct ValidationState *state,
       const_path = lookup_symbol(state, local_path);
       sl_free_symbol_path(local_path);
     }
+    /* If there is not a concrete constant, try and locate a constspace? */
+    if (const_path == NULL)
+    {
+      sl_SymbolPath *local_path, *parent_path;
+      local_path = extract_path(state, path);
+      parent_path = sl_copy_symbol_path(local_path);
+      sl_pop_symbol_path(parent_path);
+      const_path = lookup_symbol(state, parent_path);
+      if (const_path != NULL)
+      {
+        sl_push_symbol_path(const_path,
+          sl_get_symbol_path_last_segment(local_path));
+      }
+      sl_free_symbol_path(local_path);
+      sl_free_symbol_path(parent_path);
+    }
 
     v = new_constant_value(state->logic, const_path);
     sl_free_symbol_path(const_path);
@@ -486,7 +502,7 @@ validate_constspace(struct ValidationState *state,
     sl_free_symbol_path(local_path);
   }
 
-  err = add_constspace(state->logic, space_path, type_path);
+  err = sl_logic_make_constspace(state->logic, space_path, type_path);
   if (err != sl_LogicError_None)
   {
     sl_node_show_message(state->text, constspace,

@@ -32,8 +32,8 @@ html_render_value(const Value *v)
   {
     case ValueTypeConstant:
       asprintf(&str, "<a href=\"#sym-%u\">%s</a>",
-        v->constant->id,
-        sl_get_symbol_path_last_segment(v->constant->path));
+        /*v->constant->id*/ 0,
+        sl_get_symbol_path_last_segment(v->constant_path));
       break;
     case ValueTypeVariable:
       asprintf(&str, "$%s", v->variable_name);
