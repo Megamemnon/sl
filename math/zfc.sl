@@ -18,18 +18,6 @@ namespace zfc
       eval_p2(in, t(vars.z), t(vars.y)))), eq(t(vars.x), t(vars.y)))));
   }
 
-  /* TODO: this follows from extensionality. */
-  axiom
-  set_builder_uniqueness(phi : Formula)
-  {
-    require not_free(vars.x, $phi);
-
-    infer implies(exists(vars.y, any(vars.x,
-      iff(eval_p2(in, t(vars.x), t(vars.y)), $phi))),
-      exists_unique(vars.y, any(vars.x,
-      iff(eval_p2(in, t(vars.x), t(vars.y)), $phi))));
-  }
-
   theorem
   equivalent_set_membership_condition(phi : Formula)
   {
@@ -68,26 +56,39 @@ namespace zfc
       eq(t(vars.x), t(vars.y)))));
   }
 
-/*
   theorem
   set_membership_condition_unique(phi : Formula)
   {
-    assume exists(vars.x, any(vars.z,
-      iff(eval_p2(in, t(vars.z), t(vars.x)), $phi)));
+    infer implies(exists(vars.x, any(vars.z, iff(eval_p2(in, t(vars.z),
+      t(vars.x)), $phi))), exists_unique(vars.x, any(vars.z,
+      iff(eval_p2(in, t(vars.z), t(vars.x)), $phi))));
 
-    infer exists_unique(vars.x, any(vars.z,
-      iff(eval_p2(in, t(vars.z), t(vars.x)), $phi)));
-
-    step equivalent_set_membership_condition($phi);
-    step conjunction_introduction_meta(exists(vars.x, any(vars.z,
-      iff(eval_p2(in, t(vars.z), t(vars.x)), $phi))),
-      any(vars.x, any(vars.y, implies(and(
+    def ex exists(vars.x, any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.x)),
+      $phi)));
+    def uniq any(vars.x, any(vars.y, implies(and(
       any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.x)), $phi)),
       any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.y)), $phi))),
-      eq(t(vars.x), t(vars.y))))));
-    step existential_uniqueness(vars.x, , vars.y, )
+      eq(t(vars.x), t(vars.y)))));
+
+    step conjunction_introduction(%uniq, %ex);
+    step conjunction_commutation(%uniq, %ex);
+    step equivalent_set_membership_condition($phi);
+    step modus_ponens(%uniq, implies(%ex, and(%uniq, %ex)));
+    step hypothetical_syllogism_meta(%ex, and(%uniq, %ex), and(%ex, %uniq));
+    step existential_uniqueness(vars.x, any(vars.z, iff(
+      eval_p2(in, t(vars.z), t(vars.x)), $phi)), vars.y,
+      any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.y)), $phi)));
+    step biconditional_elimination_left_meta(exists_unique(vars.x,
+      any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.x)), $phi))),
+      and(exists(vars.x, any(vars.z,
+      iff(eval_p2(in, t(vars.z), t(vars.x)), $phi))),
+      any(vars.x, any(vars.y, implies(and(any(vars.z, iff(eval_p2(in, t(vars.z),
+      t(vars.x)), $phi)), any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.y)),
+      $phi))), eq(t(vars.x), t(vars.y)))))));
+    step hypothetical_syllogism_meta(%ex, and(%ex, %uniq),
+      exists_unique(vars.x, any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.x)),
+      $phi))));
   }
-*/
 
   axiom
   regularity()

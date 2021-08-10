@@ -171,7 +171,7 @@ pair_distinct_in_env(sl_LogicState *state, const struct ProofEnvironment *env,
       break;
     case ValueTypeVariable:
       /* If we did not establish the distinctness of these variables through
-         another requirements, then it is possible that they are the same. */
+         another requirhements, then it is possible that they are the same. */
       return FALSE;
       break;
     case ValueTypeComposition:
@@ -205,11 +205,6 @@ evaluate_distinct(sl_LogicState *state, const struct ProofEnvironment *env,
       bool distinct;
       a = *ARR_GET(args, i);
       b = *ARR_GET(args, j);
-      {
-        char *a_str, *b_str;
-        a_str = string_from_value(a);
-        b_str = string_from_value(b);
-      }
       distinct = pair_distinct_in_env(state, env, a, b);
       if (!distinct)
         return FALSE;
@@ -239,8 +234,8 @@ value_gets_bound(const Value *source, const Value *context)
           const struct Parameter *param =
             ARR_GET(scope->expression->parameters, i);
           struct Argument argument;
-          argument.name = strdup(param->name);
-          argument.value = copy_value(arg);
+          argument.name = param->name;
+          argument.value = arg;
           ARR_APPEND(args_array, argument);
         }
 
@@ -251,11 +246,14 @@ value_gets_bound(const Value *source, const Value *context)
           if (instantiated_binding->value_type == ValueTypeVariable
             || values_equal(instantiated_binding, source))
           {
+            free_value(instantiated_binding);
+            ARR_FREE(args_array);
             return TRUE;
             /* TODO: free. */
           }
           free_value(instantiated_binding);
         }
+        ARR_FREE(args_array);
       }
       return FALSE;
       break;
@@ -578,8 +576,6 @@ cover_free_in_env(const struct ProofEnvironment *env, ValueArray covering,
     if (!context->type->binds)
       return TRUE;
   }
-
-  //printf("aw %s\n", string_from_value(context));
   return FALSE;
 }
 
@@ -589,6 +585,7 @@ evaluate_cover_free(sl_LogicState *state,
 {
   ValueArray covering;
   const Value *context;
+  bool covers;
   if (ARR_LENGTH(args) < 1)
   {
     LOG_NORMAL(state->log_out,
@@ -602,7 +599,9 @@ evaluate_cover_free(sl_LogicState *state,
     ARR_APPEND(covering, *ARR_GET(args, i));
   }
   context = *ARR_GET(args, ARR_LENGTH(args) - 1);
-  return cover_free_in_env(env, covering, context);
+  covers = cover_free_in_env(env, covering, context);
+  ARR_FREE(covering);
+  return covers;
 }
 
 /* --- Cover Bound --- */
@@ -790,6 +789,7 @@ evaluate_requirement(sl_LogicState *state, const struct Requirement *req,
     const Value *arg = *ARR_GET(req->arguments, j);
     Value *instantiated_0 = instantiate_value(arg, environment_args);
     Value *instantiated = reduce_expressions(instantiated_0);
+    free_value(instantiated_0);
     ARR_APPEND(instantiated_args, instantiated);
   }
 
@@ -825,6 +825,11 @@ evaluate_requirement(sl_LogicState *state, const struct Requirement *req,
     case RequirementTypeFullSubstitution:
       satisfied = evaluate_full_substitution(state, env, instantiated_args);
       break;
+  }
+  for (size_t i = 0; i < ARR_LENGTH(instantiated_args); ++i) {
+    Value *arg;
+    arg = *ARR_GET(instantiated_args, i);
+    free_value(arg);
   }
   ARR_FREE(instantiated_args);
   return satisfied;

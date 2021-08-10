@@ -10,7 +10,9 @@ free_value(Value *value)
   }
   else if (value->value_type == ValueTypeConstant)
   {
-
+    sl_free_symbol_path(value->constant_path);
+    if (value->constant_latex != NULL)
+      free(value->constant_latex);
   }
   else if (value->value_type == ValueTypeComposition)
   {
@@ -36,6 +38,10 @@ copy_value_to(Value *dst, const Value *src)
   else if (src->value_type == ValueTypeConstant)
   {
     dst->constant_path = sl_copy_symbol_path(src->constant_path);
+    if (src->constant_latex != NULL)
+      dst->constant_latex = strdup(src->constant_latex);
+    else
+      dst->constant_latex = NULL;
   }
   else if (src->value_type == ValueTypeComposition)
   {
@@ -54,7 +60,7 @@ copy_value_to(Value *dst, const Value *src)
 Value *
 copy_value(const Value *value)
 {
-  Value *v = malloc(sizeof(Value));
+  Value *v = SL_NEW(Value);
   v->parent = NULL;
   copy_value_to(v, value);
   return v;
@@ -270,7 +276,7 @@ do_reduction_step(const Value *value)
          to do this here as well as in the expression creation function. */
       if (value->expression->replace_with == NULL)
       {
-        Value *new = malloc(sizeof(Value));
+        Value *new = SL_NEW(Value);
         new->value_type = ValueTypeComposition;
         new->parent = NULL;
         new->expression = value->expression;
@@ -280,8 +286,6 @@ do_reduction_step(const Value *value)
         {
           const Value *arg = *ARR_GET(value->arguments, i);
           Value *reduced = do_reduction_step(arg);
-          char *s1 = string_from_value(arg);
-          char *s2 = string_from_value(reduced);
           reduced->parent = new;
           ARR_APPEND(new->arguments, reduced);
         }
@@ -299,14 +303,17 @@ do_reduction_step(const Value *value)
           {
             struct Argument arg;
             const struct Parameter *param;
-            Value *old_value =
-              do_reduction_step(*ARR_GET(value->arguments, i));
             param = ARR_GET(value->expression->parameters, i);
             arg.name = strdup(param->name);
-            arg.value = copy_value(old_value);
+            arg.value = do_reduction_step(*ARR_GET(value->arguments, i));
             ARR_APPEND(args, arg);
           }
           new = instantiate_value(value->expression->replace_with, args);
+          for (size_t i = 0; i < ARR_LENGTH(args); ++i) {
+            struct Argument *arg = ARR_GET(args, i);
+            free(arg->name);
+            free_value(arg->value);
+          }
           ARR_FREE(args);
           return new;
         }
@@ -329,8 +336,6 @@ reduce_expressions(const Value *value)
     free_value(reduced);
     reduced = tmp;
   }
-  char *s1 = string_from_value(value);
-  char *s2 = string_from_value(reduced);
   return reduced;
 }
 
@@ -355,26 +360,10 @@ instantiate_value(const Value *src, ArgumentArray args)
             break;
           }
         }
-        if (arg == NULL)
-        {
-          char *value_str = string_from_value(src);
-          /*LOG_NORMAL(state->log_out,
-            "Cannot instantiate value '%s' because there is no matching argument.\n",
-            value_str);*/
-          free(value_str);
+        if (arg == NULL) {
           return NULL;
         }
-        if (!types_equal(arg->value->type, src->type))
-        {
-          char *value_str = string_from_value(src);
-          char *src_type = sl_string_from_symbol_path(src->type->path);
-          char *arg_type = sl_string_from_symbol_path(arg->value->type->path);
-          /*LOG_NORMAL(state->log_out,
-            "Cannot instantiate value '%s' of type '%s' because the variable has type '%s'.\n",
-            value_str, src_type, arg_type);*/
-          free(value_str);
-          free(src_type);
-          free(arg_type);
+        if (!types_equal(arg->value->type, src->type)) {
           return NULL;
         }
         return copy_value(arg->value);
@@ -382,7 +371,7 @@ instantiate_value(const Value *src, ArgumentArray args)
       break;
     case ValueTypeComposition:
       {
-        Value *dst = malloc(sizeof(Value));
+        Value *dst = SL_NEW(Value);
         dst->type = src->type;
         dst->value_type = ValueTypeComposition;
         dst->expression = src->expression;
@@ -391,7 +380,7 @@ instantiate_value(const Value *src, ArgumentArray args)
         for (size_t i = 0; i < ARR_LENGTH(src->arguments); ++i)
         {
           const Value *arg = *ARR_GET(src->arguments, i);
-          Value *instantiated_arg = instantiate_value(/*state, */arg, args);
+          Value *instantiated_arg = instantiate_value(arg, args);
           instantiated_arg->parent = dst;
           ARR_APPEND(dst->arguments, instantiated_arg);
         }

@@ -86,6 +86,7 @@ sl_node_free(sl_ASTNode *node)
 {
   /* Recursively free the children of this node. */
   free_children(node);
+  free(node);
 }
 
 static void

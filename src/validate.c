@@ -402,7 +402,6 @@ static int
 validate_constant(struct ValidationState *state, const sl_ASTNode *constant)
 {
   const sl_ASTNode *type;
-  struct TheoremEnvironment env;
   sl_LogicError err;
   sl_SymbolPath *constant_path, *type_path;
   char *latex;
@@ -424,7 +423,7 @@ validate_constant(struct ValidationState *state, const sl_ASTNode *constant)
       "a constant node must have at least a single child, containing the path to the constant's type",
       sl_MessageType_Error);
     state->valid = FALSE;
-    free(constant_path);
+    sl_free_symbol_path(constant_path);
     return 0;
   }
   type = sl_node_get_child(constant, 0);
@@ -437,18 +436,38 @@ validate_constant(struct ValidationState *state, const sl_ASTNode *constant)
 
   /* Look for latex. */
   latex = NULL;
-  /*proto.latex.segments = NULL;
-  init_theorem_environment(&env);
   for (size_t i = 0; i < sl_node_get_child_count(constant); ++i)
   {
     const sl_ASTNode *child = sl_node_get_child(constant, i);
     if (sl_node_get_type(child) == sl_ASTNodeType_Latex)
     {
-      int err = extract_latex_format(state, child, &env, &proto.latex);
-      PROPAGATE_ERROR(err);
+      const sl_ASTNode *latex_node;
+      if (sl_node_get_child_count(child) != 1)
+      {
+        /* TODO: is this a warning? */
+        sl_node_show_message(state->text, constant,
+          "a constant node's LaTeX must have a single child containing a string",
+          sl_MessageType_Error);
+        state->valid = FALSE;
+        sl_free_symbol_path(constant_path);
+        sl_free_symbol_path(type_path);
+        return 0;
+      }
+      latex_node = sl_node_get_child(child, 0);
+      if (sl_node_get_type(latex_node) != sl_ASTNodeType_LatexString)
+      {
+        /* TODO: is this a warning? */
+        sl_node_show_message(state->text, constant,
+          "a constant node's LaTeX must have a single child containing a string",
+          sl_MessageType_Error);
+        state->valid = FALSE;
+        sl_free_symbol_path(constant_path);
+        sl_free_symbol_path(type_path);
+        return 0;
+      }
+      latex = strdup(sl_node_get_name(latex_node));
     }
   }
-  free_theorem_environment(&env);*/
 
   err = sl_logic_make_constant(state->logic, constant_path, type_path,
     latex);
@@ -460,6 +479,8 @@ validate_constant(struct ValidationState *state, const sl_ASTNode *constant)
     state->valid = FALSE;
   }
 
+  if (latex != NULL)
+    free(latex);
   sl_free_symbol_path(constant_path);
   sl_free_symbol_path(type_path);
   return 0;
@@ -700,6 +721,17 @@ validate_expression(struct ValidationState *state,
     for (Value **binding = proto.bindings; *binding != NULL; ++binding)
       free_value(*binding);
     free(proto.bindings);
+  }
+  if (proto.latex.segments != NULL) {
+    for (struct PrototypeLatexFormatSegment **seg = proto.latex.segments;
+      *seg != NULL; ++seg) {
+      free((*seg)->string);
+      free((*seg));
+    }
+    free(proto.latex.segments);
+  }
+  if (proto.replace_with != NULL) {
+    free_value(proto.replace_with);
   }
 
   return 0;
@@ -1214,6 +1246,7 @@ validate_theorem(struct ValidationState *state,
     free(proto.steps[i]->arguments);
     free(proto.steps[i]);
   }
+  free(proto.requirements);
   free(proto.parameters);
   free(proto.assumptions);
   free(proto.inferences);
@@ -1378,7 +1411,12 @@ load_file_and_validate(struct ValidationState *state, const char *path)
   for (size_t i = 0; i < ARR_LENGTH(state->files_opened); ++i)
   {
     if (strcmp(absolute_path, *ARR_GET(state->files_opened, i)) == 0)
+    {
+      free(absolute_path);
+      free(state->prefix);
+      state->prefix = old_prefix;
       return 0;
+    }
   }
   ARR_APPEND(state->files_opened, strdup(absolute_path));
 
@@ -1423,6 +1461,7 @@ load_file_and_validate(struct ValidationState *state, const char *path)
   sl_lexer_free_state(lex);
   sl_node_free(ast);
   free(absolute_path);
+
   free(state->prefix);
   state->prefix = old_prefix;
 

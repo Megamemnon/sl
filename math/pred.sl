@@ -76,6 +76,20 @@ namespace predicate_calculus
   }
 
   theorem
+  quantified_biconditional_meta(x : Variable, phi : Formula, psi : Formula)
+  {
+    assume iff($phi, $psi);
+
+    infer iff(any($x, $phi), any($x, $psi));
+
+    step biconditional_elimination_left_meta($phi, $psi);
+    step biconditional_elimination_right_meta($phi, $psi);
+    step quantified_implication_meta($x, $phi, $psi);
+    step quantified_implication_meta($x, $psi, $phi);
+    step biconditional_introduction_meta(any($x, $phi), any($x, $psi));
+  }
+
+  theorem
   instantiation_elimination(x : Variable, phi : Formula)
   {
     infer implies(any($x, $phi), $phi);
@@ -274,6 +288,21 @@ namespace predicate_calculus
       not(any($x, not($psi))));
     step hypothetical_syllogism_meta(exists($x, $phi),
       not(any($x, not($psi))), exists($x, $psi));
+  }
+
+  theorem
+  biconditional_generalization_existential(x : Variable, phi : Formula,
+    psi : Formula)
+  {
+    assume iff($phi, $psi);
+
+    infer iff(exists($x, $phi), exists($x, $psi));
+
+    step biconditional_elimination_left_meta($phi, $psi);
+    step biconditional_elimination_right_meta($phi, $psi);
+    step implication_generalization_existential($x, $phi, $psi);
+    step implication_generalization_existential($x, $psi, $phi);
+    step biconditional_introduction_meta(exists($x, $phi), exists($x, $psi));
   }
 
   expr Formula

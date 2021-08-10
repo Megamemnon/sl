@@ -243,10 +243,11 @@ latex_render_value(const Value *v)
   switch (v->value_type)
   {
     case ValueTypeConstant:
-      /*if (v->constant->latex_format != NULL)
-        return latex_render_constant(v->constant);
-      else*/
-        return strdup(sl_get_symbol_path_last_segment(v->constant_path));
+      if (v->constant_latex != NULL)
+        return latex_render_string(v->constant_latex);
+      else
+        return latex_render_string(sl_get_symbol_path_last_segment(
+          v->constant_path));
       break;
     case ValueTypeVariable:
       return latex_render_string(v->variable_name);

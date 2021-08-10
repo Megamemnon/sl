@@ -784,6 +784,8 @@ namespace propositional_calculus
   conjunction_commutation(phi : Formula, psi : Formula)
   {
     infer iff(and($phi, $psi), and($psi, $phi));
+    infer implies(and($phi, $psi), and($psi, $phi));
+    infer implies(and($psi, $phi), and($phi, $psi));
 
     step lemma.conjunction_commutation_l1($phi, $psi);
     step lemma.conjunction_commutation_l1($psi, $phi);

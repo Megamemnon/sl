@@ -94,6 +94,7 @@ struct Value
   /* TODO: use a union? */
   char *variable_name;
   sl_SymbolPath *constant_path;
+  const char *constant_latex;
   const struct Expression *expression;
   ValueArray arguments;
   Value *parent;

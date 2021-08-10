@@ -8,7 +8,7 @@
 sl_SymbolPath *
 sl_new_symbol_path()
 {
-  sl_SymbolPath *path = malloc(sizeof(sl_SymbolPath));
+  sl_SymbolPath *path = SL_NEW(sl_SymbolPath);
   ARR_INIT(path->segments);
   return path;
 }
@@ -149,6 +149,16 @@ free_expression(struct Expression *expr)
     free_value(binding);
   }
   ARR_FREE(expr->bindings);
+  if (expr->has_latex) {
+    for (size_t i = 0; i < ARR_LENGTH(expr->latex.segments); ++i) {
+      struct LatexFormatSegment *seg;
+      seg = ARR_GET(expr->latex.segments, i);
+      free(seg->string);
+    }
+    ARR_FREE(expr->latex.segments);
+  }
+  if (expr->replace_with != NULL)
+    free_value(expr->replace_with);
 }
 
 static char *
@@ -241,6 +251,13 @@ string_from_expression(const struct Expression *expr)
   }
 }
 
+static void
+free_constant(struct Constant *c)
+{
+  if (c->latex_format != NULL)
+    free(c->latex_format);
+}
+
 /* Theorems. */
 static void
 free_theorem(struct Theorem *thm)
@@ -251,6 +268,16 @@ free_theorem(struct Theorem *thm)
     free_parameter(param);
   }
   ARR_FREE(thm->parameters);
+
+  for (size_t i = 0; i < ARR_LENGTH(thm->requirements); ++i) {
+    struct Requirement *req = ARR_GET(thm->requirements, i);
+    for (size_t j = 0; j < ARR_LENGTH(req->arguments); ++j) {
+      Value *arg = *ARR_GET(req->arguments, j);
+      free_value(arg);
+    }
+    ARR_FREE(req->arguments);
+  }
+  ARR_FREE(thm->requirements);
 
   for (size_t i = 0; i < ARR_LENGTH(thm->assumptions); ++i)
   {
@@ -265,6 +292,18 @@ free_theorem(struct Theorem *thm)
     free_value(value);
   }
   ARR_FREE(thm->inferences);
+
+  if (!thm->is_axiom) {
+    for (size_t i = 0; i < ARR_LENGTH(thm->steps); ++i) {
+      struct TheoremReference *step = ARR_GET(thm->steps, i);
+      for (size_t j = 0; j < ARR_LENGTH(step->arguments); ++j) {
+        Value *arg = *ARR_GET(step->arguments, j);
+        free_value(arg);
+      }
+      ARR_FREE(step->arguments);
+    }
+    ARR_FREE(thm->steps);
+  }
 }
 
 /* Symbols */
@@ -280,6 +319,7 @@ free_symbol(sl_LogicSymbol *sym)
       free_type((struct Type *)sym->object);
       break;
     case sl_LogicSymbolType_Constant:
+      free_constant((struct Constant *)sym->object);
       break;
     case sl_LogicSymbolType_Expression:
       free_expression((struct Expression *)sym->object);
@@ -761,6 +801,7 @@ new_constant_value(sl_LogicState *state, const sl_SymbolPath *constant)
   value = SL_NEW(Value);
   value->value_type = ValueTypeConstant;
   value->parent = NULL;
+  value->constant_latex = NULL;
 
   /* Is this a member of a constspace or a is it an individually declared
      constant? */
@@ -795,9 +836,9 @@ new_constant_value(sl_LogicState *state, const sl_SymbolPath *constant)
   }
   const struct Constant *constant_obj =
     (struct Constant *)constant_symbol->object;
-  //value->constant = (struct Constant *)constant_symbol->object;
   value->constant_path = sl_copy_symbol_path(constant_obj->path);
   value->type = constant_obj->type;
+  value->constant_latex = strdup(constant_obj->latex_format);
 
   return value;
 }
@@ -867,6 +908,12 @@ new_composition_value(sl_LogicState *state, const sl_SymbolPath *expr_path,
       return NULL;
     }
   }
+  for (size_t i = 0; i < ARR_LENGTH(args_array); ++i) {
+    struct Argument *arg = ARR_GET(args_array, i);
+    free(arg->name);
+    free_value(arg->value);
+  }
+  ARR_FREE(args_array);
 
   return value;
 }
@@ -1034,6 +1081,7 @@ instantiate_theorem_in_env(struct sl_LogicState *state, const struct Theorem *sr
       const Value *assumption = *ARR_GET(src->assumptions, i);
       Value *instantiated_0 = instantiate_value(assumption, args);
       Value *instantiated = reduce_expressions(instantiated_0);
+      free_value(instantiated_0);
       if (instantiated == NULL)
         return 1;
       ARR_APPEND(instantiated_assumptions, instantiated);
@@ -1065,6 +1113,7 @@ instantiate_theorem_in_env(struct sl_LogicState *state, const struct Theorem *sr
     const Value *inference = *ARR_GET(src->inferences, i);
     Value *instantiated_0 = instantiate_value(inference, args);
     Value *instantiated = reduce_expressions(instantiated_0);
+    free_value(instantiated_0);
     if (instantiated == NULL)
       return 1;
     ARR_APPEND(env->proven, instantiated);
@@ -1239,14 +1288,14 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
   {
     Value *infer = *ARR_GET(a->inferences, i);
     Value *reduced = reduce_expressions(infer);
-    char *s = string_from_value(reduced);
-    printf("%s\n", s);
     if (!statement_proven(reduced, env))
     {
       LOG_NORMAL(state->log_out,
         "Cannot add theorem because an inference was not proven.\n");
+      free_value(reduced);
       return sl_LogicError_SymbolAlreadyExists;
     }
+    free_value(reduced);
   }
 
   /* Free all the statements that we've proven. */
