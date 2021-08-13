@@ -16,12 +16,13 @@ int
 render_latex(const sl_LogicState *state, const char *output_filename);
 
 char *
-latex_render_constant(const struct Constant *c);
+latex_render_constant(const sl_LogicState *state, const struct Constant *c);
 
 char *
-latex_render_expression(const struct Expression *e);
+latex_render_expression(const sl_LogicState *state,
+  const struct Expression *e);
 
 char *
-latex_render_value(const Value *v);
+latex_render_value(const sl_LogicState *state, const Value *v);
 
 #endif

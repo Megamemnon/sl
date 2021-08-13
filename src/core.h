@@ -20,7 +20,7 @@ while (0);
 
 struct sl_SymbolPath
 {
-  ARR(char *) segments;
+  ARR(uint32_t) segments;
 };
 
 struct Parameter
@@ -185,6 +185,7 @@ struct sl_LogicSymbol
 
 struct sl_LogicState
 {
+  ARR(char *) string_table;
   ARR(sl_LogicSymbol) symbol_table;
   uint32_t next_id;
 

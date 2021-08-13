@@ -4,6 +4,16 @@
 #include "common.h"
 #include <stdio.h>
 
+/* Functions for manipulating the logic state, which contains all the theorems,
+   expressions, etc. that are handled. */
+typedef struct sl_LogicState sl_LogicState;
+
+sl_LogicState *
+sl_new_logic_state(FILE *log_out);
+
+void
+sl_free_logic_state(sl_LogicState *state);
+
 /* Methods to manipulate paths. */
 typedef struct sl_SymbolPath sl_SymbolPath;
 
@@ -20,16 +30,20 @@ int
 sl_get_symbol_path_length(const sl_SymbolPath *path);
 
 const char *
-sl_get_symbol_path_segment(const sl_SymbolPath *path, size_t index);
+sl_get_symbol_path_segment(const sl_LogicState *state,
+  const sl_SymbolPath *path, size_t index);
 
 const char *
-sl_get_symbol_path_last_segment(const sl_SymbolPath *path);
+sl_get_symbol_path_last_segment(const sl_LogicState *state,
+  const sl_SymbolPath *path);
 
 char *
-sl_string_from_symbol_path(const sl_SymbolPath *path);
+sl_string_from_symbol_path(const sl_LogicState *state,
+  const sl_SymbolPath *path);
 
 void
-sl_push_symbol_path(sl_SymbolPath *path, const char *segment);
+sl_push_symbol_path(sl_LogicState *state, sl_SymbolPath *path,
+  const char *segment);
 
 void
 sl_pop_symbol_path(sl_SymbolPath *path);
@@ -39,16 +53,6 @@ sl_append_symbol_path(sl_SymbolPath *path, const sl_SymbolPath *to_append);
 
 bool
 sl_symbol_paths_equal(const sl_SymbolPath *a, const sl_SymbolPath *b);
-
-/* Functions for manipulating the logic state, which contains all the theorems,
-   expressions, etc. that are handled. */
-typedef struct sl_LogicState sl_LogicState;
-
-sl_LogicState *
-sl_new_logic_state(FILE *log_out);
-
-void
-sl_free_logic_state(sl_LogicState *state);
 
 bool
 logic_state_path_occupied(const sl_LogicState *state, const sl_SymbolPath *path);
@@ -157,7 +161,7 @@ bool
 value_terminal(const Value *v);
 
 char *
-string_from_value(const Value *value);
+string_from_value(const sl_LogicState *state, const Value *value);
 
 Value *
 new_variable_value(sl_LogicState *state, const char *name, const sl_SymbolPath *type);

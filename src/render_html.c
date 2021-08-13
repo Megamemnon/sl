@@ -25,7 +25,7 @@ html_head(const char *title)
 }
 
 char *
-html_render_value(const Value *v)
+html_render_value(const sl_LogicState *state, const Value *v)
 {
   char *str;
   switch (v->value_type)
@@ -33,7 +33,7 @@ html_render_value(const Value *v)
     case ValueTypeConstant:
       asprintf(&str, "<a href=\"#sym-%u\">%s</a>",
         /*v->constant->id*/ 0,
-        sl_get_symbol_path_last_segment(v->constant_path));
+        sl_get_symbol_path_last_segment(state, v->constant_path));
       break;
     case ValueTypeVariable:
       asprintf(&str, "$%s", v->variable_name);
@@ -43,7 +43,7 @@ html_render_value(const Value *v)
       {
         asprintf(&str, "<a href=\"#sym-%u\">%s</a>()",
           v->expression->id,
-          sl_get_symbol_path_last_segment(v->expression->path));
+          sl_get_symbol_path_last_segment(state, v->expression->path));
       }
       else
       {
@@ -52,7 +52,7 @@ html_render_value(const Value *v)
         for (size_t i = 0; i < ARR_LENGTH(v->arguments); ++i)
         {
           const Value *arg = *ARR_GET(v->arguments, i);
-          args[i] = html_render_value(arg);
+          args[i] = html_render_value(state, arg);
           args_str_len += strlen(args[i]);
         }
         args_str_len += (ARR_LENGTH(v->arguments) - 1) * 2;
@@ -78,7 +78,7 @@ html_render_value(const Value *v)
 
         asprintf(&str, "<a href=\"#sym-%u\">%s</a>(%s)",
           v->expression->id,
-          sl_get_symbol_path_last_segment(v->expression->path),
+          sl_get_symbol_path_last_segment(state, v->expression->path),
           args_str);
         free(args_str);
       }
@@ -88,7 +88,7 @@ html_render_value(const Value *v)
 }
 
 int
-html_render_type(const struct Type *type, FILE *f)
+html_render_type(const sl_LogicState *state, const struct Type *type, FILE *f)
 {
   fputs("<div class=\"symbol\">\n", f);
   {
@@ -107,7 +107,7 @@ html_render_type(const struct Type *type, FILE *f)
     free(id_label);
   }
   {
-    char *path = sl_string_from_symbol_path(type->path);
+    char *path = sl_string_from_symbol_path(state, type->path);
     char *type_label;
     asprintf(&type_label, "<h4>Path: <code>%s</code></h4>\n", path);
     fputs(type_label, f);
@@ -119,7 +119,8 @@ html_render_type(const struct Type *type, FILE *f)
 }
 
 int
-html_render_constant(const struct Constant *constant, FILE *f)
+html_render_constant(const sl_LogicState *state,
+  const struct Constant *constant, FILE *f)
 {
   fputs("<div class=\"symbol\">\n", f);
   {
@@ -135,7 +136,7 @@ html_render_constant(const struct Constant *constant, FILE *f)
     free(id_label);
   }
   {
-    char *path = sl_string_from_symbol_path(constant->path);
+    char *path = sl_string_from_symbol_path(state, constant->path);
     char *type_label;
     asprintf(&type_label, "<h4>Path: <code>%s</code></h4>\n", path);
     fputs(type_label, f);
@@ -143,7 +144,7 @@ html_render_constant(const struct Constant *constant, FILE *f)
     free(type_label);
   }
   {
-    char *const_type = sl_string_from_symbol_path(constant->type->path);
+    char *const_type = sl_string_from_symbol_path(state, constant->type->path);
     char *type_label;
     asprintf(&type_label,
       "<h4>Type: <code><a href=\"#sym-%u\">%s</a></code></h4>\n",
@@ -154,7 +155,7 @@ html_render_constant(const struct Constant *constant, FILE *f)
   }
   if (constant->latex_format != NULL)
   {
-    char *latex = latex_render_constant(constant);
+    char *latex = latex_render_constant(state, constant);
     char *latex_label;
     asprintf(&latex_label, "<h4>LaTeX: \\(%s\\)</h4>\n", latex);
     fputs(latex_label, f);
@@ -166,7 +167,8 @@ html_render_constant(const struct Constant *constant, FILE *f)
 }
 
 int
-html_render_expression(const struct Expression *expression, FILE *f)
+html_render_expression(const sl_LogicState *state,
+  const struct Expression *expression, FILE *f)
 {
   {
     char *div_begin;
@@ -183,7 +185,7 @@ html_render_expression(const struct Expression *expression, FILE *f)
     free(id_label);
   }
   {
-    char *path = sl_string_from_symbol_path(expression->path);
+    char *path = sl_string_from_symbol_path(state, expression->path);
     char *path_label;
     asprintf(&path_label, "<h4>Path: <code>%s</code></h4>\n", path);
     fputs(path_label, f);
@@ -191,7 +193,7 @@ html_render_expression(const struct Expression *expression, FILE *f)
     free(path_label);
   }
   {
-    char *expr_type = sl_string_from_symbol_path(expression->type->path);
+    char *expr_type = sl_string_from_symbol_path(state, expression->type->path);
     char *type_label;
     asprintf(&type_label,
       "<h4>Type: <code><a href=\"#sym-%u\">%s</a></code></h4>\n",
@@ -207,7 +209,7 @@ html_render_expression(const struct Expression *expression, FILE *f)
     for (size_t i = 0; i < ARR_LENGTH(expression->parameters); ++i)
     {
       const struct Parameter *param = ARR_GET(expression->parameters, i);
-      char *param_type = sl_string_from_symbol_path(param->type->path);
+      char *param_type = sl_string_from_symbol_path(state, param->type->path);
       char *param_str = latex_render_string(param->name);
       char *param_label;
       asprintf(&param_label,
@@ -222,7 +224,7 @@ html_render_expression(const struct Expression *expression, FILE *f)
   }
   if (expression->has_latex)
   {
-    char *latex = latex_render_expression(expression);
+    char *latex = latex_render_expression(state, expression);
     char *latex_label;
     asprintf(&latex_label, "<h4>LaTeX: \\(%s\\)</h4>\n", latex);
     fputs(latex_label, f);
@@ -234,7 +236,8 @@ html_render_expression(const struct Expression *expression, FILE *f)
 }
 
 int
-html_render_theorem(const struct Theorem *theorem, FILE *f)
+html_render_theorem(const sl_LogicState *state, const struct Theorem *theorem,
+  FILE *f)
 {
   {
     char *div_begin;
@@ -252,7 +255,7 @@ html_render_theorem(const struct Theorem *theorem, FILE *f)
     free(id_label);
   }
   {
-    char *path = sl_string_from_symbol_path(theorem->path);
+    char *path = sl_string_from_symbol_path(state, theorem->path);
     char *path_label;
     asprintf(&path_label, "<h4>Path: <code><a href=\"./symbols/theorem-%u.html\">%s</a></code></h4>\n",
       theorem->id, path);
@@ -268,7 +271,7 @@ html_render_theorem(const struct Theorem *theorem, FILE *f)
     {
       const struct Parameter *param =
         ARR_GET(theorem->parameters, i);
-      char *param_type = sl_string_from_symbol_path(param->type->path);
+      char *param_type = sl_string_from_symbol_path(state, param->type->path);
       char *param_str = latex_render_string(param->name);
       char *param_label;
       asprintf(&param_label,
@@ -288,8 +291,8 @@ html_render_theorem(const struct Theorem *theorem, FILE *f)
     for (size_t i = 0; i < ARR_LENGTH(theorem->assumptions); ++i)
     {
       const Value *assume = *ARR_GET(theorem->assumptions, i);
-      char *assume_str = html_render_value(assume);
-      char *assume_latex = latex_render_value(assume);
+      char *assume_str = html_render_value(state, assume);
+      char *assume_latex = latex_render_value(state, assume);
       char *assume_label;
       asprintf(&assume_label, "<li><code>%s</code><br />\\(%s\\)</li>\n",
         assume_str, assume_latex);
@@ -308,8 +311,8 @@ html_render_theorem(const struct Theorem *theorem, FILE *f)
     for (size_t i = 0; i < ARR_LENGTH(theorem->inferences); ++i)
     {
       const Value *infer = *ARR_GET(theorem->inferences, i);
-      char *infer_str = html_render_value(infer);
-      char *infer_latex = latex_render_value(infer);
+      char *infer_str = html_render_value(state, infer);
+      char *infer_latex = latex_render_value(state, infer);
       char *infer_label;
       asprintf(&infer_label, "<li><code>%s</code><br />\\(%s\\)</li>\n",
         infer_str, infer_latex);
@@ -345,13 +348,13 @@ html_render_index_page(const sl_LogicState *state, const char *filepath)
   {
     const sl_LogicSymbol *sym = ARR_GET(state->symbol_table, i);
     if (sym->type == sl_LogicSymbolType_Type)
-      html_render_type((struct Type *)sym->object, f);
+      html_render_type(state, (struct Type *)sym->object, f);
     else if (sym->type == sl_LogicSymbolType_Constant)
-      html_render_constant((struct Constant *)sym->object, f);
+      html_render_constant(state, (struct Constant *)sym->object, f);
     else if (sym->type == sl_LogicSymbolType_Expression)
-      html_render_expression((struct Expression *)sym->object, f);
+      html_render_expression(state, (struct Expression *)sym->object, f);
     else if (sym->type == sl_LogicSymbolType_Theorem)
-      html_render_theorem((struct Theorem *)sym->object, f);
+      html_render_theorem(state, (struct Theorem *)sym->object, f);
   }
 
   fputs(HTML_END, f);
@@ -367,7 +370,8 @@ html_render_theorem_page(const sl_LogicState *state,
   if (f == NULL)
     return 1;
   {
-    char *head = html_head(sl_get_symbol_path_last_segment(theorem->path));
+    char *head = html_head(sl_get_symbol_path_last_segment(state,
+      theorem->path));
     fputs(head, f);
     free(head);
   }
@@ -382,7 +386,7 @@ html_render_theorem_page(const sl_LogicState *state,
     free(id_label);
   }
   {
-    char *path = sl_string_from_symbol_path(theorem->path);
+    char *path = sl_string_from_symbol_path(state, theorem->path);
     char *path_label;
     asprintf(&path_label, "<h2>Path: <code>%s</code></h2>\n", path);
     fputs(path_label, f);
@@ -396,7 +400,7 @@ html_render_theorem_page(const sl_LogicState *state,
     for (size_t i = 0; i < ARR_LENGTH(theorem->parameters); ++i)
     {
       const struct Parameter *param = ARR_GET(theorem->parameters, i);
-      char *param_type = sl_string_from_symbol_path(param->type->path);
+      char *param_type = sl_string_from_symbol_path(state, param->type->path);
       char *param_str = latex_render_string(param->name);
       char *param_label;
       asprintf(&param_label,
@@ -416,8 +420,8 @@ html_render_theorem_page(const sl_LogicState *state,
     for (size_t i = 0; i < ARR_LENGTH(theorem->assumptions); ++i)
     {
       const Value *assume = *ARR_GET(theorem->assumptions, i);
-      char *assume_str = html_render_value(assume);
-      char *assume_latex = latex_render_value(assume);
+      char *assume_str = html_render_value(state, assume);
+      char *assume_latex = latex_render_value(state, assume);
       char *assume_label;
       asprintf(&assume_label, "<li><code>%s</code><br />\\(%s\\)</li>\n",
         assume_str, assume_latex);
@@ -436,8 +440,8 @@ html_render_theorem_page(const sl_LogicState *state,
     for (size_t i = 0; i < ARR_LENGTH(theorem->inferences); ++i)
     {
       const Value *infer = *ARR_GET(theorem->inferences, i);
-      char *infer_str = html_render_value(infer);
-      char *infer_latex = latex_render_value(infer);
+      char *infer_str = html_render_value(state, infer);
+      char *infer_latex = latex_render_value(state, infer);
       char *infer_label;
       asprintf(&infer_label, "<li><code>%s</code><br />\\(%s\\)</li>\n",
         infer_str, infer_latex);

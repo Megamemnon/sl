@@ -126,13 +126,14 @@ value_terminal(const Value *v)
 }
 
 char *
-string_from_value(const Value *value)
+string_from_value(const sl_LogicState *state, const Value *value)
 {
   switch (value->value_type)
   {
     case ValueTypeComposition:
       {
-        char *expr_str = sl_string_from_symbol_path(value->expression->path);
+        char *expr_str = sl_string_from_symbol_path(state,
+          value->expression->path);
         char *str;
         if (ARR_LENGTH(value->arguments) == 0)
         {
@@ -153,7 +154,7 @@ string_from_value(const Value *value)
           for (size_t i = 0; i < ARR_LENGTH(value->arguments); ++i)
           {
             const struct Value *arg = *ARR_GET(value->arguments, i);
-            args[i] = string_from_value(arg);
+            args[i] = string_from_value(state, arg);
             len += strlen(args[i]);
           }
           len += (ARR_LENGTH(value->arguments) - 1) * 2;
@@ -190,7 +191,8 @@ string_from_value(const Value *value)
       break;
     case ValueTypeConstant:
       {
-        char *const_str = sl_string_from_symbol_path(value->constant_path);
+        char *const_str = sl_string_from_symbol_path(state,
+          value->constant_path);
         size_t len = 1 + strlen(const_str);
         char *str = malloc(len);
         char *c = str;

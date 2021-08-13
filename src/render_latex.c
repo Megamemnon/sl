@@ -203,7 +203,7 @@ latex_render_string(const char *src)
 }
 
 char *
-latex_render_constant(const struct Constant *c)
+latex_render_constant(const sl_LogicState *state, const struct Constant *c)
 {
   char *result;
   if (c->latex_format == NULL)
@@ -212,7 +212,7 @@ latex_render_constant(const struct Constant *c)
 }
 
 char *
-latex_render_expression(const struct Expression *e)
+latex_render_expression(const sl_LogicState *state, const struct Expression *e)
 {
   char *result;
   ARR(char *) segments;
@@ -238,7 +238,7 @@ latex_render_expression(const struct Expression *e)
 }
 
 char *
-latex_render_value(const Value *v)
+latex_render_value(const sl_LogicState *state, const Value *v)
 {
   switch (v->value_type)
   {
@@ -246,7 +246,7 @@ latex_render_value(const Value *v)
       if (v->constant_latex != NULL)
         return latex_render_string(v->constant_latex);
       else
-        return latex_render_string(sl_get_symbol_path_last_segment(
+        return latex_render_string(sl_get_symbol_path_last_segment(state,
           v->constant_path));
       break;
     case ValueTypeVariable:
@@ -279,7 +279,7 @@ latex_render_value(const Value *v)
               }
             }
             Value *arg = *ARR_GET(v->arguments, arg_index);
-            str = latex_render_value(arg);
+            str = latex_render_value(state, arg);
           }
           else
           {

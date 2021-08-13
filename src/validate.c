@@ -74,7 +74,7 @@ extract_path(struct ValidationState *state, const sl_ASTNode *path)
     }
     else
     {
-      sl_push_symbol_path(dst, sl_node_get_name(seg));
+      sl_push_symbol_path(state->logic, dst, sl_node_get_name(seg));
     }
   }
 
@@ -125,7 +125,7 @@ validate_type(struct ValidationState *state,
     return 0;
   }
   type_path = sl_copy_symbol_path(state->prefix_path);
-  sl_push_symbol_path(type_path, sl_node_get_name(type));
+  sl_push_symbol_path(state->logic, type_path, sl_node_get_name(type));
 
   atomic = FALSE;
   binds = FALSE;
@@ -283,8 +283,8 @@ extract_value(struct ValidationState *state,
       const_path = lookup_symbol(state, parent_path);
       if (const_path != NULL)
       {
-        sl_push_symbol_path(const_path,
-          sl_get_symbol_path_last_segment(local_path));
+        sl_push_symbol_path(state->logic, const_path,
+          sl_get_symbol_path_last_segment(state->logic, local_path));
       }
       sl_free_symbol_path(local_path);
       sl_free_symbol_path(parent_path);
@@ -415,7 +415,8 @@ validate_constant(struct ValidationState *state, const sl_ASTNode *constant)
   }
 
   constant_path = sl_copy_symbol_path(state->prefix_path);
-  sl_push_symbol_path(constant_path, sl_node_get_name(constant));
+  sl_push_symbol_path(state->logic, constant_path,
+    sl_node_get_name(constant));
 
   if (sl_node_get_child_count(constant) < 1)
   {
@@ -504,7 +505,7 @@ validate_constspace(struct ValidationState *state,
   }
 
   space_path = sl_copy_symbol_path(state->prefix_path);
-  sl_push_symbol_path(space_path, sl_node_get_name(constspace));
+  sl_push_symbol_path(state->logic, space_path, sl_node_get_name(constspace));
 
   if (sl_node_get_child_count(constspace) != 1)
   {
@@ -592,7 +593,8 @@ validate_expression(struct ValidationState *state,
   /* Construct a prototype expression, then try adding it to the logical
      state. */
   proto.expression_path = sl_copy_symbol_path(state->prefix_path);
-  sl_push_symbol_path(proto.expression_path, sl_node_get_name(expression));
+  sl_push_symbol_path(state->logic, proto.expression_path,
+    sl_node_get_name(expression));
   if (sl_node_get_child_count(expression) < 2)
   {
     sl_node_show_message(state->text, expression,
@@ -890,7 +892,8 @@ validate_axiom(struct ValidationState *state,
   /* Construct a prototype theorem, then try adding it to the logical
      state. */
   proto.theorem_path = sl_copy_symbol_path(state->prefix_path);
-  sl_push_symbol_path(proto.theorem_path, sl_node_get_name(axiom));
+  sl_push_symbol_path(state->logic, proto.theorem_path,
+    sl_node_get_name(axiom));
 
   requirements_n = 0;
   assumptions_n = 0;
@@ -1108,7 +1111,8 @@ validate_theorem(struct ValidationState *state,
   /* Construct a prototype theorem, then try adding it to the logical
      state. */
   proto.theorem_path = sl_copy_symbol_path(state->prefix_path);
-  sl_push_symbol_path(proto.theorem_path, sl_node_get_name(theorem));
+  sl_push_symbol_path(state->logic, proto.theorem_path,
+    sl_node_get_name(theorem));
 
   requirements_n = 0;
   assumptions_n = 0;
@@ -1181,7 +1185,8 @@ validate_theorem(struct ValidationState *state,
       else if (sl_node_get_type(child) == sl_ASTNodeType_Assume)
       {
         proto.assumptions[assume_index] = extract_assumption(state, child, &env);
-        char *str = string_from_value(proto.assumptions[assume_index]);
+        char *str = string_from_value(state->logic,
+          proto.assumptions[assume_index]);
         free(str);
         ++assume_index;
       }
@@ -1271,7 +1276,8 @@ validate_namespace(struct ValidationState *state,
 
   if (sl_node_get_name(namespace) != NULL)
   {
-    sl_push_symbol_path(state->prefix_path, sl_node_get_name(namespace));
+    sl_push_symbol_path(state->logic, state->prefix_path,
+      sl_node_get_name(namespace));
     {
       /* Try to add to an existing namespace with the same name. Otherwise,
          we have an issue. */

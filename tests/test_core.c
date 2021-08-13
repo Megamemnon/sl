@@ -8,23 +8,25 @@ run_test_paths(struct TestState *state)
 {
   sl_SymbolPath *path, *path2, *path3;
   char *str;
+  sl_LogicState *logic;
 
+  logic = sl_new_logic_state(NULL);
   path = sl_new_symbol_path();
-  sl_push_symbol_path(path, "main");
-  sl_push_symbol_path(path, "section");
+  sl_push_symbol_path(logic, path, "main");
+  sl_push_symbol_path(logic, path, "section");
   if (sl_get_symbol_path_length(path) != 2)
   {
     return 1;
   }
-  if (strcmp(sl_get_symbol_path_segment(path, 0), "main") != 0)
+  if (strcmp(sl_get_symbol_path_segment(logic, path, 0), "main") != 0)
   {
     return 1;
   }
-  if (strcmp(sl_get_symbol_path_segment(path, 1), "section") != 0)
+  if (strcmp(sl_get_symbol_path_segment(logic, path, 1), "section") != 0)
   {
     return 1;
   }
-  if (strcmp(sl_get_symbol_path_last_segment(path), "section") != 0)
+  if (strcmp(sl_get_symbol_path_last_segment(logic, path), "section") != 0)
   {
     return 1;
   }
@@ -39,12 +41,12 @@ run_test_paths(struct TestState *state)
     return 1;
   }
 
-  sl_push_symbol_path(path2, "item");
+  sl_push_symbol_path(logic, path2, "item");
   if (sl_symbol_paths_equal(path, path2))
   {
     return 1;
   }
-  str = sl_string_from_symbol_path(path2);
+  str = sl_string_from_symbol_path(logic, path2);
   if (strcmp(str, "main.section.item") != 0)
   {
     return 1;
@@ -56,11 +58,11 @@ run_test_paths(struct TestState *state)
   }
 
   path3 = sl_new_symbol_path();
-  sl_push_symbol_path(path3, "a");
-  sl_push_symbol_path(path3, "b");
+  sl_push_symbol_path(logic, path3, "a");
+  sl_push_symbol_path(logic, path3, "b");
   sl_append_symbol_path(path, path3);
-  sl_push_symbol_path(path2, "a");
-  sl_push_symbol_path(path2, "b");
+  sl_push_symbol_path(logic, path2, "a");
+  sl_push_symbol_path(logic, path2, "b");
   if (!sl_symbol_paths_equal(path, path2))
   {
     return 1;
@@ -69,6 +71,7 @@ run_test_paths(struct TestState *state)
   sl_free_symbol_path(path);
   sl_free_symbol_path(path2);
   sl_free_symbol_path(path3);
+  sl_free_logic_state(logic);
   free(str);
   return 0;
 }
@@ -81,7 +84,7 @@ run_test_namespaces(struct TestState *state)
 
   {
     sl_SymbolPath *path = sl_new_symbol_path();
-    sl_push_symbol_path(path, "space");
+    sl_push_symbol_path(logic, path, "space");
     if (sl_logic_make_namespace(logic, path) != sl_LogicError_None)
       return 1;
     if (sl_logic_make_namespace(logic, path)
@@ -92,8 +95,8 @@ run_test_namespaces(struct TestState *state)
 
   {
     sl_SymbolPath *path = sl_new_symbol_path();
-    sl_push_symbol_path(path, "a");
-    sl_push_symbol_path(path, "b");
+    sl_push_symbol_path(logic, path, "a");
+    sl_push_symbol_path(logic, path, "b");
     if (sl_logic_make_namespace(logic, path) != sl_LogicError_NoParent)
       return 1;
     sl_free_symbol_path(path);
@@ -101,8 +104,8 @@ run_test_namespaces(struct TestState *state)
 
   {
     sl_SymbolPath *path = sl_new_symbol_path();
-    sl_push_symbol_path(path, "space");
-    sl_push_symbol_path(path, "nested");
+    sl_push_symbol_path(logic, path, "space");
+    sl_push_symbol_path(logic, path, "nested");
     if (sl_logic_make_namespace(logic, path) != sl_LogicError_None)
       return 1;
     sl_free_symbol_path(path);
@@ -121,7 +124,7 @@ run_test_types(struct TestState *state)
 
   {
     sl_SymbolPath *path = sl_new_symbol_path();
-    sl_push_symbol_path(path, "type1");
+    sl_push_symbol_path(logic, path, "type1");
     if (sl_logic_make_type(logic, path, FALSE, FALSE) != sl_LogicError_None)
       return 1;
     if (sl_logic_make_type(logic, path, FALSE, FALSE)
@@ -132,7 +135,7 @@ run_test_types(struct TestState *state)
 
   {
     sl_SymbolPath *path = sl_new_symbol_path();
-    sl_push_symbol_path(path, "type2");
+    sl_push_symbol_path(logic, path, "type2");
     if (sl_logic_make_type(logic, path, TRUE, FALSE) != sl_LogicError_None)
       return 1;
     sl_free_symbol_path(path);
@@ -140,7 +143,7 @@ run_test_types(struct TestState *state)
 
   {
     sl_SymbolPath *path = sl_new_symbol_path();
-    sl_push_symbol_path(path, "type3");
+    sl_push_symbol_path(logic, path, "type3");
     if (sl_logic_make_type(logic, path, FALSE, TRUE)
       != sl_LogicError_CannotBindNonAtomic)
       return 1;
@@ -151,8 +154,8 @@ run_test_types(struct TestState *state)
 
   {
     sl_SymbolPath *path = sl_new_symbol_path();
-    sl_push_symbol_path(path, "a");
-    sl_push_symbol_path(path, "b");
+    sl_push_symbol_path(logic, path, "a");
+    sl_push_symbol_path(logic, path, "b");
     if (sl_logic_make_type(logic, path, FALSE, FALSE) != sl_LogicError_NoParent)
       return 1;
     sl_free_symbol_path(path);
@@ -160,8 +163,8 @@ run_test_types(struct TestState *state)
 
   {
     sl_SymbolPath *path = sl_new_symbol_path();
-    sl_push_symbol_path(path, "type3");
-    sl_push_symbol_path(path, "child");
+    sl_push_symbol_path(logic, path, "type3");
+    sl_push_symbol_path(logic, path, "child");
     if (sl_logic_make_type(logic, path, FALSE, FALSE) != sl_LogicError_NoParent)
       return 1;
     sl_free_symbol_path(path);
@@ -170,9 +173,9 @@ run_test_types(struct TestState *state)
   {
     sl_SymbolPath *namespace_path, *type_path;
     namespace_path = sl_new_symbol_path();
-    sl_push_symbol_path(namespace_path, "container");
+    sl_push_symbol_path(logic, namespace_path, "container");
     type_path = sl_copy_symbol_path(namespace_path);
-    sl_push_symbol_path(type_path, "type");
+    sl_push_symbol_path(logic, type_path, "type");
     if (sl_logic_make_namespace(logic, namespace_path) != sl_LogicError_None)
       return 1;
     if (sl_logic_make_type(logic, type_path, FALSE, FALSE)
@@ -194,13 +197,13 @@ run_test_constants(struct TestState *state)
   logic = sl_new_logic_state(NULL);
 
   type_path = sl_new_symbol_path();
-  sl_push_symbol_path(type_path, "type_A");
+  sl_push_symbol_path(logic, type_path, "type_A");
   if (sl_logic_make_type(logic, type_path, FALSE, FALSE) != sl_LogicError_None)
     return 1;
 
   {
     sl_SymbolPath *path = sl_new_symbol_path();
-    sl_push_symbol_path(path, "c1");
+    sl_push_symbol_path(logic, path, "c1");
     if (sl_logic_make_constant(logic, path, type_path, NULL)
       != sl_LogicError_None)
       return 1;
@@ -214,9 +217,9 @@ run_test_constants(struct TestState *state)
     sl_SymbolPath *type_path2;
     sl_SymbolPath *path;
     type_path2 = sl_new_symbol_path();
-    sl_push_symbol_path(type_path2, "fake_type");
+    sl_push_symbol_path(logic, type_path2, "fake_type");
     path = sl_new_symbol_path();
-    sl_push_symbol_path(path, "c2");
+    sl_push_symbol_path(logic, path, "c2");
     if (sl_logic_make_constant(logic, path, type_path2, NULL)
       != sl_LogicError_NoType)
       return 1;

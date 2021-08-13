@@ -4,6 +4,32 @@
 
 #include "core.h"
 
+static uint32_t logic_state_add_string(sl_LogicState *state, const char *str)
+{
+  uint32_t index;
+  if (state == NULL || str == NULL)
+    return 0;
+  /* TODO: binary search with alphabetical order? */
+  for (size_t i = 0; i < ARR_LENGTH(state->string_table); ++i) {
+    const char *stored = *ARR_GET(state->string_table, i);
+    if (strcmp(str, stored) == 0)
+      return i;
+  }
+  index = ARR_LENGTH(state->string_table);
+  ARR_APPEND(state->string_table, strdup(str));
+  return index;
+}
+
+static const char * logic_state_get_string(const sl_LogicState *state,
+  uint32_t index)
+{
+  if (state == NULL)
+    return NULL;
+  if (index >= ARR_LENGTH(state->string_table))
+    return NULL;
+  return *ARR_GET(state->string_table, index);
+}
+
 /* Paths */
 sl_SymbolPath *
 sl_new_symbol_path()
@@ -19,7 +45,7 @@ sl_copy_symbol_path(const sl_SymbolPath *src)
   sl_SymbolPath *dst = sl_new_symbol_path();
   for (size_t i = 0; i < ARR_LENGTH(src->segments); ++i)
   {
-    ARR_APPEND(dst->segments, strdup(*ARRAY_GET(src->segments, char *, i)));
+    ARR_APPEND(dst->segments, *ARR_GET(src->segments, i));
   }
   return dst;
 }
@@ -27,10 +53,6 @@ sl_copy_symbol_path(const sl_SymbolPath *src)
 void
 sl_free_symbol_path(sl_SymbolPath *path)
 {
-  for (size_t i = 0; i < ARR_LENGTH(path->segments); ++i)
-  {
-    free(*ARR_GET(path->segments, i));
-  }
   ARR_FREE(path->segments);
   free(path);
 }
@@ -42,26 +64,30 @@ sl_get_symbol_path_length(const sl_SymbolPath *path)
 }
 
 const char *
-sl_get_symbol_path_segment(const sl_SymbolPath *path, size_t index)
+sl_get_symbol_path_segment(const sl_LogicState *state,
+  const sl_SymbolPath *path, size_t index)
 {
-  return *ARR_GET(path->segments, index);
+  return logic_state_get_string(state, *ARR_GET(path->segments, index));
 }
 
 const char *
-sl_get_symbol_path_last_segment(const sl_SymbolPath *path)
+sl_get_symbol_path_last_segment(const sl_LogicState *state,
+  const sl_SymbolPath *path)
 {
-  return sl_get_symbol_path_segment(path, sl_get_symbol_path_length(path) - 1);
+  return sl_get_symbol_path_segment(state, path,
+    sl_get_symbol_path_length(path) - 1);
 }
 
 char *
-sl_string_from_symbol_path(const sl_SymbolPath *path)
+sl_string_from_symbol_path(const sl_LogicState *state,
+  const sl_SymbolPath *path)
 {
   if (ARR_LENGTH(path->segments) == 0)
     return strdup("");
   size_t str_len = ARR_LENGTH(path->segments);
   for (size_t i = 0; i < ARR_LENGTH(path->segments); ++i)
   {
-    const char *segment = *ARR_GET(path->segments, i);
+    const char *segment = sl_get_symbol_path_segment(state, path, i);
     str_len += strlen(segment);
   }
   char *str = malloc(str_len);
@@ -73,7 +99,7 @@ sl_string_from_symbol_path(const sl_SymbolPath *path)
       *c = '.';
       ++c;
     }
-    const char *segment = *ARR_GET(path->segments, i);
+    const char *segment = sl_get_symbol_path_segment(state, path, i);
     strcpy(c, segment);
     c += strlen(segment);
   }
@@ -82,25 +108,28 @@ sl_string_from_symbol_path(const sl_SymbolPath *path)
 }
 
 void
-sl_push_symbol_path(sl_SymbolPath *path, const char *segment)
+sl_push_symbol_path(sl_LogicState *state, sl_SymbolPath *path,
+  const char *segment)
 {
-  ARR_APPEND(path->segments, strdup(segment));
+  uint32_t index;
+  index = logic_state_add_string(state, segment);
+  ARR_APPEND(path->segments, index);
 }
 
 void
 sl_pop_symbol_path(sl_SymbolPath *path)
 {
-  free(*ARR_GET(path->segments, ARRAY_LENGTH(path->segments) - 1));
   ARR_POP(path->segments);
 }
 
 void
 sl_append_symbol_path(sl_SymbolPath *path, const sl_SymbolPath *to_append)
 {
+  /* TODO: reserve segments before. */
   for (size_t i = 0; i < ARR_LENGTH(to_append->segments); ++i)
   {
-    const char *segment = *ARR_GET(to_append->segments, i);
-    sl_push_symbol_path(path, segment);
+    uint32_t segment = *ARR_GET(to_append->segments, i);
+    ARR_APPEND(path->segments, segment);
   }
 }
 
@@ -111,9 +140,9 @@ sl_symbol_paths_equal(const sl_SymbolPath *a, const sl_SymbolPath *b)
     return FALSE;
   for (size_t i = 0; i < ARR_LENGTH(a->segments); ++i)
   {
-    const char *a_segment = *ARR_GET(a->segments, i);
-    const char *b_segment = *ARR_GET(b->segments, i);
-    if (strcmp(a_segment, b_segment) != 0)
+    uint32_t a_segment = *ARR_GET(a->segments, i);
+    uint32_t b_segment = *ARR_GET(b->segments, i);
+    if (a_segment != b_segment)
       return FALSE;
   }
   return TRUE;
@@ -162,11 +191,12 @@ free_expression(struct Expression *expr)
 }
 
 static char *
-string_from_expression(const struct Expression *expr)
+string_from_expression(const sl_LogicState *state,
+  const struct Expression *expr)
 {
   size_t len = 5; /* two pairs of parentheses "()" and terminator. */
-  char *path = sl_string_from_symbol_path(expr->path);
-  char *type = sl_string_from_symbol_path(expr->type->path);
+  char *path = sl_string_from_symbol_path(state, expr->path);
+  char *type = sl_string_from_symbol_path(state, expr->type->path);
   len += strlen(path) + strlen(type) + 3; /* '[NAME] : [TYPE]' */
 
   if (ARR_LENGTH(expr->parameters) == 0)
@@ -202,7 +232,7 @@ string_from_expression(const struct Expression *expr)
       if (first_param)
         first_param = FALSE;
       const struct Parameter *param = ARR_GET(expr->parameters, i);
-      char *param_type = sl_string_from_symbol_path(param->type->path);
+      char *param_type = sl_string_from_symbol_path(state, param->type->path);
       len += strlen(param->name) + strlen(param_type) + 3; /* '[NAME] : [TYPE]' */
       ARR_APPEND(param_types, param_type);
     }
@@ -338,6 +368,7 @@ sl_new_logic_state(FILE *log_out)
   sl_LogicState *state = SL_NEW(sl_LogicState);
   if (state == NULL)
     return NULL;
+  ARR_INIT(state->string_table);
   ARR_INIT(state->symbol_table);
   state->next_id = 0;
   state->log_out = log_out;
@@ -352,6 +383,11 @@ sl_new_logic_state(FILE *log_out)
 void
 sl_free_logic_state(sl_LogicState *state)
 {
+  for (size_t i = 0; i < ARR_LENGTH(state->string_table); ++i) {
+    char *str = *ARR_GET(state->string_table, i);
+    free(str);
+  }
+  ARR_FREE(state->string_table);
   for (size_t i = 0; i < ARR_LENGTH(state->symbol_table); ++i)
   {
     sl_LogicSymbol *sym = ARR_GET(state->symbol_table, i);
@@ -433,7 +469,7 @@ add_symbol(sl_LogicState *state, sl_LogicSymbol sym)
   if (locate_symbol(state, sym.path) != NULL)
   {
     char *path_str;
-    path_str = sl_string_from_symbol_path(sym.path);
+    path_str = sl_string_from_symbol_path(state, sym.path);
     LOG_NORMAL(state->log_out,
       "Cannot add symbol '%s' because the path is in use.\n", path_str);
     free(path_str);
@@ -448,8 +484,8 @@ add_symbol(sl_LogicState *state, sl_LogicSymbol sym)
       sl_LogicSymbolType_Namespace) == NULL)
     {
       char *path_str, *parent_path_str;
-      path_str = sl_string_from_symbol_path(sym.path);
-      parent_path_str = sl_string_from_symbol_path(parent_path);
+      path_str = sl_string_from_symbol_path(state, sym.path);
+      parent_path_str = sl_string_from_symbol_path(state, parent_path);
       LOG_NORMAL(state->log_out,
         "Cannot add symbol '%s' because there is no parent namespace '%s'.\n",
         path_str, parent_path_str);
@@ -494,7 +530,7 @@ sl_logic_make_type(sl_LogicState *state, const sl_SymbolPath *type_path,
   if (!atomic && binds)
   {
     char *type_str;
-    type_str = sl_string_from_symbol_path(type_path);
+    type_str = sl_string_from_symbol_path(state, type_path);
     LOG_NORMAL(state->log_out,
       "Cannot add type '%s' because it binds but is not atomic.\n", type_str);
     free(type_str);
@@ -520,7 +556,7 @@ sl_logic_make_type(sl_LogicState *state, const sl_SymbolPath *type_path,
   else
   {
     char *type_str;
-    type_str = sl_string_from_symbol_path(type_path);
+    type_str = sl_string_from_symbol_path(state, type_path);
     LOG_NORMAL(state->log_out, "Successfully added type '%s'.\n", type_str);
     free(type_str);
   }
@@ -546,8 +582,8 @@ sl_logic_make_constant(sl_LogicState *state, const sl_SymbolPath *constant_path,
   if (type_symbol == NULL)
   {
     char *const_str, *type_str;
-    const_str = sl_string_from_symbol_path(constant_path);
-    type_str = sl_string_from_symbol_path(type_path);
+    const_str = sl_string_from_symbol_path(state, constant_path);
+    type_str = sl_string_from_symbol_path(state, type_path);
     LOG_NORMAL(state->log_out,
       "Cannot add constant '%s' because there is no such type '%s'.\n",
       const_str, type_str);
@@ -579,7 +615,7 @@ sl_logic_make_constant(sl_LogicState *state, const sl_SymbolPath *constant_path,
   else
   {
     char *const_str;
-    const_str = sl_string_from_symbol_path(sym.path);
+    const_str = sl_string_from_symbol_path(state, sym.path);
     LOG_NORMAL(state->log_out, "Successfully added constant '%s'.\n",
       const_str);
     free(const_str);
@@ -600,8 +636,8 @@ sl_logic_make_constspace(sl_LogicState *state,
   if (type_symbol == NULL)
   {
     char *constspace_str, *type_str;
-    constspace_str = sl_string_from_symbol_path(constspace_path);
-    type_str = sl_string_from_symbol_path(type_path);
+    constspace_str = sl_string_from_symbol_path(state, constspace_path);
+    type_str = sl_string_from_symbol_path(state, type_path);
     LOG_NORMAL(state->log_out,
       "Cannot add constspace '%s' because there is no such type '%s'.\n",
       constspace_str, type_str);
@@ -627,7 +663,7 @@ sl_logic_make_constspace(sl_LogicState *state,
   else
   {
     char *constspace_str;
-    constspace_str = sl_string_from_symbol_path(sym.path);
+    constspace_str = sl_string_from_symbol_path(state, sym.path);
     LOG_NORMAL(state->log_out, "Successfully created constspace '%s'.\n",
       constspace_str);
     free(constspace_str);
@@ -640,7 +676,7 @@ add_expression(sl_LogicState *state, struct PrototypeExpression proto)
 {
   if (locate_symbol(state, proto.expression_path) != NULL)
   {
-    char *expr_str = sl_string_from_symbol_path(proto.expression_path);
+    char *expr_str = sl_string_from_symbol_path(state, proto.expression_path);
     LOG_NORMAL(state->log_out,
       "Cannot add expression '%s' because the path is in use.\n", expr_str);
     free(expr_str);
@@ -655,8 +691,8 @@ add_expression(sl_LogicState *state, struct PrototypeExpression proto)
     proto.expression_type, sl_LogicSymbolType_Type);
   if (type_symbol == NULL)
   {
-    char *expr_str = sl_string_from_symbol_path(proto.expression_path);
-    char *type_str = sl_string_from_symbol_path(proto.expression_type);
+    char *expr_str = sl_string_from_symbol_path(state, proto.expression_path);
+    char *type_str = sl_string_from_symbol_path(state, proto.expression_type);
     LOG_NORMAL(state->log_out,
       "Cannot add expression '%s' because there is no such type '%s'.\n",
       expr_str, type_str);
@@ -687,8 +723,8 @@ add_expression(sl_LogicState *state, struct PrototypeExpression proto)
   /* The type of the expression must not be atomic. */
   if (e->type->atomic)
   {
-    char *expr_str = sl_string_from_symbol_path(proto.expression_path);
-    char *type_str = sl_string_from_symbol_path(proto.expression_type);
+    char *expr_str = sl_string_from_symbol_path(state, proto.expression_path);
+    char *type_str = sl_string_from_symbol_path(state, proto.expression_type);
     LOG_NORMAL(state->log_out,
       "Cannot add expression '%s' because the type '%s' is atomic.\n",
       expr_str, type_str);
@@ -707,8 +743,8 @@ add_expression(sl_LogicState *state, struct PrototypeExpression proto)
       (*param)->type, sl_LogicSymbolType_Type);
     if (type_symbol == NULL)
     {
-      char *expr_str = sl_string_from_symbol_path(proto.expression_path);
-      char *type_str = sl_string_from_symbol_path((*param)->type);
+      char *expr_str = sl_string_from_symbol_path(state, proto.expression_path);
+      char *type_str = sl_string_from_symbol_path(state, (*param)->type);
       LOG_NORMAL(state->log_out,
         "Cannot add expression '%s' because there is no such type '%s'.\n",
         expr_str, type_str);
@@ -746,20 +782,20 @@ add_expression(sl_LogicState *state, struct PrototypeExpression proto)
 
   add_symbol(state, sym);
 
-  char *expr_str = sl_string_from_symbol_path(proto.expression_path);
+  char *expr_str = sl_string_from_symbol_path(state, proto.expression_path);
   LOG_NORMAL(state->log_out,
     "Successfully added expression '%s'.\n", expr_str);
   free(expr_str);
   if (verbose)
   {
-    expr_str = string_from_expression(e);
+    expr_str = string_from_expression(state, e);
     LOG_VERBOSE(state->log_out, "Signature: '%s'.\n", expr_str);
     free(expr_str);
 
     for (size_t i = 0; i < ARR_LENGTH(e->bindings); ++i)
     {
       Value *binding = *ARR_GET(e->bindings, i);
-      char *binding_str = string_from_value(binding);
+      char *binding_str = string_from_value(state, binding);
       LOG_VERBOSE(state->log_out, "Binds: '%s'.\n", binding_str);
       free(binding_str);
     }
@@ -781,7 +817,7 @@ new_variable_value(sl_LogicState *state, const char *name, const sl_SymbolPath *
     type, sl_LogicSymbolType_Type);
   if (type_symbol == NULL)
   {
-    char *type_str = sl_string_from_symbol_path(type);
+    char *type_str = sl_string_from_symbol_path(state, type);
     LOG_NORMAL(state->log_out,
       "Cannot create value because there is no such type '%s'.\n", type_str);
     free(type_str);
@@ -827,7 +863,7 @@ new_constant_value(sl_LogicState *state, const sl_SymbolPath *constant)
     constant, sl_LogicSymbolType_Constant);
   if (constant_symbol == NULL)
   {
-    char *const_str = sl_string_from_symbol_path(constant);
+    char *const_str = sl_string_from_symbol_path(state, constant);
     LOG_NORMAL(state->log_out,
       "Cannot create value because there is no such constant '%s'.\n", const_str);
     free(const_str);
@@ -855,7 +891,7 @@ new_composition_value(sl_LogicState *state, const sl_SymbolPath *expr_path,
     expr_path, sl_LogicSymbolType_Expression);
   if (expr_symbol == NULL)
   {
-    char *expr_str = sl_string_from_symbol_path(expr_path);
+    char *expr_str = sl_string_from_symbol_path(state, expr_path);
     LOG_NORMAL(state->log_out,
       "Cannot create value because there is no such expression '%s'.\n",
       expr_str);
@@ -879,7 +915,7 @@ new_composition_value(sl_LogicState *state, const sl_SymbolPath *expr_path,
      the expression. */
   if (ARR_LENGTH(value->arguments) != ARR_LENGTH(value->expression->parameters))
   {
-    char *expr_str = sl_string_from_symbol_path(expr_path);
+    char *expr_str = sl_string_from_symbol_path(state, expr_path);
     LOG_NORMAL(state->log_out,
       "Cannot create value because the wrong number of arguments are supplied to the expression '%s'\n",
       expr_str);
@@ -899,7 +935,7 @@ new_composition_value(sl_LogicState *state, const sl_SymbolPath *expr_path,
     ARR_APPEND(args_array, argument);
     if (!types_equal(arg->type, param->type))
     {
-      char *expr_str = sl_string_from_symbol_path(expr_path);
+      char *expr_str = sl_string_from_symbol_path(state, expr_path);
       LOG_NORMAL(state->log_out,
         "Cannot create value because the type of an argument does not match the required value of the corresponding parameter of expression '%s'\n",
         expr_str);
@@ -923,7 +959,7 @@ add_axiom(sl_LogicState *state, struct PrototypeTheorem proto)
 {
   if (locate_symbol(state, proto.theorem_path) != NULL)
   {
-    char *axiom_str = sl_string_from_symbol_path(proto.theorem_path);
+    char *axiom_str = sl_string_from_symbol_path(state, proto.theorem_path);
     LOG_NORMAL(state->log_out,
       "Cannot add axiom '%s' because the path is in use.\n", axiom_str);
     free(axiom_str);
@@ -945,8 +981,8 @@ add_axiom(sl_LogicState *state, struct PrototypeTheorem proto)
       (*param)->type, sl_LogicSymbolType_Type);
     if (type_symbol == NULL)
     {
-      char *axiom_str = sl_string_from_symbol_path(proto.theorem_path);
-      char *type_str = sl_string_from_symbol_path((*param)->type);
+      char *axiom_str = sl_string_from_symbol_path(state, proto.theorem_path);
+      char *type_str = sl_string_from_symbol_path(state, (*param)->type);
       LOG_NORMAL(state->log_out,
         "Cannot add axiom '%s' because there is no such type '%s'.\n",
         axiom_str, type_str);
@@ -996,7 +1032,7 @@ add_axiom(sl_LogicState *state, struct PrototypeTheorem proto)
 
   add_symbol(state, sym);
 
-  char *axiom_str = sl_string_from_symbol_path(proto.theorem_path);
+  char *axiom_str = sl_string_from_symbol_path(state, proto.theorem_path);
   LOG_NORMAL(state->log_out,
     "Successfully added axiom '%s'.\n", axiom_str);
   free(axiom_str);
@@ -1005,13 +1041,13 @@ add_axiom(sl_LogicState *state, struct PrototypeTheorem proto)
   {
     for (size_t i = 0; i < ARR_LENGTH(a->assumptions); ++i)
     {
-      char *str = string_from_value(*ARR_GET(a->assumptions, i));
+      char *str = string_from_value(state, *ARR_GET(a->assumptions, i));
       printf("Assumption %zu: %s\n", i, str);
       free(str);
     }
     for (size_t i = 0; i < ARR_LENGTH(a->inferences); ++i)
     {
-      char *str = string_from_value(*ARR_GET(a->inferences, i));
+      char *str = string_from_value(state, *ARR_GET(a->inferences, i));
       printf("Inference %zu: %s\n", i, str);
       free(str);
     }
@@ -1093,8 +1129,8 @@ instantiate_theorem_in_env(struct sl_LogicState *state, const struct Theorem *sr
       Value *assumption = *ARR_GET(instantiated_assumptions, i);
       if (!statement_proven(assumption, env))
       {
-        char *theorem_str = sl_string_from_symbol_path(src->path);
-        char *assumption_str = string_from_value(assumption);
+        char *theorem_str = sl_string_from_symbol_path(state, src->path);
+        char *assumption_str = string_from_value(state, assumption);
         LOG_NORMAL(state->log_out,
           "Cannot instantiate theorem '%s' because the assumption '%s' is not satisfied.\n",
           theorem_str, assumption_str);
@@ -1129,7 +1165,7 @@ list_proven(sl_LogicState *state, const struct ProofEnvironment *env)
   for (size_t i = 0; i < ARR_LENGTH(env->proven); ++i)
   {
     Value *stmt = *ARR_GET(env->proven, i);
-    char *str = string_from_value(stmt);
+    char *str = string_from_value(state, stmt);
     LOG_NORMAL(state->log_out, "> '%s'\n", str);
     free(str);
   }
@@ -1142,7 +1178,7 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
 {
   if (locate_symbol(state, proto.theorem_path) != NULL)
   {
-    char *axiom_str = sl_string_from_symbol_path(proto.theorem_path);
+    char *axiom_str = sl_string_from_symbol_path(state, proto.theorem_path);
     LOG_NORMAL(state->log_out,
       "Cannot add theorem '%s' because the path is in use.\n", axiom_str);
     free(axiom_str);
@@ -1167,8 +1203,8 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
       (*param)->type, sl_LogicSymbolType_Type);
     if (type_symbol == NULL)
     {
-      char *axiom_str = sl_string_from_symbol_path(proto.theorem_path);
-      char *type_str = sl_string_from_symbol_path((*param)->type);
+      char *axiom_str = sl_string_from_symbol_path(state, proto.theorem_path);
+      char *type_str = sl_string_from_symbol_path(state, (*param)->type);
       LOG_NORMAL(state->log_out,
         "Cannot add theorem '%s' because there is no such type '%s'.\n",
         axiom_str, type_str);
@@ -1308,7 +1344,7 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
 
   add_symbol(state, sym);
 
-  char *axiom_str = sl_string_from_symbol_path(proto.theorem_path);
+  char *axiom_str = sl_string_from_symbol_path(state, proto.theorem_path);
   LOG_NORMAL(state->log_out,
     "Successfully added theorem '%s'.\n", axiom_str);
   free(axiom_str);
@@ -1317,13 +1353,13 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
   {
     for (size_t i = 0; i < ARR_LENGTH(a->assumptions); ++i)
     {
-      char *str = string_from_value(*ARR_GET(a->assumptions, i));
+      char *str = string_from_value(state, *ARR_GET(a->assumptions, i));
       printf("Assumption %zu: %s\n", i, str);
       free(str);
     }
     for (size_t i = 0; i < ARR_LENGTH(a->inferences); ++i)
     {
-      char *str = string_from_value(*ARR_GET(a->inferences, i));
+      char *str = string_from_value(state, *ARR_GET(a->inferences, i));
       printf("Inference %zu: %s\n", i, str);
       free(str);
     }
