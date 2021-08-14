@@ -237,6 +237,24 @@ enumerate_value_occurrences(const Value *target, const Value *search_in,
   }
 }
 
+unsigned int
+count_value_occurrences(const Value *target, const Value *search_in)
+{
+  if (values_equal(target, search_in)) {
+    return 1;
+  } else if (search_in->value_type == ValueTypeComposition) {
+    unsigned int child_occurrences = 0;
+    for (size_t i = 0; i < ARR_LENGTH(search_in->arguments); ++i) {
+      const Value *arg = *ARR_GET(search_in->arguments, i);
+      child_occurrences +=
+          count_value_occurrences(target, arg);
+    }
+    return child_occurrences;
+  } else {
+    return 0;
+  }
+}
+
 static bool
 value_is_irreducible(const Value *value)
 {

@@ -115,6 +115,9 @@ void
 enumerate_value_occurrences(const Value *target, const Value *search_in,
   ValueArray *occurrences);
 
+unsigned int
+count_value_occurrences(const Value *target, const Value *search_in);
+
 Value *
 reduce_expressions(const Value *value);
 
@@ -126,13 +129,11 @@ enum RequirementType
   RequirementTypeDistinct,
   RequirementTypeFreeFor,
   RequirementTypeNotFree,
-  RequirementTypeNotBound,
   RequirementTypeFree,
-  RequirementTypeBound,
   RequirementTypeCoverFree,
-  RequirementTypeCoverBound,
   RequirementTypeSubstitution,
-  RequirementTypeFullSubstitution
+  RequirementTypeFullSubstitution,
+  RequirementTypeUnused
 };
 
 struct Requirement

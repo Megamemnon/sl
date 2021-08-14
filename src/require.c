@@ -44,53 +44,9 @@ make_requirement(sl_LogicState *state,
       return 1;
     }
   }
-  else if (strcmp(src->require, "not_bound") == 0)
-  {
-    dst->type = RequirementTypeNotBound;
-    if (ARR_LENGTH(dst->arguments) != 2)
-    {
-      for (size_t i = 0; i < ARR_LENGTH(dst->arguments); ++i)
-        free_value(*ARR_GET(dst->arguments, i));
-      ARR_FREE(dst->arguments);
-      return 1;
-    }
-  }
-  else if (strcmp(src->require, "free") == 0)
-  {
-    dst->type = RequirementTypeFree;
-    if (ARR_LENGTH(dst->arguments) != 2)
-    {
-      for (size_t i = 0; i < ARR_LENGTH(dst->arguments); ++i)
-        free_value(*ARR_GET(dst->arguments, i));
-      ARR_FREE(dst->arguments);
-      return 1;
-    }
-  }
-  else if (strcmp(src->require, "bound") == 0)
-  {
-    dst->type = RequirementTypeBound;
-    if (ARR_LENGTH(dst->arguments) != 2)
-    {
-      for (size_t i = 0; i < ARR_LENGTH(dst->arguments); ++i)
-        free_value(*ARR_GET(dst->arguments, i));
-      ARR_FREE(dst->arguments);
-      return 1;
-    }
-  }
   else if (strcmp(src->require, "cover_free") == 0)
   {
     dst->type = RequirementTypeCoverFree;
-    if (ARR_LENGTH(dst->arguments) < 1)
-    {
-      for (size_t i = 0; i < ARR_LENGTH(dst->arguments); ++i)
-        free_value(*ARR_GET(dst->arguments, i));
-      ARR_FREE(dst->arguments);
-      return 1;
-    }
-  }
-  else if (strcmp(src->require, "cover_bound") == 0)
-  {
-    dst->type = RequirementTypeCoverBound;
     if (ARR_LENGTH(dst->arguments) < 1)
     {
       for (size_t i = 0; i < ARR_LENGTH(dst->arguments); ++i)
@@ -114,6 +70,17 @@ make_requirement(sl_LogicState *state,
   {
     dst->type = RequirementTypeFullSubstitution;
     if (ARR_LENGTH(dst->arguments) != 4)
+    {
+      for (size_t i = 0; i < ARR_LENGTH(dst->arguments); ++i)
+        free_value(*ARR_GET(dst->arguments, i));
+      ARR_FREE(dst->arguments);
+      return 1;
+    }
+  }
+  else if (strcmp(src->require, "unused") == 0)
+  {
+    dst->type = RequirementTypeUnused;
+    if (ARR_LENGTH(dst->arguments) != 1)
     {
       for (size_t i = 0; i < ARR_LENGTH(dst->arguments); ++i)
         free_value(*ARR_GET(dst->arguments, i));
@@ -434,83 +401,6 @@ evaluate_not_free(sl_LogicState *state, const struct ProofEnvironment *env,
   return not_free_in_env(env, target, context);
 }
 
-/* --- Not Bound --- */
-static bool
-evaluate_not_bound(struct sl_LogicState *state,
-  const struct ProofEnvironment *env, ValueArray args)
-{
-  #if 0
-  const Value *target, *context;
-  if (ARR_LENGTH(args) != 2)
-  {
-    LOG_NORMAL(state->log_out,
-      "Requirement has wrong number of arguments");
-    return 1;
-  }
-  target = *ARR_GET(args, 0);
-  context = *ARR_GET(args, 1);
-
-  /* TODO: Instead of requiring everything to be terminal, in cases that
-     we have non-terminals, figure out what must be required in order to
-     make it work and check for that requirement in the environment. */
-  if (!value_terminal(target) || !value_terminal(context))
-    return FALSE;
-
-  {
-    bool not_free = TRUE;
-    ValueArray occurrences;
-    ARR_INIT(occurrences);
-    enumerate_value_occurrences(target, context, &occurrences);
-    for (size_t i = 0; i < ARR_LENGTH(occurrences); ++i)
-    {
-      const Value *occurrence = *ARR_GET(occurrences, i);
-      if (!occurrence->bound)
-        not_free = FALSE;
-    }
-    ARR_FREE(occurrences);
-
-    return not_free;
-  }
-  #endif
-  return TRUE;
-}
-
-/* --- Free --- */
-static bool
-evaluate_free(sl_LogicState *state, const struct ProofEnvironment *env,
-  ValueArray args)
-{
-  const Value *target, *context;
-  if (ARR_LENGTH(args) != 2)
-  {
-    LOG_NORMAL(state->log_out,
-      "Requirement has wrong number of arguments");
-    return 1;
-  }
-  target = *ARR_GET(args, 0);
-  context = *ARR_GET(args, 1);
-
-  return FALSE;
-}
-
-/* --- Bound --- */
-static bool
-evaluate_bound(sl_LogicState *state, const struct ProofEnvironment *env,
-  ValueArray args)
-{
-  const Value *target, *context;
-  if (ARR_LENGTH(args) != 2)
-  {
-    LOG_NORMAL(state->log_out,
-      "Requirement has wrong number of arguments");
-    return 1;
-  }
-  target = *ARR_GET(args, 0);
-  context = *ARR_GET(args, 1);
-
-  return FALSE;
-}
-
 /* --- Cover Free --- */
 static bool
 cover_free_in_env(const struct ProofEnvironment *env, ValueArray covering,
@@ -602,14 +492,6 @@ evaluate_cover_free(sl_LogicState *state,
   covers = cover_free_in_env(env, covering, context);
   ARR_FREE(covering);
   return covers;
-}
-
-/* --- Cover Bound --- */
-static bool
-evaluate_cover_bound(sl_LogicState *state,
-  const struct ProofEnvironment *env, ValueArray args)
-{
-  return FALSE;
 }
 
 /* --- Substitution --- */
@@ -775,6 +657,37 @@ evaluate_full_substitution(struct sl_LogicState *state,
   return is_full_substitution(env, target, context, source, new_context);
 }
 
+/* --- Unused --- */
+static bool
+evaluate_unused(sl_LogicState *state, const struct ProofEnvironment *env,
+  ValueArray args)
+{
+  /* Search through all the axioms and theorems that have already been added to
+     the state. If the argument (a value) appears in any of the inferences,
+     it is used. Otherwise, it is unused. */
+  const Value *v;
+  if (ARR_LENGTH(args) != 1) {
+    LOG_NORMAL(state->log_out,
+        "Requirement 'unused' given wrong number of arguments.");
+    return FALSE;
+  }
+  v = *ARR_GET(args, 0);
+  for (size_t i = 0; i < ARR_LENGTH(state->symbol_table); ++i) {
+    sl_LogicSymbol *sym = ARR_GET(state->symbol_table, i);
+    if (sym->type == sl_LogicSymbolType_Theorem) {
+      struct Theorem *thm = (struct Theorem *)sym->object;
+      for (size_t j = 0; j < ARR_LENGTH(thm->inferences); ++j) {
+        const Value *infer = *ARR_GET(thm->inferences, j);
+        unsigned int occurrences = count_value_occurrences(v, infer);
+        if (occurrences != 0)
+          return FALSE;
+      }
+    }
+  }
+
+  return TRUE;
+}
+
 /* --- Evaluation --- */
 bool
 evaluate_requirement(sl_LogicState *state, const struct Requirement *req,
@@ -804,26 +717,17 @@ evaluate_requirement(sl_LogicState *state, const struct Requirement *req,
     case RequirementTypeNotFree:
       satisfied = evaluate_not_free(state, env, instantiated_args);
       break;
-    case RequirementTypeNotBound:
-      satisfied = evaluate_not_bound(state, env, instantiated_args);
-      break;
-    case RequirementTypeFree:
-      satisfied = evaluate_free(state, env, instantiated_args);
-      break;
-    case RequirementTypeBound:
-      satisfied = evaluate_bound(state, env, instantiated_args);
-      break;
     case RequirementTypeCoverFree:
       satisfied = evaluate_cover_free(state, env, instantiated_args);
-      break;
-    case RequirementTypeCoverBound:
-      satisfied = evaluate_cover_bound(state, env, instantiated_args);
       break;
     case RequirementTypeSubstitution:
       satisfied = evaluate_substitution(state, env, instantiated_args);
       break;
     case RequirementTypeFullSubstitution:
       satisfied = evaluate_full_substitution(state, env, instantiated_args);
+      break;
+    case RequirementTypeUnused:
+      satisfied = evaluate_unused(state, env, instantiated_args);
       break;
   }
   for (size_t i = 0; i < ARR_LENGTH(instantiated_args); ++i) {
