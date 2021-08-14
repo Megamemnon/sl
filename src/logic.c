@@ -416,6 +416,23 @@ sl_get_symbol_type(const sl_LogicSymbol *symbol)
   return symbol->type;
 }
 
+size_t sl_logic_count_symbols(const sl_LogicState *state)
+{
+  return ARR_LENGTH(state->symbol_table);
+}
+
+size_t sl_logic_count_symbols_of_type(const sl_LogicState *state,
+    sl_LogicSymbolType type)
+{
+  size_t count = 0;
+  for (size_t i = 0; i < ARR_LENGTH(state->symbol_table); ++i) {
+    const sl_LogicSymbol *sym = ARR_GET(state->symbol_table, i);
+    if (sym->type == type)
+      count += 1;
+  }
+  return count;
+}
+
 bool
 logic_state_path_occupied(const sl_LogicState *state, const sl_SymbolPath *path)
 {

@@ -91,6 +91,10 @@ sl_logic_get_symbol(sl_LogicState *state, const sl_SymbolPath *path);
 sl_LogicSymbolType
 sl_get_symbol_type(const sl_LogicSymbol *symbol);
 
+size_t sl_logic_count_symbols(const sl_LogicState *state);
+size_t sl_logic_count_symbols_of_type(const sl_LogicState *state,
+    sl_LogicSymbolType type);
+
 /* Namespaces. */
 sl_LogicError
 sl_logic_make_namespace(sl_LogicState *state,

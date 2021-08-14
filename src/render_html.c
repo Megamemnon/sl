@@ -328,20 +328,17 @@ html_render_theorem(const sl_LogicState *state, const struct Theorem *theorem,
 }
 
 int
-html_render_index_page(const sl_LogicState *state, const char *filepath)
+html_render_all_page(const sl_LogicState *state, const char *filepath)
 {
   FILE *f = fopen(filepath, "w");
   if (f == NULL)
     return 1;
   {
-    char *head = html_head("Index");
+    char *head = html_head("All Symbols");
     fputs(head, f);
     free(head);
   }
-  fputs("<h1>Index of Logic Database</h1>\n", f);
-
-  /* Run through all the namespaces. */
-  fputs("<h2>Table of Contents</h2>\n", f);
+  fputs("<h1>All Symbols</h1>\n", f);
 
   /* Print out all the symbols. */
   for (size_t i = 0; i < ARR_LENGTH(state->symbol_table); ++i)
@@ -355,6 +352,58 @@ html_render_index_page(const sl_LogicState *state, const char *filepath)
       html_render_expression(state, (struct Expression *)sym->object, f);
     else if (sym->type == sl_LogicSymbolType_Theorem)
       html_render_theorem(state, (struct Theorem *)sym->object, f);
+  }
+
+  fputs(HTML_END, f);
+  fclose(f);
+  return 0;
+}
+
+static void render_symbol_count(const sl_LogicState *state,
+  sl_LogicSymbolType type, const char *type_name_plural, FILE *out)
+{
+  size_t symbols_n = sl_logic_count_symbols_of_type(state, type);
+  char *symbols_string;
+  asprintf(&symbols_string, "<li><p>%zu %s.</p></li>\n", symbols_n,
+    type_name_plural);
+  fputs(symbols_string, out);
+  free(symbols_string);
+}
+
+static int html_render_index_page(const sl_LogicState *state,
+  const char *filepath)
+{
+  FILE *f = fopen(filepath, "w");
+  if (f == NULL)
+    return 1;
+  {
+    char *head = html_head("Index");
+    fputs(head, f);
+    free(head);
+  }
+  fputs("<h1>Index of Logic Database</h1>\n", f);
+
+  {
+    fputs("<div id=\"statistics\">\n", f);
+    fputs("<p>This database contains...</p>\n<ul>", f);
+    {
+      char *symbols_string;
+      size_t symbols_n = sl_logic_count_symbols(state);
+      asprintf(&symbols_string, "<li><p>%zu symbol(s).</p></li>\n", symbols_n);
+      fputs(symbols_string, f);
+      free(symbols_string);
+    }
+    render_symbol_count(state, sl_LogicSymbolType_Namespace,
+        "namespace(s)", f);
+    render_symbol_count(state, sl_LogicSymbolType_Type, "type(s)", f);
+    render_symbol_count(state, sl_LogicSymbolType_Constant,
+        "constant(s)", f);
+    render_symbol_count(state, sl_LogicSymbolType_Constspace,
+        "constspace(s)", f);
+    render_symbol_count(state, sl_LogicSymbolType_Expression,
+        "expression(s)", f);
+    render_symbol_count(state, sl_LogicSymbolType_Theorem, "theorem(s)", f);
+    fputs("</ul>\n</div>\n", f);
   }
 
   fputs(HTML_END, f);
@@ -547,6 +596,12 @@ render_html(const sl_LogicState *state, const char *output_dir)
     char index_path[1024];
     snprintf(index_path, 1024, "%s/index.html", output_dir);
     int err = html_render_index_page(state, index_path);
+    PROPAGATE_ERROR(err);
+  }
+  {
+    char all_path[1024];
+    snprintf(all_path, 1024, "%s/all.html", output_dir);
+    int err = html_render_all_page(state, all_path);
     PROPAGATE_ERROR(err);
   }
   for (size_t i = 0; i < ARR_LENGTH(state->symbol_table); ++i)

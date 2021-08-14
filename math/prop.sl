@@ -631,6 +631,13 @@ namespace propositional_calculus {
         implies(implies($phi, $chi), implies($psi, $chi)));
   }
 
+  /* TODO: prove. */
+  axiom biconditional_distribution_left_2(phi : Formula, psi : Formula,
+      chi : Formula) {
+    infer implies(iff($phi, $psi),
+        iff(implies($phi, $chi), implies($psi, $chi)));
+  }
+
   theorem biconditional_distribution_right(phi : Formula, psi : Formula,
       chi : Formula) {
     infer implies(iff($phi, $psi),
@@ -837,5 +844,37 @@ namespace propositional_calculus {
     step conjunction_elimination_right($phi, F);
     step false_implies(and($phi, F));
     step biconditional_introduction_meta(and($phi, F), F);
+  }
+
+  /* TODO: prove the tautological form. */
+  axiom conjunction_biconditional_distribution_meta(phi : Formula,
+      psi : Formula, chi : Formula, theta : Formula) {
+    assume iff($phi, $psi);
+    assume iff($chi, $theta);
+
+    infer iff(and($phi, $chi), and($psi, $theta));
+  }
+
+  /* TODO: prove the tautological form. */
+  axiom biconditional_transitive_meta(phi : Formula, psi : Formula,
+      chi : Formula) {
+    assume iff($phi, $psi);
+    assume iff($psi, $chi);
+
+    infer iff($phi, $chi);
+  }
+
+  /* TODO: prove the tautological form. */
+  axiom biconditional_transitive_meta_2(phi : Formula, psi : Formula,
+      chi : Formula) {
+    assume iff($phi, $psi);
+    assume iff($chi, $psi);
+
+    infer iff($phi, $chi);
+  }
+
+  /* TODO: prove. */
+  axiom biconditional_not_simplification(phi : Formula) {
+    infer iff(not($phi), iff($phi, F));
   }
 }

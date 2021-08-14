@@ -8,96 +8,106 @@ namespace zfc {
     latex "\\in";
   }
 
-  axiom extensionality() {
-    infer any(vars.x, any(vars.y, implies(
-        any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.x)),
-        eval_p2(in, t(vars.z), t(vars.y)))), eq(t(vars.x), t(vars.y)))));
+  axiom extensionality(x : Variable, y : Variable, z : Variable) {
+    require distinct($x, $y, $z);
+
+    infer any($x, any($y, implies(
+        any($z, iff(eval_p2(in, t($z), t($x)),
+        eval_p2(in, t($z), t($y)))), eq(t($x), t($y)))));
   }
 
-  theorem equivalent_set_membership_condition(phi : Formula) {
-    infer any(vars.x, any(vars.y, implies(and(
-        any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.x)), $phi)),
-        any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.y)), $phi))),
-        eq(t(vars.x), t(vars.y)))));
+  theorem equivalent_set_membership_condition(phi : Formula,
+      x : Variable, y : Variable, z : Variable) {
+    require distinct($x, $y, $z);
 
-    step extensionality();
-    step instantiation_elimination_meta(vars.x,
-        any(vars.y, implies(
-        any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.x)),
-        eval_p2(in, t(vars.z), t(vars.y)))), eq(t(vars.x), t(vars.y)))));
-    step instantiation_elimination_meta(vars.y,
-        implies(any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.x)),
-        eval_p2(in, t(vars.z), t(vars.y)))), eq(t(vars.x), t(vars.y))));
+    infer any($x, any($y, implies(and(
+        any($z, iff(eval_p2(in, t($z), t($x)), $phi)),
+        any($z, iff(eval_p2(in, t($z), t($y)), $phi))),
+        eq(t($x), t($y)))));
+
+    step extensionality($x, $y, $z);
+    step instantiation_elimination_meta($x,
+        any($y, implies(
+        any($z, iff(eval_p2(in, t($z), t($x)),
+        eval_p2(in, t($z), t($y)))), eq(t($x), t($y)))));
+    step instantiation_elimination_meta($y,
+        implies(any($z, iff(eval_p2(in, t($z), t($x)),
+        eval_p2(in, t($z), t($y)))), eq(t($x), t($y))));
     step conjunction_biconditional_elimination($phi,
-        eval_p2(in, t(vars.z), t(vars.x)), eval_p2(in, t(vars.z), t(vars.y)));
-    step quantified_conjunction_implication_meta(vars.z,
-        iff(eval_p2(in, t(vars.z), t(vars.x)), $phi),
-        iff(eval_p2(in, t(vars.z), t(vars.y)), $phi),
-        iff(eval_p2(in, t(vars.z), t(vars.x)),
-        eval_p2(in, t(vars.z), t(vars.y))));
+        eval_p2(in, t($z), t($x)), eval_p2(in, t($z), t($y)));
+    step quantified_conjunction_implication_meta($z,
+        iff(eval_p2(in, t($z), t($x)), $phi),
+        iff(eval_p2(in, t($z), t($y)), $phi),
+        iff(eval_p2(in, t($z), t($x)),
+        eval_p2(in, t($z), t($y))));
     step hypothetical_syllogism_meta(and(
-        any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.x)), $phi)),
-        any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.y)), $phi))),
-        any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.x)),
-        eval_p2(in, t(vars.z), t(vars.y)))), eq(t(vars.x), t(vars.y)));
-    step generalization(vars.y, implies(and(
-        any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.x)), $phi)),
-        any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.y)), $phi))),
-        eq(t(vars.x), t(vars.y))));
-    step generalization(vars.x, any(vars.y, implies(and(
-        any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.x)), $phi)),
-        any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.y)), $phi))),
-        eq(t(vars.x), t(vars.y)))));
+        any($z, iff(eval_p2(in, t($z), t($x)), $phi)),
+        any($z, iff(eval_p2(in, t($z), t($y)), $phi))),
+        any($z, iff(eval_p2(in, t($z), t($x)),
+        eval_p2(in, t($z), t($y)))), eq(t($x), t($y)));
+    step generalization($y, implies(and(
+        any($z, iff(eval_p2(in, t($z), t($x)), $phi)),
+        any($z, iff(eval_p2(in, t($z), t($y)), $phi))),
+        eq(t($x), t($y))));
+    step generalization($x, any($y, implies(and(
+        any($z, iff(eval_p2(in, t($z), t($x)), $phi)),
+        any($z, iff(eval_p2(in, t($z), t($y)), $phi))),
+        eq(t($x), t($y)))));
   }
 
-  theorem set_membership_condition_unique(phi : Formula) {
-    infer implies(exists(vars.x, any(vars.z, iff(eval_p2(in, t(vars.z),
-        t(vars.x)), $phi))), exists_unique(vars.x, any(vars.z,
-        iff(eval_p2(in, t(vars.z), t(vars.x)), $phi))));
+  theorem set_membership_condition_unique(phi : Formula,
+      x : Variable, y : Variable, z : Variable) {
+    require distinct($x, $y, $z);
 
-    def ex exists(vars.x, any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.x)),
+    infer implies(exists($x, any($z, iff(eval_p2(in, t($z),
+        t($x)), $phi))), exists_unique($x, any($z,
+        iff(eval_p2(in, t($z), t($x)), $phi))));
+
+    def ex exists($x, any($z, iff(eval_p2(in, t($z), t($x)),
         $phi)));
-    def uniq any(vars.x, any(vars.y, implies(and(
-        any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.x)), $phi)),
-        any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.y)), $phi))),
-        eq(t(vars.x), t(vars.y)))));
+    def uniq any($x, any($y, implies(and(
+        any($z, iff(eval_p2(in, t($z), t($x)), $phi)),
+        any($z, iff(eval_p2(in, t($z), t($y)), $phi))),
+        eq(t($x), t($y)))));
 
     step conjunction_introduction(%uniq, %ex);
     step conjunction_commutation(%uniq, %ex);
-    step equivalent_set_membership_condition($phi);
+    step equivalent_set_membership_condition($phi, $x, $y, $z);
     step modus_ponens(%uniq, implies(%ex, and(%uniq, %ex)));
     step hypothetical_syllogism_meta(%ex, and(%uniq, %ex), and(%ex, %uniq));
-    step existential_uniqueness(vars.x, any(vars.z, iff(
-        eval_p2(in, t(vars.z), t(vars.x)), $phi)), vars.y,
-        any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.y)), $phi)));
-    step biconditional_elimination_left_meta(exists_unique(vars.x,
-        any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.x)), $phi))),
-        and(exists(vars.x, any(vars.z,
-        iff(eval_p2(in, t(vars.z), t(vars.x)), $phi))),
-        any(vars.x, any(vars.y, implies(and(any(vars.z,
-        iff(eval_p2(in, t(vars.z), t(vars.x)), $phi)),
-        any(vars.z, iff(eval_p2(in, t(vars.z), t(vars.y)), $phi))),
-        eq(t(vars.x), t(vars.y)))))));
+    step existential_uniqueness($x, any($z, iff(
+        eval_p2(in, t($z), t($x)), $phi)), $y,
+        any($z, iff(eval_p2(in, t($z), t($y)), $phi)));
+    step biconditional_elimination_left_meta(exists_unique($x,
+        any($z, iff(eval_p2(in, t($z), t($x)), $phi))),
+        and(exists($x, any($z,
+        iff(eval_p2(in, t($z), t($x)), $phi))),
+        any($x, any($y, implies(and(any($z,
+        iff(eval_p2(in, t($z), t($x)), $phi)),
+        any($z, iff(eval_p2(in, t($z), t($y)), $phi))),
+        eq(t($x), t($y)))))));
     step hypothetical_syllogism_meta(%ex, and(%ex, %uniq),
-        exists_unique(vars.x, any(vars.z, iff(eval_p2(in, t(vars.z),
-        t(vars.x)), $phi))));
+        exists_unique($x, any($z, iff(eval_p2(in, t($z),
+        t($x)), $phi))));
   }
 
-  axiom regularity() {
-    def nonempty exists(vars.a, eval_p2(in, t(vars.a), t(vars.x)));
+  axiom regularity(x : Variable, y : Variable, z : Variable, a : Variable) {
+    def nonempty exists($a, eval_p2(in, t($a), t($x)));
 
-    infer any(vars.x, implies(%nonempty,
-        exists(vars.y, and(eval_p2(in, t(vars.y), t(vars.x)),
-        not(exists(vars.z, and(eval_p2(in, t(vars.z), t(vars.y)),
-        eval_p2(in, t(vars.z), t(vars.y)))))))));
+    infer any($x, implies(%nonempty,
+        exists($y, and(eval_p2(in, t($y), t($x)),
+        not(exists($z, and(eval_p2(in, t($z), t($y)),
+        eval_p2(in, t($z), t($y)))))))));
   }
 
-  axiom specification(phi : Formula) {
-    require cover_free(vars.x, $phi);
+  axiom specification(phi : Formula, x : Variable, y : Variable,
+      z : Variable) {
+    require distinct($x, $y, $z);
+    require cover_free($x, $phi);
 
-    infer any(vars.z, exists(vars.y, any(vars.x,
-        iff(eval_p2(in, t(vars.x), t(vars.y)),
-        and(eval_p2(in, t(vars.x), t(vars.z)), $phi)))));
+    infer any($z, exists($y, any($x,
+        iff(eval_p2(in, t($x), t($y)),
+        and(eval_p2(in, t($x), t($z)), $phi)))));
   }
 
   const empty : Function0 {
@@ -105,58 +115,90 @@ namespace zfc {
   }
 
   namespace lemma {
-    theorem empty_set_exists() {
-      infer exists(vars.y, any(vars.x, not(eval_p2(in, t(vars.x),
-          t(vars.y)))));
+    /* TODO: Since $z is not referenced outside of the proof, a dummy variable,
+       guaranteed to be distinct from all other variables referenced in the
+       proof, should be provided by the program (after applying an appropriate
+       qualifier to the Variable type). */
+    theorem empty_set_exists(x : Variable, y : Variable, z : Variable) {
+      require distinct($x, $y, $z);
 
-      step specification(F);
+      infer exists($y, any($x, not(eval_p2(in, t($x),
+          t($y)))));
+
+      step specification(F, $x, $y, $z);
       step false();
       step negative_conjunction_introduction(F,
-          eval_p2(in, t(vars.x), t(vars.z)));
-      step modus_ponens(not(F), not(and(eval_p2(in, t(vars.x), t(vars.z)),
+          eval_p2(in, t($x), t($z)));
+      step modus_ponens(not(F), not(and(eval_p2(in, t($x), t($z)),
           F)));
-      step instantiation_elimination(vars.z, exists(vars.y, any(vars.x,
-          iff(eval_p2(in, t(vars.x), t(vars.y)), and(
-          eval_p2(in, t(vars.x), t(vars.z)), F)))));
-      step modus_ponens(any(vars.z, exists(vars.y, any(vars.x,
-          iff(eval_p2(in, t(vars.x), t(vars.y)), and(
-          eval_p2(in, t(vars.x), t(vars.z)), F))))),
-          exists(vars.y, any(vars.x,
-          iff(eval_p2(in, t(vars.x), t(vars.y)), and(
-          eval_p2(in, t(vars.x), t(vars.z)), F)))));
-      step identity(iff(eval_p2(in, t(vars.x), t(vars.y)), and(
-          eval_p2(in, t(vars.x), t(vars.z)), F)));
-      step infer_negated_equivalent(iff(eval_p2(in, t(vars.x), t(vars.y)), and(
-          eval_p2(in, t(vars.x), t(vars.z)), F)),
-          eval_p2(in, t(vars.x), t(vars.y)), and(
-          eval_p2(in, t(vars.x), t(vars.z)), F));
-      step implication_generalization(vars.x, iff(eval_p2(in, t(vars.x),
-          t(vars.y)), and(eval_p2(in, t(vars.x), t(vars.z)), F)),
-          not(eval_p2(in, t(vars.x), t(vars.y))));
-      step implication_generalization_existential(vars.y,
-          any(vars.x, iff(eval_p2(in, t(vars.x),
-          t(vars.y)), and(eval_p2(in, t(vars.x), t(vars.z)), F))),
-          any(vars.x, not(eval_p2(in, t(vars.x), t(vars.y)))));
-      step modus_ponens(exists(vars.y, any(vars.x,
-          iff(eval_p2(in, t(vars.x), t(vars.y)), and(
-          eval_p2(in, t(vars.x), t(vars.z)), F)))),
-          exists(vars.y, any(vars.x, not(eval_p2(in, t(vars.x), t(vars.y))))));
+      step instantiation_elimination($z, exists($y, any($x,
+          iff(eval_p2(in, t($x), t($y)), and(
+          eval_p2(in, t($x), t($z)), F)))));
+      step modus_ponens(any($z, exists($y, any($x,
+          iff(eval_p2(in, t($x), t($y)), and(
+          eval_p2(in, t($x), t($z)), F))))),
+          exists($y, any($x,
+          iff(eval_p2(in, t($x), t($y)), and(
+          eval_p2(in, t($x), t($z)), F)))));
+      step identity(iff(eval_p2(in, t($x), t($y)), and(
+          eval_p2(in, t($x), t($z)), F)));
+      step infer_negated_equivalent(iff(eval_p2(in, t($x), t($y)), and(
+          eval_p2(in, t($x), t($z)), F)),
+          eval_p2(in, t($x), t($y)), and(
+          eval_p2(in, t($x), t($z)), F));
+      step implication_generalization($x, iff(eval_p2(in, t($x),
+          t($y)), and(eval_p2(in, t($x), t($z)), F)),
+          not(eval_p2(in, t($x), t($y))));
+      step implication_generalization_existential($y,
+          any($x, iff(eval_p2(in, t($x),
+          t($y)), and(eval_p2(in, t($x), t($z)), F))),
+          any($x, not(eval_p2(in, t($x), t($y)))));
+      step modus_ponens(exists($y, any($x,
+          iff(eval_p2(in, t($x), t($y)), and(
+          eval_p2(in, t($x), t($z)), F)))),
+          exists($y, any($x, not(eval_p2(in, t($x), t($y))))));
     }
 
     /* TODO: this can be inferred from set_builder_uniqueness. */
-    axiom empty_set_unique() {
-      infer exists_unique(vars.y, any(vars.x,
-          not(eval_p2(in, t(vars.x), t(vars.y)))));
+    theorem empty_set_unique(x : Variable, y : Variable, z : Variable) {
+      require distinct($x, $y, $z);
 
-      /* step empty_set_exists(); */
+      infer exists_unique($y, any($x, not(eval_p2(in, t($x), t($y)))));
+
+      step empty_set_exists($x, $y, $z);
+      step biconditional_not_simplification(eval_p2(in, t($x), t($y)));
+      step quantified_biconditional_meta($x, not(eval_p2(in, t($x), t($y))),
+          iff(eval_p2(in, t($x), t($y)), F));
+      step biconditional_generalization_existential($y,
+          any($x, not(eval_p2(in, t($x), t($y)))),
+          any($x, iff(eval_p2(in, t($x), t($y)), F)));
+      step biconditional_elimination_right_meta(exists($y, any($x, not(
+          eval_p2(in, t($x), t($y))))), exists($y, any($x, iff(eval_p2(in,
+          t($x), t($y)), F))));
+      step modus_ponens(exists($y, any($x, not(eval_p2(in, t($x), t($y))))),
+          exists($y, any($x, iff(eval_p2(in, t($x), t($y)), F))));
+      step set_membership_condition_unique(F, $y, $z, $x);
+      step modus_ponens(exists($y, any($x, iff(eval_p2(in, t($x), t($y)), F))),
+          exists_unique($y, any($x, iff(eval_p2(in, t($x), t($y)), F))));
+      step existential_uniqueness_biconditional($y, $z,
+          any($x, not(eval_p2(in, t($x), t($y)))),
+          any($x, iff(eval_p2(in, t($x), t($y)), F)),
+          any($x, not(eval_p2(in, t($x), t($z)))),
+          any($x, iff(eval_p2(in, t($x), t($z)), F)));
+      step biconditional_elimination_left_meta(
+          exists_unique($y, any($x, not(eval_p2(in, t($x), t($y))))),
+          exists_unique($y, any($x, iff(eval_p2(in, t($x), t($y)), F))));
+      step modus_ponens(
+          exists_unique($y, any($x, iff(eval_p2(in, t($x), t($y)), F))),
+          exists_unique($y, any($x, not(eval_p2(in, t($x), t($y))))));
     }
   }
 
   theorem empty_set() {
     infer any(vars.x, not(eval_p2(in, t(vars.x), eval_f0(empty))));
 
-    step lemma.empty_set_exists();
-    step lemma.empty_set_unique();
+    step lemma.empty_set_exists(vars.x, vars.y, vars.z);
+    step lemma.empty_set_unique(vars.x, vars.y, vars.z);
     step extend_function0(empty,
         any(vars.x, not(eval_p2(in, t(vars.x), t(vars.y)))),
         any(vars.x, not(eval_p2(in, t(vars.x), eval_f0(empty)))));

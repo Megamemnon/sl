@@ -234,6 +234,11 @@ latex_render_expression(const sl_LogicState *state, const struct Expression *e)
     result_ptr += strlen(seg);
   }
   *result_ptr = '\0';
+  for (size_t i = 0; i < ARR_LENGTH(segments); ++i) {
+    char *seg = *ARR_GET(segments, i);
+    free(seg);
+  }
+  ARR_FREE(segments);
   return result;
 }
 
@@ -297,6 +302,12 @@ latex_render_value(const sl_LogicState *state, const Value *v)
           result_ptr += strlen(seg);
         }
         *result_ptr = '\0';
+        for (size_t i = 0; i < ARR_LENGTH(segments); ++i)
+        {
+          char *seg = *ARR_GET(segments, i);
+          free(seg);
+        }
+        ARR_FREE(segments);
         return result;
       }
       else

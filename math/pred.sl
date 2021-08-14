@@ -49,6 +49,84 @@ namespace predicate_calculus {
     infer any($x, $phi);
   }
 
+  theorem implication_substitution(x : Variable, t : Term,
+      phi : Formula, psi : Formula, phi_0 : Formula, psi_0 : Formula) {
+    require free_for($t, t($x), $phi);
+    require free_for($t, t($x), $psi);
+    require full_substitution(t($x), $phi, $t, $phi_0);
+    require full_substitution(t($x), $psi, $t, $psi_0);
+
+    assume implies($phi, $psi);
+
+    infer implies($phi_0, $psi_0);
+
+    step generalization($x, implies($phi, $psi));
+    step instantiation($x, implies($phi, $psi), $t, implies($phi_0, $psi_0));
+    step modus_ponens(any($x, implies($phi, $psi)), implies($phi_0, $psi_0));
+  }
+
+  theorem negation_substitution(x : Variable, t : Term,
+      phi : Formula, phi_0 : Formula) {
+    require free_for($t, t($x), $phi);
+    require full_substitution(t($x), $phi, $t, $phi_0);
+
+    assume not($phi);
+
+    infer not($phi_0);
+
+    step generalization($x, not($phi));
+    step instantiation($x, not($phi), $t, not($phi_0));
+    step modus_ponens(any($x, not($phi)), not($phi_0));
+  }
+
+  theorem conjunction_substitution(x : Variable, t : Term,
+      phi : Formula, psi : Formula, phi_0 : Formula, psi_0 : Formula) {
+    require free_for($t, t($x), $phi);
+    require free_for($t, t($x), $psi);
+    require full_substitution(t($x), $phi, $t, $phi_0);
+    require full_substitution(t($x), $psi, $t, $psi_0);
+
+    assume and($phi, $psi);
+
+    infer and($phi_0, $psi_0);
+
+    step generalization($x, and($phi, $psi));
+    step instantiation($x, and($phi, $psi), $t, and($phi_0, $psi_0));
+    step modus_ponens(any($x, and($phi, $psi)), and($phi_0, $psi_0));
+  }
+
+  theorem disjunction_substitution(x : Variable, t : Term,
+      phi : Formula, psi : Formula, phi_0 : Formula, psi_0 : Formula) {
+    require free_for($t, t($x), $phi);
+    require free_for($t, t($x), $psi);
+    require full_substitution(t($x), $phi, $t, $phi_0);
+    require full_substitution(t($x), $psi, $t, $psi_0);
+
+    assume or($phi, $psi);
+
+    infer or($phi_0, $psi_0);
+
+    step generalization($x, or($phi, $psi));
+    step instantiation($x, or($phi, $psi), $t, or($phi_0, $psi_0));
+    step modus_ponens(any($x, or($phi, $psi)), or($phi_0, $psi_0));
+  }
+
+  theorem biconditional_substitution(x : Variable, t : Term,
+      phi : Formula, psi : Formula, phi_0 : Formula, psi_0 : Formula) {
+    require free_for($t, t($x), $phi);
+    require free_for($t, t($x), $psi);
+    require full_substitution(t($x), $phi, $t, $phi_0);
+    require full_substitution(t($x), $psi, $t, $psi_0);
+
+    assume iff($phi, $psi);
+
+    infer iff($phi_0, $psi_0);
+
+    step generalization($x, iff($phi, $psi));
+    step instantiation($x, iff($phi, $psi), $t, iff($phi_0, $psi_0));
+    step modus_ponens(any($x, iff($phi, $psi)), iff($phi_0, $psi_0));
+  }
+
   theorem quantified_implication_meta(x : Variable, phi : Formula,
       psi : Formula) {
     assume implies($phi, $psi);
@@ -99,6 +177,18 @@ namespace predicate_calculus {
     step quantified_implication($x, $phi, $psi);
     step modus_ponens(any($x, implies($phi, $psi)),
         implies(any($x, $phi), any($x, $psi)));
+  }
+
+  theorem biconditional_generalization(x : Variable, phi : Formula,
+      psi : Formula) {
+    assume iff($phi, $psi);
+
+    infer iff(any($x, $phi), any($x, $psi));
+
+    step biconditional_elimination_meta($phi, $psi);
+    step implication_generalization($x, $phi, $psi);
+    step implication_generalization($x, $psi, $phi);
+    step biconditional_introduction_meta(any($x, $phi), any($x, $psi));
   }
 
   theorem quantified_conjunction(x : Variable, phi : Formula,
@@ -159,23 +249,25 @@ namespace predicate_calculus {
     infer implies(eq(t($x), t($y)), implies($phi, $phi_0));
   }
 
-  theorem _equality_symmetric(x : Variable, y : Variable) {
-    infer implies(eq(t($x), t($y)), eq(t($y), t($x)));
+  namespace lemma {
+    theorem equality_symmetric_l1(x : Variable, y : Variable) {
+      infer implies(eq(t($x), t($y)), eq(t($y), t($x)));
 
-    step equality_reflexive_v($x);
-    step instantiation_elimination($x, eq(t($x), t($x)));
-    step modus_ponens(any($x, eq(t($x), t($x))), eq(t($x), t($x)));
-    step equality_substitution($x, eq(t($x), t($x)), $y, eq(t($y), t($x)));
-    step intermediate_elimination(eq(t($x), t($y)),
-        eq(t($x), t($x)), eq(t($y), t($x)));
+      step equality_reflexive_v($x);
+      step instantiation_elimination($x, eq(t($x), t($x)));
+      step modus_ponens(any($x, eq(t($x), t($x))), eq(t($x), t($x)));
+      step equality_substitution($x, eq(t($x), t($x)), $y, eq(t($y), t($x)));
+      step intermediate_elimination(eq(t($x), t($y)),
+          eq(t($x), t($x)), eq(t($y), t($x)));
+    }
   }
 
   theorem equality_symmetric() {
     infer any(vars.x, any(vars.y,
         iff(eq(t(vars.x), t(vars.y)), eq(t(vars.y), t(vars.x)))));
 
-    step _equality_symmetric(vars.x, vars.y);
-    step _equality_symmetric(vars.y, vars.x);
+    step lemma.equality_symmetric_l1(vars.x, vars.y);
+    step lemma.equality_symmetric_l1(vars.y, vars.x);
     step biconditional_introduction_meta(eq(t(vars.x), t(vars.y)),
         eq(t(vars.y), t(vars.x)));
     step generalization(vars.y,
@@ -269,11 +361,55 @@ namespace predicate_calculus {
 
   axiom existential_uniqueness(x : Variable, phi : Formula,
       y : Variable, phi_0 : Formula) {
+    require distinct($x, $y);
     require free_for(t($y), t($x), $phi);
-    require substitution(t($x), $phi, t($y), $phi_0);
+    require full_substitution(t($x), $phi, t($y), $phi_0);
 
     infer iff(exists_unique($x, $phi), and(exists($x, $phi),
         any($x, any($y, implies(and($phi, $phi_0), eq(t($x), t($y)))))));
+  }
+
+  theorem existential_uniqueness_biconditional(x : Variable, y : Variable,
+      phi : Formula, psi : Formula, phi_0 : Formula, psi_0 : Formula) {
+    require distinct($x, $y);
+    require free_for(t($y), t($x), $phi);
+    require full_substitution(t($x), $phi, t($y), $phi_0);
+    require free_for(t($y), t($x), $psi);
+    require full_substitution(t($x), $psi, t($y), $psi_0);
+
+    assume iff($phi, $psi);
+
+    infer iff(exists_unique($x, $phi), exists_unique($x, $psi));
+
+    step biconditional_generalization_existential($x, $phi, $psi);
+    step existential_uniqueness($x, $phi, $y, $phi_0);
+    step existential_uniqueness($x, $psi, $y, $psi_0);
+    step biconditional_substitution($x, t($y), $phi, $psi, $phi_0, $psi_0);
+    step conjunction_biconditional_distribution_meta($phi, $psi, $phi_0,
+        $psi_0);
+    step biconditional_distribution_left_2(and($phi, $phi_0),
+        and($psi, $psi_0), eq(t($x), t($y)));
+    step modus_ponens(iff(and($phi, $phi_0), and($psi, $psi_0)),
+        iff(implies(and($phi, $phi_0), eq(t($x), t($y))),
+        implies(and($psi, $psi_0), eq(t($x), t($y)))));
+    step biconditional_generalization($y, implies(and($phi, $phi_0),
+        eq(t($x), t($y))), implies(and($psi, $psi_0), eq(t($x), t($y))));
+    step biconditional_generalization($x, any($y, implies(and($phi, $phi_0),
+        eq(t($x), t($y)))), any($y, implies(and($psi, $psi_0),
+        eq(t($x), t($y)))));
+    step conjunction_biconditional_distribution_meta(exists($x, $phi),
+        exists($x, $psi), any($x, any($y, implies(and($phi, $phi_0),
+        eq(t($x), t($y))))), any($x, any($y, implies(and($psi, $psi_0),
+        eq(t($x), t($y))))));
+    step biconditional_transitive_meta(exists_unique($x, $phi),
+        and(exists($x, $phi), any($x, any($y, implies(and($phi, $phi_0),
+        eq(t($x), t($y)))))),
+        and(exists($x, $psi), any($x, any($y, implies(and($psi, $psi_0),
+        eq(t($x), t($y)))))));
+    step biconditional_transitive_meta_2(exists_unique($x, $phi),
+        and(exists($x, $psi), any($x, any($y, implies(and($psi, $psi_0),
+        eq(t($x), t($y)))))),
+        exists_unique($x, $psi));
   }
 
   type Predicate1 atomic;

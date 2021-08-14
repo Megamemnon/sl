@@ -104,7 +104,7 @@ make_requirement(sl_LogicState *state,
 
 /* --- Distinctness --- */
 static bool
-pair_distinct_in_env(sl_LogicState *state, const struct ProofEnvironment *env,
+pair_distinct_in_env(const struct ProofEnvironment *env,
   const Value *a, const Value *b)
 {
   for (size_t i = 0; i < ARR_LENGTH(env->requirements); ++i)
@@ -151,7 +151,7 @@ pair_distinct_in_env(sl_LogicState *state, const struct ProofEnvironment *env,
         Value *arg_a, *arg_b;
         arg_a = *ARR_GET(a->arguments, i);
         arg_b = *ARR_GET(b->arguments, i);
-        if (!pair_distinct_in_env(state, env, arg_a, arg_b))
+        if (!pair_distinct_in_env(env, arg_a, arg_b))
           return FALSE;
       }
       break;
@@ -172,7 +172,7 @@ evaluate_distinct(sl_LogicState *state, const struct ProofEnvironment *env,
       bool distinct;
       a = *ARR_GET(args, i);
       b = *ARR_GET(args, j);
-      distinct = pair_distinct_in_env(state, env, a, b);
+      distinct = pair_distinct_in_env(env, a, b);
       if (!distinct)
         return FALSE;
     }
@@ -182,7 +182,8 @@ evaluate_distinct(sl_LogicState *state, const struct ProofEnvironment *env,
 
 /* --- Free for --- */
 static bool
-value_gets_bound(const Value *source, const Value *context)
+value_gets_bound(const struct ProofEnvironment *env, const Value *source,
+    const Value *context)
 {
   switch (source->value_type)
   {
@@ -225,14 +226,35 @@ value_gets_bound(const Value *source, const Value *context)
       return FALSE;
       break;
     case ValueTypeVariable:
-      /* If we have a variable, just assume there is a
-         production that introduces a sub-value that gets bound if context
-         is a child of any binding expressions. */
+      /* Look for distinctness requirements that prevent source from being
+         bound in context. */
       for (const Value *scope = context->parent; scope != NULL;
-        scope = scope->parent)
-      {
-        if (ARR_LENGTH(scope->expression->bindings) > 0)
-          return TRUE;
+          scope = scope->parent) {
+        ArgumentArray args_array;
+        ARR_INIT(args_array);
+        for (size_t i = 0; i < ARR_LENGTH(scope->arguments); ++i) {
+          Value *arg = *ARR_GET(scope->arguments, i);
+          const struct Parameter *param =
+            ARR_GET(scope->expression->parameters, i);
+          struct Argument argument;
+          argument.name = param->name;
+          argument.value = arg;
+          ARR_APPEND(args_array, argument);
+        }
+
+        for (size_t i = 0; i < ARR_LENGTH(scope->expression->bindings); ++i) {
+          const Value *binding = *ARR_GET(scope->expression->bindings, i);
+          Value *instantiated_binding = instantiate_value(binding, args_array);
+          /* Is there a distinctness requirement that prevents source from
+             being bound? */
+          if (!pair_distinct_in_env(env, instantiated_binding, source)) {
+            free_value(instantiated_binding);
+            ARR_FREE(args_array);
+            return TRUE;
+          }
+          free_value(instantiated_binding);
+        }
+        ARR_FREE(args_array);
       }
       return FALSE;
       break;
@@ -240,7 +262,7 @@ value_gets_bound(const Value *source, const Value *context)
       for (size_t i = 0; i < ARR_LENGTH(source->arguments); ++i)
       {
         const Value *arg = *ARR_GET(source->arguments, i);
-        if (value_gets_bound(arg, context))
+        if (value_gets_bound(env, arg, context))
           return TRUE;
       }
       return FALSE;
@@ -283,7 +305,7 @@ free_for_in_env(const struct ProofEnvironment *env,
   {
     /* Then, iterate through the source and look for terms that can
        be bound. */
-    return !value_gets_bound(source, context);
+    return !value_gets_bound(env, source, context);
   }
   else if (context->value_type == ValueTypeConstant)
   {
@@ -447,7 +469,7 @@ cover_free_in_env(const struct ProofEnvironment *env, ValueArray covering,
   if (context->value_type == ValueTypeConstant
     || context->value_type == ValueTypeVariable)
   {
-    if (value_gets_bound(context, context))
+    if (value_gets_bound(env, context, context))
       return TRUE;
   }
 
