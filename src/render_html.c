@@ -222,6 +222,18 @@ html_render_expression(const sl_LogicState *state,
     }
     fputs("</ol>\n", f);
   }
+  if (expression->replace_with != NULL) {
+    char *abbreviates_label, *abbreviates_str, *abbreviates_latex;
+    abbreviates_str = html_render_value(state, expression->replace_with);
+    abbreviates_latex = latex_render_value(state, expression->replace_with);
+    asprintf(&abbreviates_label, "<li><code>%s</code><br />\\(%s\\)</li>\n",
+        abbreviates_str, abbreviates_latex);
+    fputs("<h4>Abbreviates:</h4>\n", f);
+    fputs(abbreviates_label, f);
+    free(abbreviates_label);
+    free(abbreviates_str);
+    free(abbreviates_latex);
+  }
   if (expression->has_latex)
   {
     char *latex = latex_render_expression(state, expression);
@@ -262,6 +274,44 @@ html_render_theorem(const sl_LogicState *state, const struct Theorem *theorem,
     fputs(path_label, f);
     free(path);
     free(path_label);
+  }
+  if (ARR_LENGTH(theorem->requirements) > 0) {
+    fputs("<h4>Requirements:</h4>\n", f);
+    fputs("<ul>\n", f);
+    for (size_t i = 0; i < ARR_LENGTH(theorem->requirements); ++i) {
+      const struct Requirement *req = ARR_GET(theorem->requirements, i);
+      switch (req->type) {
+        case RequirementTypeDistinct:
+          fputs("<li><h5>Distinct:</h5><ul>\n", f);
+          for (size_t j = 0; j < ARR_LENGTH(req->arguments); ++j) {
+            const Value *arg = *ARR_GET(req->arguments, j);
+            char *arg_str = html_render_value(state, arg);
+            char *arg_latex = latex_render_value(state, arg);
+            char *arg_label;
+            asprintf(&arg_label, "<li><code>%s</code><br />\\(%s\\)</li>\n",
+              arg_str, arg_latex);
+            fputs(arg_label, f);
+            free(arg_str);
+            free(arg_latex);
+            free(arg_label);
+          }
+          fputs("</ul></li>\n", f);
+          break;
+        case RequirementTypeFreeFor:
+          break;
+        case RequirementTypeNotFree:
+          break;
+        case RequirementTypeCoverFree:
+          break;
+        case RequirementTypeSubstitution:
+          break;
+        case RequirementTypeFullSubstitution:
+          break;
+        case RequirementTypeUnused:
+          break;
+      }
+    }
+    fputs("</ul>\n", f);
   }
   if (ARR_LENGTH(theorem->parameters))
   {

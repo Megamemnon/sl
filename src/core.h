@@ -129,7 +129,6 @@ enum RequirementType
   RequirementTypeDistinct,
   RequirementTypeFreeFor,
   RequirementTypeNotFree,
-  RequirementTypeFree,
   RequirementTypeCoverFree,
   RequirementTypeSubstitution,
   RequirementTypeFullSubstitution,

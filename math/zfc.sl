@@ -91,6 +91,20 @@ namespace zfc {
         t($x)), $phi))));
   }
 
+  theorem set_membership_condition_unique_meta(phi : Formula,
+      x : Variable, y : Variable, z : Variable) {
+    require distinct($x, $y, $z);
+
+    assume exists($x, any($z, iff(eval_p2(in, t($z), t($x)), $phi)));
+
+    infer exists_unique($x, any($z, iff(eval_p2(in, t($z), t($x)), $phi)));
+
+    step set_membership_condition_unique($phi, $x, $y, $z);
+    step modus_ponens(exists($x, any($z, iff(eval_p2(in, t($z), t($x)),
+        $phi))), exists_unique($x, any($z, iff(eval_p2(in, t($z), t($x)),
+        $phi))));
+  }
+
   axiom regularity(x : Variable, y : Variable, z : Variable, a : Variable) {
     def nonempty exists($a, eval_p2(in, t($a), t($x)));
 
@@ -110,6 +124,32 @@ namespace zfc {
         and(eval_p2(in, t($x), t($z)), $phi)))));
   }
 
+  /* TODO: prove this from specification. */
+  axiom set_extraction(phi : Formula, x : Variable, y : Variable) {
+    require distinct($x, $y);
+    require cover_free($y, $phi);
+
+    infer implies(exists($x, any($y, implies($phi,
+        eval_p2(in, t($y), t($x))))),
+        exists($x, any($y, iff(eval_p2(in, t($y), t($x)), $phi))));
+  }
+
+  theorem set_extraction_unique_meta(phi : Formula, x : Variable,
+      y : Variable) {
+    require distinct($x, $y);
+    require cover_free($y, $phi);
+
+    assume exists($x, any($y, implies($phi, eval_p2(in, t($y), t($x)))));
+
+    infer exists_unique($x, any($y, iff(eval_p2(in, t($y), t($x)), $phi)));
+
+    step set_extraction($phi, $x, $y);
+    step modus_ponens(exists($x, any($y, implies($phi,
+        eval_p2(in, t($y), t($x))))),
+        exists($x, any($y, iff(eval_p2(in, t($y), t($x)), $phi))));
+    step set_membership_condition_unique_meta($phi, $x, vars.dummyz, $y);
+  }
+
   const empty : Function0 {
     latex "\\emptyset";
   }
@@ -121,6 +161,8 @@ namespace zfc {
        qualifier to the Variable type). */
     theorem empty_set_exists(x : Variable, y : Variable, z : Variable) {
       require distinct($x, $y, $z);
+
+      dummy _z : Variable;
 
       infer exists($y, any($x, not(eval_p2(in, t($x),
           t($y)))));
@@ -204,10 +246,10 @@ namespace zfc {
         any(vars.x, not(eval_p2(in, t(vars.x), eval_f0(empty)))));
   }
 
-  axiom pairing() {
-    infer any(vars.x, any(vars.y, exists(vars.z, and(
-        eval_p2(in, t(vars.x), t(vars.z)),
-        eval_p2(in, t(vars.y), t(vars.z))))));
+  axiom pairing(x : Variable, y : Variable, z : Variable) {
+    infer any($x, any($y, exists($z, and(
+        eval_p2(in, t($x), t($z)),
+        eval_p2(in, t($y), t($z))))));
   }
 
   const singleton : Function1 {
@@ -271,30 +313,44 @@ namespace zfc {
         eq(t(vars.x), t(vars.b))))), vars.a, vars.b);
   }
 
-  axiom replacement(phi : Formula) {
-    //require free(vars.x, $phi);
-    //require free(vars.y, $phi);
-    //require free(vars.A, $phi);
-    //require not_free(vars.B, $phi);
+  axiom union(F : Variable, A : Variable, Y : Variable, x : Variable) {
+    infer any($F, exists($A, any($Y, any($x,
+        implies(and(eval_p2(in, t($x), t($Y)), eval_p2(in, t($Y), t($F))),
+        eval_p2(in, t($x), t($A)))))));
+  }
 
-    infer any(vars.A, implies(any(vars.x, implies(
-        eval_p2(in, t(vars.x), t(vars.A)), exists_unique(vars.y, $phi))),
-        exists(vars.B, any(vars.x, implies(eval_p2(in, t(vars.x), t(vars.A)),
-        exists(vars.y, and(eval_p2(in, t(vars.y), t(vars.B)), $phi)))))));
+  const union_of : Function1 {
+    latex "\\cup \\cdot_1";
+  }
+
+  /* TODO: prove from the axiom of union. */
+  axiom union_of_elements() {
+    infer any(vars.a, any(vars.x, iff(eval_p2(in, t(vars.x),
+        eval_f1(union_of, t(vars.a))), exists(vars.z, and(
+        eval_p2(in, t(vars.x), t(vars.z)),
+        eval_p2(in, t(vars.z), t(vars.a)))))));
+  }
+
+  axiom replacement(phi : Formula, x : Variable, y : Variable, A : Variable,
+      B : Variable) {
+    require cover_free($x, $y, $A, $phi);
+    require not_free($B, $phi);
+
+    infer any($A, implies(any($x, implies(eval_p2(in, t($x), t($A)),
+        exists_unique($y, $phi))), exists($B, any($x, implies(
+        eval_p2(in, t($x), t($A)), exists($y, and(
+        eval_p2(in, t($y), t($B)), $phi)))))));
   }
 
   const successor : Function1 {
     latex "S";
   }
 
-  /*
-  axiom infinity() {
-    infer exists(vars.X, and(eval_p2(in, empty, t(vars.X)),
-        any(vars.y,
-        implies(eval_p2(in, t(vars.y), t(vars.X)),
-        eval_p2(in, eval_f1(successor, t(vars.y)), t(vars.X))))));
+  axiom infinity(X : Variable, y : Variable) {
+    infer exists($X, and(eval_p2(in, eval_f0(empty), t($X)),
+        any($y, implies(eval_p2(in, t($y), t($X)),
+        eval_p2(in, eval_f1(successor, t($y)), t($X))))));
   }
-  */
 
   const subset : Predicate2 {
     latex "\\subset";
@@ -310,23 +366,10 @@ namespace zfc {
         t(vars.x)), eval_p2(in, t(vars.z), t(vars.y)))), vars.x, vars.y);
   }
 
-  axiom power_set() {
-    infer any(vars.x, exists(vars.y, any(vars.z,
-        implies(eval_p2(subset, t(vars.z), t(vars.x)),
-        eval_p2(in, t(vars.z), t(vars.y))))));
-  }
-
-
-  const union : Function1 {
-    latex "\\cup \\cdot_1";
-  }
-
-  /* TODO: prove from the axiom of union. */
-  axiom union_of_elements() {
-    infer any(vars.a, any(vars.x, iff(eval_p2(in, t(vars.x),
-        eval_f1(union, t(vars.a))), exists(vars.z, and(
-        eval_p2(in, t(vars.x), t(vars.z)),
-        eval_p2(in, t(vars.z), t(vars.a)))))));
+  axiom power_set(x : Variable, y : Variable, z : Variable) {
+    infer any($x, exists($y, any($z,
+        implies(eval_p2(subset, t($z), t($x)),
+        eval_p2(in, t($z), t($y))))));
   }
 
   const naturals_ordinals : Function0 {
@@ -370,6 +413,8 @@ namespace zfc {
   const eval_map : Function2 {
     latex "\\cdot_1 \\left( \\cdot_2 \\right)";
   }
+
+  /* TODO: Formula the axiom of choice. */
 }
 
 namespace algebra {

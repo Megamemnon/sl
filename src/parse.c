@@ -1092,6 +1092,24 @@ parse_def(struct ParserState *state,
 }
 
 static int
+parse_dummy(struct ParserState *state,
+    union ParserStepUserData user_data)
+{
+  add_step_to_stack(state, &ascend, user_data_none());
+  add_step_to_stack(state, &consume_symbol,
+      user_data_token_type(sl_LexerTokenType_Semicolon));
+  add_step_to_stack(state, &parse_path, user_data_none());
+  add_step_to_stack(state, &consume_symbol,
+      user_data_token_type(sl_LexerTokenType_Colon));
+  add_step_to_stack(state, &consume_name, user_data_none());
+  add_step_to_stack(state, &set_node_location, user_data_none());
+  add_step_to_stack(state, &consume_keyword, user_data_str("dummy"));
+  add_step_to_stack(state, &descend,
+      user_data_node_type(sl_ASTNodeType_Dummy));
+  return 0;
+}
+
+static int
 parse_axiom_item(struct ParserState *state,
   union ParserStepUserData user_data)
 {
@@ -1112,8 +1130,9 @@ parse_axiom_item(struct ParserState *state,
   else if (next_is_keyword(state, "def"))
   {
     exec = &parse_def;
-  }
-  else if (!next_is_type(state, sl_LexerTokenType_ClosingBrace))
+  } else if (next_is_keyword(state, "dummy")) {
+    exec = &parse_dummy;
+  } else if (!next_is_type(state, sl_LexerTokenType_ClosingBrace))
   {
     sl_lexer_show_message_at_current_token(state->input,
       "Unknown expression in axiom body.", sl_MessageType_Error);
@@ -1202,7 +1221,9 @@ parse_theorem_item(struct ParserState *state,
   {
     exec = &parse_def;
   }
-  else if (next_is_keyword(state, "step"))
+  else if (next_is_keyword(state, "dummy")) {
+    exec = &parse_dummy;
+  } else if (next_is_keyword(state, "step"))
   {
     exec = &parse_step;
   }

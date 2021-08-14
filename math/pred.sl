@@ -249,6 +249,19 @@ namespace predicate_calculus {
     infer implies(eq(t($x), t($y)), implies($phi, $phi_0));
   }
 
+  theorem equality_substitution_2(x : Variable, phi : Formula, y : Variable,
+      phi_0 : Formula) {
+    require free_for(t($y), t($x), $phi);
+    require substitution(t($x), $phi, t($y), $phi_0);
+
+    infer implies($phi, implies(eq(t($x), t($y)), $phi_0));
+
+    step equality_substitution($x, $phi, $y, $phi_0);
+    step implication_commutation(eq(t($x), t($y)), $phi, $phi_0);
+    step modus_ponens(implies(eq(t($x), t($y)), implies($phi, $phi_0)),
+        implies($phi, implies(eq(t($x), t($y)), $phi_0)));
+  }
+
   namespace lemma {
     theorem equality_symmetric_l1(x : Variable, y : Variable) {
       infer implies(eq(t($x), t($y)), eq(t($y), t($x)));

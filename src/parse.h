@@ -133,6 +133,7 @@ enum sl_ASTNodeType
   sl_ASTNodeType_Latex,
   sl_ASTNodeType_Bind,
   sl_ASTNodeType_Def,
+  sl_ASTNodeType_Dummy,
   sl_ASTNodeType_Assume,
   sl_ASTNodeType_Require,
   sl_ASTNodeType_Infer,

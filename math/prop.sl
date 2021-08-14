@@ -286,6 +286,60 @@ namespace propositional_calculus {
         implies(not($psi), not(not($phi))), implies(not($psi), $phi));
   }
 
+  theorem transposition_4(phi : Formula, psi : Formula) {
+    infer implies(implies($phi, not($psi)), implies($psi, not($phi)));
+
+    step transposition_2($phi, not($psi));
+    step double_negation_right($psi);
+    step hypothetical_syllogism_2($psi, not(not($psi)), not($phi));
+    step modus_ponens(implies($psi, not(not($psi))),
+        implies(implies(not(not($psi)), not($phi)), implies($psi, not($phi))));
+    step hypothetical_syllogism_meta(implies($phi, not($psi)),
+        implies(not(not($psi)), not($phi)), implies($psi, not($phi)));
+  }
+
+  theorem simplification_meta(phi : Formula, psi : Formula) {
+    assume $phi;
+
+    infer implies($psi, $phi);
+
+    step simplification($phi, $psi);
+    step modus_ponens($phi, implies($psi, $phi));
+  }
+
+  theorem distributive_meta(phi : Formula, psi : Formula, chi : Formula) {
+    assume implies($phi, implies($psi, $chi));
+
+    infer implies(implies($phi, $psi), implies($phi, $chi));
+
+    step distributive($phi, $psi, $chi);
+    step modus_ponens(implies($phi, implies($psi, $chi)),
+        implies(implies($phi, $psi), implies($phi, $chi)));
+  }
+
+  theorem distributive_meta_2(phi : Formula, psi : Formula, chi : Formula) {
+    assume implies($phi, implies($psi, $chi));
+    assume implies($phi, $psi);
+
+    infer implies($phi, $chi);
+
+    step distributive_meta($phi, $psi, $chi);
+    step modus_ponens(implies($phi, $psi), implies($phi, $chi));
+  }
+
+  theorem transposition_inference_4(phi : Formula, psi : Formula,
+      chi : Formula) {
+    assume implies($phi, implies($psi, not($chi)));
+
+    infer implies($phi, implies($chi, not($psi)));
+
+    step transposition_4($psi, $chi);
+    step simplification_meta(implies(implies($psi, not($chi)),
+        implies($chi, not($psi))), $phi);
+    step distributive_meta_2($phi, implies($psi, not($chi)),
+        implies($chi, not($psi)));
+  }
+
   theorem contradiction(phi : Formula) {
     infer implies(implies(not($phi), $phi), $phi);
 
@@ -353,8 +407,11 @@ namespace propositional_calculus {
     latex "\\left( " + $phi + " \\land " + $psi + " \\right)";
   }
 
-  axiom conjunction_introduction(phi : Formula, psi : Formula) {
+  theorem conjunction_introduction(phi : Formula, psi : Formula) {
     infer implies($phi, implies($psi, and($phi, $psi)));
+
+    step double_simplification($phi, not($psi));
+    step transposition_inference_4($phi, implies($phi, not($psi)), $psi);
   }
 
   theorem hypothetical_conjunction_introduction(phi : Formula,
