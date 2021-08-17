@@ -49,6 +49,19 @@ namespace predicate_calculus {
     infer any($x, $phi);
   }
 
+  theorem instantiation_meta(x : Variable, phi : Formula, t : Term,
+      phi_0 : Formula) {
+    require free_for($t, t($x), $phi);
+    require full_substitution(t($x), $phi, $t, $phi_0);
+
+    assume any($x, $phi);
+
+    infer $phi_0;
+
+    step instantiation($x, $phi, $t, $phi_0);
+    step modus_ponens(any($x, $phi), $phi_0);
+  }
+
   theorem implication_substitution(x : Variable, t : Term,
       phi : Formula, psi : Formula, phi_0 : Formula, psi_0 : Formula) {
     require free_for($t, t($x), $phi);
@@ -275,50 +288,95 @@ namespace predicate_calculus {
     }
   }
 
-  theorem equality_symmetric() {
-    infer any(vars.x, any(vars.y,
-        iff(eq(t(vars.x), t(vars.y)), eq(t(vars.y), t(vars.x)))));
+  theorem equality_symmetric(x : Variable, y : Variable) {
+    infer any($x, any($y,
+        iff(eq(t($x), t($y)), eq(t($y), t($x)))));
 
-    step lemma.equality_symmetric_l1(vars.x, vars.y);
-    step lemma.equality_symmetric_l1(vars.y, vars.x);
-    step biconditional_introduction_meta(eq(t(vars.x), t(vars.y)),
-        eq(t(vars.y), t(vars.x)));
-    step generalization(vars.y,
-        iff(eq(t(vars.x), t(vars.y)), eq(t(vars.y), t(vars.x))));
-    step generalization(vars.x, any(vars.y,
-        iff(eq(t(vars.x), t(vars.y)), eq(t(vars.y), t(vars.x)))));
+    step lemma.equality_symmetric_l1($x, $y);
+    step lemma.equality_symmetric_l1($y, $x);
+    step biconditional_introduction_meta(eq(t($x), t($y)),
+        eq(t($y), t($x)));
+    step generalization($y,
+        iff(eq(t($x), t($y)), eq(t($y), t($x))));
+    step generalization($x, any($y,
+        iff(eq(t($x), t($y)), eq(t($y), t($x)))));
   }
 
-  theorem equality_transitive() {
-    def transitive implies(eq(t(vars.x), t(vars.y)), implies(eq(t(vars.y),
-        t(vars.z)),
-    eq(t(vars.x), t(vars.z))));
+  theorem equality_substitution_reversed(x : Variable, phi : Formula,
+      y : Variable, phi_0 : Formula) {
+    require free_for(t($y), t($x), $phi);
+    require substitution(t($x), $phi, t($y), $phi_0);
 
-    infer any(vars.x, any(vars.y, any(vars.z,
-        implies(eq(t(vars.x), t(vars.y)), implies(eq(t(vars.y), t(vars.z)),
-        eq(t(vars.x), t(vars.z)))))));
+    infer implies(eq(t($y), t($x)), implies($phi, $phi_0));
 
-    step equality_symmetric();
-    step instantiation_elimination(vars.x, any(vars.y,
-        iff(eq(t(vars.x), t(vars.y)), eq(t(vars.y), t(vars.x)))));
-    step modus_ponens(any(vars.x, any(vars.y,
-        iff(eq(t(vars.x), t(vars.y)), eq(t(vars.y), t(vars.x))))),
-        any(vars.y, iff(eq(t(vars.x), t(vars.y)), eq(t(vars.y), t(vars.x)))));
-    step instantiation_elimination(vars.y,
-        iff(eq(t(vars.x), t(vars.y)), eq(t(vars.y), t(vars.x))));
-    step modus_ponens(any(vars.y, iff(eq(t(vars.x), t(vars.y)),
-        eq(t(vars.y), t(vars.x)))),
-        iff(eq(t(vars.x), t(vars.y)), eq(t(vars.y), t(vars.x))));
-    step equality_substitution(vars.y, eq(t(vars.y), t(vars.z)),
-        vars.x, eq(t(vars.x), t(vars.z)));
-    step biconditional_elimination_right_meta(eq(t(vars.x), t(vars.y)),
-        eq(t(vars.y), t(vars.x)));
-    step hypothetical_syllogism_meta(eq(t(vars.x), t(vars.y)),
-        eq(t(vars.y), t(vars.x)),
-        implies(eq(t(vars.y), t(vars.z)), eq(t(vars.x), t(vars.z))));
-    step generalization(vars.z, %transitive);
-    step generalization(vars.y, any(vars.z, %transitive));
-    step generalization(vars.x, any(vars.y, any(vars.z, %transitive)));
+    step equality_symmetric($x, $y);
+    step instantiation_elimination_meta($x,
+        any($y, iff(eq(t($x), t($y)), eq(t($y), t($x)))));
+    step instantiation_elimination_meta($y,
+        iff(eq(t($x), t($y)), eq(t($y), t($x))));
+    step biconditional_elimination_left_meta(eq(t($x), t($y)),
+        eq(t($y), t($x)));
+    step equality_substitution($x, $phi, $y, $phi_0);
+    step hypothetical_syllogism_meta(eq(t($y), t($x)), eq(t($x), t($y)),
+        implies($phi, $phi_0));
+  }
+
+  theorem equality_substitution_reversed_2(x : Variable, phi : Formula,
+      y : Variable, phi_0 : Formula) {
+    require free_for(t($y), t($x), $phi);
+    require substitution(t($x), $phi, t($y), $phi_0);
+
+    infer implies($phi, implies(eq(t($y), t($x)), $phi_0));
+
+    step equality_substitution_reversed($x, $phi, $y, $phi_0);
+    step implication_commutation(eq(t($y), t($x)), $phi, $phi_0);
+    step modus_ponens(implies(eq(t($y), t($x)), implies($phi, $phi_0)),
+        implies($phi, implies(eq(t($y), t($x)), $phi_0)));
+  }
+
+  theorem equality_transitive(x : Variable, y : Variable, z : Variable) {
+    def transitive implies(eq(t($x), t($y)), implies(eq(t($y),
+        t($z)), eq(t($x), t($z))));
+
+    infer any($x, any($y, any($z,
+        implies(eq(t($x), t($y)), implies(eq(t($y), t($z)),
+        eq(t($x), t($z)))))));
+
+    step equality_symmetric($x, $y);
+    step instantiation_elimination($x, any($y,
+        iff(eq(t($x), t($y)), eq(t($y), t($x)))));
+    step modus_ponens(any($x, any($y,
+        iff(eq(t($x), t($y)), eq(t($y), t($x))))),
+        any($y, iff(eq(t($x), t($y)), eq(t($y), t($x)))));
+    step instantiation_elimination($y,
+        iff(eq(t($x), t($y)), eq(t($y), t($x))));
+    step modus_ponens(any($y, iff(eq(t($x), t($y)),
+        eq(t($y), t($x)))),
+        iff(eq(t($x), t($y)), eq(t($y), t($x))));
+    step equality_substitution($y, eq(t($y), t($z)),
+        $x, eq(t($x), t($z)));
+    step biconditional_elimination_right_meta(eq(t($x), t($y)),
+        eq(t($y), t($x)));
+    step hypothetical_syllogism_meta(eq(t($x), t($y)),
+        eq(t($y), t($x)),
+        implies(eq(t($y), t($z)), eq(t($x), t($z))));
+    step generalization($z, %transitive);
+    step generalization($y, any($z, %transitive));
+    step generalization($x, any($y, any($z, %transitive)));
+  }
+
+  theorem instantiation_equality(x : Variable, y : Variable, z : Variable) {
+    infer implies(any($z, implies(eq(t($z), t($x)), eq(t($z), t($y)))),
+        eq(t($x), t($y)));
+    /*infer implies(any($z, iff(eq(t($z), t($x)), eq(t($z), t($y)))),
+        eq(t($x), t($y)));*/
+
+    step instantiation($z, implies(eq(t($z), t($x)), eq(t($z), t($y))),
+        t($x), implies(eq(t($x), t($x)), eq(t($x), t($y))));
+    step equality_reflexive_v($x);
+    step instantiation_elimination_meta($x, eq(t($x), t($x)));
+    step intermediate_elimination(any($z, implies(eq(t($z), t($x)),
+        eq(t($z), t($y)))), eq(t($x), t($x)), eq(t($x), t($y)));
   }
 
   expr Formula exists(x : Variable, phi : Formula) {
@@ -328,6 +386,51 @@ namespace predicate_calculus {
 
   axiom existential_quantification(x : Variable, phi : Formula) {
     infer iff(exists($x, $phi), not(any($x, not($phi))));
+  }
+
+  theorem generalization_existential(x : Variable, phi : Formula, t : Term,
+      phi_0 : Formula) {
+    require free_for($t, t($x), $phi);
+    require full_substitution(t($x), $phi, $t, $phi_0);
+
+    infer implies($phi_0, exists($x, $phi));
+
+    step instantiation($x, not($phi), $t, not($phi_0));
+    step transposition_4(any($x, not($phi)), $phi_0);
+    step modus_ponens(implies(any($x, not($phi)), not($phi_0)),
+        implies($phi_0, not(any($x, not($phi)))));
+    step existential_quantification($x, $phi);
+    step biconditional_elimination_left_meta(exists($x, $phi),
+        not(any($x, not($phi))));
+    step hypothetical_syllogism_meta($phi_0, not(any($x, not($phi))),
+        exists($x, $phi));
+  }
+
+  theorem generalization_existential_meta(x : Variable, phi : Formula,
+      t : Term, phi_0 : Formula) {
+    require free_for($t, t($x), $phi);
+    require full_substitution(t($x), $phi, $t, $phi_0);
+
+    assume $phi_0;
+
+    infer exists($x, $phi);
+
+    step generalization_existential($x, $phi, $t, $phi_0);
+    step modus_ponens($phi_0, exists($x, $phi));
+  }
+
+  theorem equality_existence(x : Variable, y : Variable) {
+    infer any($x, exists($y, eq(t($x), t($y))));
+    infer any($x, exists($y, eq(t($y), t($x))));
+
+    step equality_reflexive_v($x);
+    step instantiation_elimination_meta($x, eq(t($x), t($x)));
+    step generalization_existential_meta($y, eq(t($x), t($y)), t($x),
+        eq(t($x), t($x)));
+    step generalization($x, exists($y, eq(t($x), t($y))));
+    step generalization_existential_meta($y, eq(t($y), t($x)), t($x),
+        eq(t($x), t($x)));
+    step generalization($x, exists($y, eq(t($y), t($x))));
   }
 
   theorem implication_generalization_existential(x : Variable, phi : Formula,
@@ -425,12 +528,88 @@ namespace predicate_calculus {
         exists_unique($x, $psi));
   }
 
+  theorem equality_existence_uniqueness(x : Variable, y : Variable) {
+    require distinct($x, $y, vars.dummyx, vars.dummyy, vars.dummyz);
+
+    infer any($x, exists_unique($y, eq(t($x), t($y))));
+    infer any($x, exists_unique($y, eq(t($y), t($x))));
+
+    step equality_existence($x, $y);
+    step instantiation_meta($x, exists($y, eq(t($x), t($y))),
+        t($x), exists($y, eq(t($x), t($y))));
+    step equality_transitive(vars.dummyx, vars.dummyy, vars.dummyz);
+    step instantiation_meta(vars.dummyx,
+        any(vars.dummyy, any(vars.dummyz, implies(eq(t(vars.dummyx),
+        t(vars.dummyy)), implies(eq(t(vars.dummyy), t(vars.dummyz)),
+        eq(t(vars.dummyx), t(vars.dummyz)))))),
+        t($y),
+        any(vars.dummyy, any(vars.dummyz, implies(eq(t($y),
+        t(vars.dummyy)), implies(eq(t(vars.dummyy), t(vars.dummyz)),
+        eq(t($y), t(vars.dummyz)))))));
+    step instantiation_meta(vars.dummyy,
+        any(vars.dummyz, implies(eq(t($y), t(vars.dummyy)),
+        implies(eq(t(vars.dummyy), t(vars.dummyz)),
+        eq(t($y), t(vars.dummyz))))), t($x),
+        any(vars.dummyz, implies(eq(t($y), t($x)),
+        implies(eq(t($x), t(vars.dummyz)), eq(t($y), t(vars.dummyz))))));
+    step instantiation_meta(vars.dummyz,
+        implies(eq(t($y), t($x)),
+        implies(eq(t($x), t(vars.dummyz)), eq(t($y), t(vars.dummyz)))),
+        t(vars.dummyz), implies(eq(t($y), t($x)),
+        implies(eq(t($x), t(vars.dummyz)), eq(t($y), t(vars.dummyz)))));
+    step equality_symmetric(vars.dummyx, vars.dummyy);
+    step instantiation_meta(vars.dummyx, any(vars.dummyy,
+        iff(eq(t(vars.dummyx), t(vars.dummyy)),
+        eq(t(vars.dummyy), t(vars.dummyx)))), t($x),
+        any(vars.dummyy, iff(eq(t($x), t(vars.dummyy)),
+        eq(t(vars.dummyy), t($x)))));
+    step instantiation_meta(vars.dummyy,
+        iff(eq(t($x), t(vars.dummyy)), eq(t(vars.dummyy), t($x))),
+        t($y), iff(eq(t($x), t($y)), eq(t($y), t($x))));
+    step biconditional_elimination_right_meta(eq(t($x), t($y)),
+        eq(t($y), t($x)));
+    step hypothetical_syllogism_meta(eq(t($x), t($y)), eq(t($y), t($x)),
+        implies(eq(t($x), t(vars.dummyz)), eq(t($y), t(vars.dummyz))));
+    step hypothetical_implication_to_conjunction(eq(t($x), t($y)),
+        eq(t($x), t(vars.dummyz)), eq(t($y), t(vars.dummyz)));
+    step modus_ponens(implies(eq(t($x), t($y)),
+        implies(eq(t($x), t(vars.dummyz)), eq(t($y), t(vars.dummyz)))),
+        implies(and(eq(t($x), t($y)), eq(t($x), t(vars.dummyz))),
+        eq(t($y), t(vars.dummyz))));
+    step generalization(vars.dummyz, implies(and(eq(t($x), t($y)),
+        eq(t($x), t(vars.dummyz))), eq(t($y), t(vars.dummyz))));
+    step generalization($y, any(vars.dummyz, implies(and(eq(t($x), t($y)),
+        eq(t($x), t(vars.dummyz))), eq(t($y), t(vars.dummyz)))));
+    step conjunction_introduction_meta(exists($y, eq(t($x), t($y))),
+        any($y, any(vars.dummyz, implies(and(eq(t($x), t($y)),
+        eq(t($x), t(vars.dummyz))), eq(t($y), t(vars.dummyz))))));
+    step existential_uniqueness($y, eq(t($x), t($y)), vars.dummyz,
+        eq(t($x), t(vars.dummyz)));
+    step biconditional_elimination_left_meta(exists_unique($y,
+        eq(t($x), t($y))), and(exists($y, eq(t($x), t($y))),
+        any($y, any(vars.dummyz, implies(and(eq(t($x), t($y)),
+        eq(t($x), t(vars.dummyz))), eq(t($y), t(vars.dummyz)))))));
+    step modus_ponens(and(exists($y, eq(t($x), t($y))),
+        any($y, any(vars.dummyz, implies(and(eq(t($x), t($y)),
+        eq(t($x), t(vars.dummyz))), eq(t($y), t(vars.dummyz)))))),
+        exists_unique($y, eq(t($x), t($y))));
+    step existential_uniqueness_biconditional($y, vars.dummyz,
+        eq(t($x), t($y)), eq(t($y), t($x)),
+        eq(t($x), t(vars.dummyz)), eq(t(vars.dummyz), t($x)));
+    step biconditional_elimination_right_meta(
+        exists_unique($y, eq(t($x), t($y))),
+        exists_unique($y, eq(t($y), t($x))));
+    step modus_ponens(exists_unique($y, eq(t($x), t($y))),
+        exists_unique($y, eq(t($y), t($x))));
+    step generalization($x, exists_unique($y, eq(t($x), t($y))));
+    step generalization($x, exists_unique($y, eq(t($y), t($x))));
+  }
+
   type Predicate1 atomic;
   type Predicate2 atomic;
   type Predicate3 atomic;
 
   expr Formula eval_p1(p : Predicate1, t_1 : Term) {
-    // require unused($p);
     latex "\\left( " + $p + " \\right)\\left( " + $t_1 + " \\right) ";
   }
 
@@ -493,54 +672,140 @@ namespace predicate_calculus {
         iff(eval_p3($p, t($x_1), t($x_2), t($x_3)), $phi))));
   }
 
-  axiom extend_function0(f : Function0, phi : Formula, phi_0 : Formula) {
-    require free_for(eval_f0($f), t(vars.y), $phi);
-    require full_substitution(t(vars.y), $phi, eval_f0($f), $phi_0);
+  axiom extend_function0(f : Function0, y : Variable, phi : Formula,
+      phi_0 : Formula) {
+    require free_for(eval_f0($f), t($y), $phi);
+    require full_substitution(t($y), $phi, eval_f0($f), $phi_0);
     require unused($f);
 
-    assume exists_unique(vars.y, $phi);
+    assume exists_unique($y, $phi);
 
     infer $phi_0;
   }
 
-  axiom extend_function1(f : Function1, phi : Formula, phi_0 : Formula,
-      x_1 : Variable) {
-    require distinct(vars.y, $x_1);
-    require cover_free(vars.y, $x_1, $phi);
-    require free_for(eval_f1($f, t($x_1)), t(vars.y), $phi);
-    require full_substitution(t(vars.y), $phi, eval_f1($f, t($x_1)), $phi_0);
+  theorem extend_term_function0(f : Function0, t : Term) {
+    require unused($f);
+    require free_for($t, t(vars._dummyx),
+        exists_unique(vars._dummyy, eq(t(vars._dummyy), t(vars._dummyx))));
+
+    infer eq(eval_f0($f), $t);
+
+    step equality_existence_uniqueness(vars._dummyx, vars._dummyy);
+    step instantiation_meta(vars._dummyx, exists_unique(vars._dummyy,
+        eq(t(vars._dummyy), t(vars._dummyx))), $t,
+        exists_unique(vars._dummyy, eq(t(vars._dummyy), $t)));
+    step extend_function0($f, vars._dummyy,
+        eq(t(vars._dummyy), $t),
+        eq(eval_f0($f), $t));
+  }
+
+  axiom extend_function1(f : Function1, y : Variable, phi : Formula,
+      phi_0 : Formula, x_1 : Variable) {
+    require distinct($y, $x_1);
+    require cover_free($y, $x_1, $phi);
+    require free_for(eval_f1($f, t($x_1)), t($y), $phi);
+    require full_substitution(t($y), $phi, eval_f1($f, t($x_1)), $phi_0);
     require unused($f);
 
-    assume any($x_1, exists_unique(vars.y, $phi));
+    assume any($x_1, exists_unique($y, $phi));
 
     infer any($x_1, $phi_0);
   }
 
-  axiom extend_function2(f : Function2, phi : Formula, phi_0 : Formula,
-      x_1 : Variable, x_2 : Variable) {
-    require distinct(vars.y, $x_1, $x_2);
-    require cover_free(vars.y, $x_1, $x_2, $phi);
-    require free_for(eval_f2($f, t($x_1), t($x_2)), t(vars.y), $phi);
-    require full_substitution(t(vars.y), $phi,
+  theorem extend_term_function1(f : Function1, t : Term, x_1 : Variable) {
+    require unused($f);
+    require distinct($x_1, vars._dummyy);
+    require cover_free(vars._dummyy, $x_1, eq(t(vars._dummyy), $t));
+    require free_for($t, t(vars._dummyx),
+        exists_unique(vars._dummyy, eq(t(vars._dummyy), t(vars._dummyx))));
+
+    infer any($x_1, eq(eval_f1($f, t($x_1)), $t));
+
+    step equality_existence_uniqueness(vars._dummyx, vars._dummyy);
+    step instantiation_meta(vars._dummyx, exists_unique(vars._dummyy,
+        eq(t(vars._dummyy), t(vars._dummyx))), $t,
+        exists_unique(vars._dummyy, eq(t(vars._dummyy), $t)));
+    step generalization($x_1,
+        exists_unique(vars._dummyy, eq(t(vars._dummyy), $t)));
+    step extend_function1($f, vars._dummyy,
+        eq(t(vars._dummyy), $t), eq(eval_f1($f, t($x_1)), $t), $x_1);
+  }
+
+  axiom extend_function2(f : Function2, y : Variable, phi : Formula,
+      phi_0 : Formula, x_1 : Variable, x_2 : Variable) {
+    require distinct($y, $x_1, $x_2);
+    require cover_free($y, $x_1, $x_2, $phi);
+    require free_for(eval_f2($f, t($x_1), t($x_2)), t($y), $phi);
+    require full_substitution(t($y), $phi,
         eval_f2($f, t($x_1), t($x_2)), $phi_0);
     require unused($f);
 
-    assume any($x_1, any($x_2, exists_unique(vars.y, $phi)));
+    assume any($x_1, any($x_2, exists_unique($y, $phi)));
 
     infer any($x_1, any($x_2, $phi_0));
   }
 
-  axiom extend_function3(f : Function3, phi : Formula, phi_0 : Formula,
-      x_1 : Variable, x_2 : Variable, x_3 : Variable) {
-    require distinct(vars.y, $x_1, $x_2, $x_3);
-    require cover_free(vars.y, $x_1, $x_2, $x_3, $phi);
-    require free_for(eval_f3($f, t($x_1), t($x_2), t($x_3)), t(vars.y), $phi);
-    require full_substitution(t(vars.y), $phi,
+  theorem extend_term_function2(f : Function2, t : Term, x_1 : Variable,
+      x_2 : Variable) {
+    require unused($f);
+    require distinct($x_1, $x_2, vars._dummyy);
+    require cover_free(vars._dummyy, $x_1, $x_2, eq(t(vars._dummyy), $t));
+    require free_for($t, t(vars._dummyx),
+        exists_unique(vars._dummyy, eq(t(vars._dummyy), t(vars._dummyx))));
+
+    infer any($x_1, any($x_2, eq(eval_f2($f, t($x_1), t($x_2)), $t)));
+
+    step equality_existence_uniqueness(vars._dummyx, vars._dummyy);
+    step instantiation_meta(vars._dummyx, exists_unique(vars._dummyy,
+        eq(t(vars._dummyy), t(vars._dummyx))), $t,
+        exists_unique(vars._dummyy, eq(t(vars._dummyy), $t)));
+    step generalization($x_2,
+        exists_unique(vars._dummyy, eq(t(vars._dummyy), $t)));
+    step generalization($x_1, any($x_2,
+        exists_unique(vars._dummyy, eq(t(vars._dummyy), $t))));
+    step extend_function2($f, vars._dummyy,
+        eq(t(vars._dummyy), $t), eq(eval_f2($f, t($x_1), t($x_2)), $t),
+        $x_1, $x_2);
+  }
+
+  axiom extend_function3(f : Function3, y : Variable, phi : Formula,
+      phi_0 : Formula, x_1 : Variable, x_2 : Variable, x_3 : Variable) {
+    require distinct($y, $x_1, $x_2, $x_3);
+    require cover_free($y, $x_1, $x_2, $x_3, $phi);
+    require free_for(eval_f3($f, t($x_1), t($x_2), t($x_3)), t($y), $phi);
+    require full_substitution(t($y), $phi,
         eval_f3($f, t($x_1), t($x_2), t($x_3)), $phi_0);
     require unused($f);
 
-    assume any($x_1, any($x_2, any($x_3, exists_unique(vars.y, $phi))));
+    assume any($x_1, any($x_2, any($x_3, exists_unique($y, $phi))));
 
     infer any($x_1, any($x_2, any($x_3, $phi_0)));
+  }
+
+  theorem extend_term_function3(f : Function3, t : Term, x_1 : Variable,
+      x_2 : Variable, x_3 : Variable) {
+    require unused($f);
+    require distinct($x_1, $x_2, $x_3, vars._dummyy);
+    require cover_free(vars._dummyy, $x_1, $x_2, $x_3, eq(t(vars._dummyy), $t));
+    require free_for($t, t(vars._dummyx),
+        exists_unique(vars._dummyy, eq(t(vars._dummyy), t(vars._dummyx))));
+
+    infer any($x_1, any($x_2, any($x_3,
+        eq(eval_f3($f, t($x_1), t($x_2), t($x_3)), $t))));
+
+    step equality_existence_uniqueness(vars._dummyx, vars._dummyy);
+    step instantiation_meta(vars._dummyx, exists_unique(vars._dummyy,
+        eq(t(vars._dummyy), t(vars._dummyx))), $t,
+        exists_unique(vars._dummyy, eq(t(vars._dummyy), $t)));
+    step generalization($x_3,
+        exists_unique(vars._dummyy, eq(t(vars._dummyy), $t)));
+    step generalization($x_2, any($x_3,
+        exists_unique(vars._dummyy, eq(t(vars._dummyy), $t))));
+    step generalization($x_1, any($x_2, any($x_3,
+        exists_unique(vars._dummyy, eq(t(vars._dummyy), $t)))));
+    step extend_function3($f, vars._dummyy,
+        eq(t(vars._dummyy), $t),
+        eq(eval_f3($f, t($x_1), t($x_2), t($x_3)), $t),
+        $x_1, $x_2, $x_3);
   }
 }

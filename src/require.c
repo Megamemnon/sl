@@ -103,10 +103,11 @@ make_requirement(sl_LogicState *state,
    negatives, this only limits the scope of theorems that can be proved. */
 
 /* --- Distinctness --- */
-static bool
-pair_distinct_in_env(const struct ProofEnvironment *env,
-  const Value *a, const Value *b)
+static bool pair_distinct_in_env(const struct ProofEnvironment *env,
+    const Value *a, const Value *b)
 {
+  if (values_equal(a, b))
+    return FALSE;
   for (size_t i = 0; i < ARR_LENGTH(env->requirements); ++i)
   {
     const struct Requirement *req = ARR_GET(env->requirements, i);
@@ -180,9 +181,9 @@ evaluate_distinct(sl_LogicState *state, const struct ProofEnvironment *env,
   return TRUE;
 }
 
-/* --- Free for --- */
-static bool
-value_gets_bound(const struct ProofEnvironment *env, const Value *source,
+/* --- Free For --- */
+static bool value_gets_bound(const sl_LogicState *state,
+    const struct ProofEnvironment *env, const Value *source,
     const Value *context)
 {
   switch (source->value_type)
@@ -191,6 +192,8 @@ value_gets_bound(const struct ProofEnvironment *env, const Value *source,
       /* For a constant, look up through the parents of context. If there is
          a binding equal to source, or if there is a variable that gets
          bound, return true. */
+      if (!source->type->binds)
+        return FALSE;
       for (const Value *scope = context->parent; scope != NULL;
         scope = scope->parent)
       {
@@ -262,7 +265,7 @@ value_gets_bound(const struct ProofEnvironment *env, const Value *source,
       for (size_t i = 0; i < ARR_LENGTH(source->arguments); ++i)
       {
         const Value *arg = *ARR_GET(source->arguments, i);
-        if (value_gets_bound(env, arg, context))
+        if (value_gets_bound(state, env, arg, context))
           return TRUE;
       }
       return FALSE;
@@ -271,7 +274,7 @@ value_gets_bound(const struct ProofEnvironment *env, const Value *source,
 }
 
 static bool
-free_for_in_env(const struct ProofEnvironment *env,
+free_for_in_env(const sl_LogicState *state, const struct ProofEnvironment *env,
   const Value *source, const Value *target, const Value *context)
 {
   /* Special case: anything is always free for itself. */
@@ -305,7 +308,7 @@ free_for_in_env(const struct ProofEnvironment *env,
   {
     /* Then, iterate through the source and look for terms that can
        be bound. */
-    return !value_gets_bound(env, source, context);
+    return !value_gets_bound(state, env, source, context);
   }
   else if (context->value_type == ValueTypeConstant)
   {
@@ -318,7 +321,7 @@ free_for_in_env(const struct ProofEnvironment *env,
     for (size_t i = 0; i < ARR_LENGTH(context->arguments); ++i)
     {
       const Value *arg = *ARR_GET(context->arguments, i);
-      if (!free_for_in_env(env, source, target, arg))
+      if (!free_for_in_env(state, env, source, target, arg))
         return FALSE;
     }
     return TRUE;
@@ -341,13 +344,12 @@ evaluate_free_for(struct sl_LogicState *state,
   target = *ARR_GET(args, 1);
   context = *ARR_GET(args, 2);
 
-  return free_for_in_env(env, source, target, context);
+  return free_for_in_env(state, env, source, target, context);
 }
 
 /* --- Not Free --- */
-static bool
-not_free_in_env(const struct ProofEnvironment *env, const Value *target,
-  const Value *context)
+static bool not_free_in_env(const struct ProofEnvironment *env,
+    const Value *target, const Value *context)
 {
   /* Check if there is a corresponding requirement in the environment. */
   for (size_t i = 0; i < ARR_LENGTH(env->requirements); ++i)
@@ -391,10 +393,10 @@ not_free_in_env(const struct ProofEnvironment *env, const Value *target,
   }
   else if (context->value_type == ValueTypeVariable)
   {
-    /* There is no way to know if there haven't been requirements imposed
-       already. */
-    /* TODO: if the type is atomic, and we know the target and the context
-       are required to be distinct, we can safely return true. */
+    if (pair_distinct_in_env(env, target, context))
+      return TRUE;
+    /* Unless they are guaranteed distinct, it is possible these variables
+       have the same value. */
     return FALSE;
   }
   else
@@ -424,9 +426,9 @@ evaluate_not_free(sl_LogicState *state, const struct ProofEnvironment *env,
 }
 
 /* --- Cover Free --- */
-static bool
-cover_free_in_env(const struct ProofEnvironment *env, ValueArray covering,
-  const Value *context)
+static bool cover_free_in_env(const sl_LogicState *state,
+    const struct ProofEnvironment *env, ValueArray covering,
+    const Value *context)
 {
   /* Check if there is a corresponding requirement in the environment. */
   for (size_t i = 0; i < ARR_LENGTH(env->requirements); ++i)
@@ -469,7 +471,7 @@ cover_free_in_env(const struct ProofEnvironment *env, ValueArray covering,
   if (context->value_type == ValueTypeConstant
     || context->value_type == ValueTypeVariable)
   {
-    if (value_gets_bound(env, context, context))
+    if (value_gets_bound(state, env, context, context))
       return TRUE;
   }
 
@@ -478,7 +480,7 @@ cover_free_in_env(const struct ProofEnvironment *env, ValueArray covering,
     for (size_t i = 0; i < ARR_LENGTH(context->arguments); ++i)
     {
       const Value *arg = *ARR_GET(context->arguments, i);
-      if (!cover_free_in_env(env, covering, arg))
+      if (!cover_free_in_env(state, env, covering, arg))
         return FALSE;
     }
     return TRUE;
@@ -511,7 +513,7 @@ evaluate_cover_free(sl_LogicState *state,
     ARR_APPEND(covering, *ARR_GET(args, i));
   }
   context = *ARR_GET(args, ARR_LENGTH(args) - 1);
-  covers = cover_free_in_env(env, covering, context);
+  covers = cover_free_in_env(state, env, covering, context);
   ARR_FREE(covering);
   return covers;
 }

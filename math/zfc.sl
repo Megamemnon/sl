@@ -127,26 +127,20 @@ namespace zfc {
   /* TODO: prove this from specification. */
   axiom set_extraction(phi : Formula, x : Variable, y : Variable) {
     require distinct($x, $y);
-    require cover_free($y, $phi);
 
-    infer implies(exists($x, any($y, implies($phi,
-        eval_p2(in, t($y), t($x))))),
-        exists($x, any($y, iff(eval_p2(in, t($y), t($x)), $phi))));
+    assume exists($x, any($y, implies($phi, eval_p2(in, t($y), t($x)))));
+
+    infer exists($x, any($y, iff(eval_p2(in, t($y), t($x)), $phi)));
   }
 
-  theorem set_extraction_unique_meta(phi : Formula, x : Variable,
-      y : Variable) {
+  theorem set_extraction_unique(phi : Formula, x : Variable, y : Variable) {
     require distinct($x, $y);
-    require cover_free($y, $phi);
 
     assume exists($x, any($y, implies($phi, eval_p2(in, t($y), t($x)))));
 
     infer exists_unique($x, any($y, iff(eval_p2(in, t($y), t($x)), $phi)));
 
     step set_extraction($phi, $x, $y);
-    step modus_ponens(exists($x, any($y, implies($phi,
-        eval_p2(in, t($y), t($x))))),
-        exists($x, any($y, iff(eval_p2(in, t($y), t($x)), $phi))));
     step set_membership_condition_unique_meta($phi, $x, vars.dummyz, $y);
   }
 
@@ -201,7 +195,6 @@ namespace zfc {
           exists($y, any($x, not(eval_p2(in, t($x), t($y))))));
     }
 
-    /* TODO: this can be inferred from set_builder_uniqueness. */
     theorem empty_set_unique(x : Variable, y : Variable, z : Variable) {
       require distinct($x, $y, $z);
 
@@ -241,83 +234,270 @@ namespace zfc {
 
     step lemma.empty_set_exists(vars.x, vars.y, vars.z);
     step lemma.empty_set_unique(vars.x, vars.y, vars.z);
-    step extend_function0(empty,
+    step extend_function0(empty, vars.y,
         any(vars.x, not(eval_p2(in, t(vars.x), t(vars.y)))),
         any(vars.x, not(eval_p2(in, t(vars.x), eval_f0(empty)))));
   }
 
   axiom pairing(x : Variable, y : Variable, z : Variable) {
+    require distinct($x, $y, $z);
+
     infer any($x, any($y, exists($z, and(
         eval_p2(in, t($x), t($z)),
         eval_p2(in, t($y), t($z))))));
   }
 
-  const singleton : Function1 {
-    latex "\\{ \\cdot_1 \\}";
-  }
-
   namespace lemma {
-    /* TODO: prove this from pairing. */
-    axiom singleton_exists() {
-      infer any(vars.a, exists(vars.y, any(vars.x, iff(
-          eval_p2(in, t(vars.x), t(vars.y)), eq(t(vars.x), t(vars.a))))));
+    theorem unordered_pair_existence_uniqueness(x : Variable, y : Variable,
+        z : Variable, w : Variable) {
+      require distinct($x, $y, $z, $w);
+
+      infer any($x, any($y, exists_unique($z, any($w,
+          iff(eval_p2(in, t($w), t($z)), or(eq(t($w), t($x)),
+          eq(t($w), t($y))))))));
+
+      step pairing($x, $y, $z);
+      step instantiation_elimination_meta($x,
+          any($y, exists($z, and(eval_p2(in, t($x), t($z)),
+          eval_p2(in, t($y), t($z))))));
+      step instantiation_elimination_meta($y,
+          exists($z, and(eval_p2(in, t($x), t($z)),
+          eval_p2(in, t($y), t($z)))));
+      step equality_substitution_reversed_2($x, eval_p2(in, t($x), t($z)),
+          $w, eval_p2(in, t($w), t($z)));
+      step equality_substitution_reversed_2($y, eval_p2(in, t($y), t($z)),
+          $w, eval_p2(in, t($w), t($z)));
+      step conjunction_elimination_left(eval_p2(in, t($x), t($z)),
+          eval_p2(in, t($y), t($z)));
+      step conjunction_elimination_right(eval_p2(in, t($x), t($z)),
+          eval_p2(in, t($y), t($z)));
+      step hypothetical_syllogism_meta(and(eval_p2(in, t($x), t($z)),
+          eval_p2(in, t($y), t($z))), eval_p2(in, t($x), t($z)),
+          implies(eq(t($w), t($x)), eval_p2(in, t($w), t($z))));
+      step hypothetical_syllogism_meta(and(eval_p2(in, t($x), t($z)),
+          eval_p2(in, t($y), t($z))), eval_p2(in, t($y), t($z)),
+          implies(eq(t($w), t($y)), eval_p2(in, t($w), t($z))));
+      step hypothetical_disjunction_elimination_meta(and(
+          eval_p2(in, t($x), t($z)), eval_p2(in, t($y), t($z))),
+          eval_p2(in, t($w), t($z)), eq(t($w), t($x)), eq(t($w), t($y)));
+      step quantified_implication_meta($w, and(eval_p2(in, t($x), t($z)),
+          eval_p2(in, t($y), t($z))), implies(or(eq(t($w), t($x)),
+          eq(t($w), t($y))), eval_p2(in, t($w), t($z))));
+      step bound_generalization($w, and(eval_p2(in, t($x), t($z)),
+          eval_p2(in, t($y), t($z))));
+      step hypothetical_syllogism_meta(and(eval_p2(in, t($x), t($z)),
+          eval_p2(in, t($y), t($z))), any($w, and(eval_p2(in, t($x), t($z)),
+          eval_p2(in, t($y), t($z)))),
+          any($w, implies(or(eq(t($w), t($x)), eq(t($w), t($y))),
+          eval_p2(in, t($w), t($z)))));
+      step implication_generalization_existential($z, and(
+          eval_p2(in, t($x), t($z)), eval_p2(in, t($y), t($z))),
+          any($w, implies(or(eq(t($w), t($x)), eq(t($w), t($y))),
+          eval_p2(in, t($w), t($z)))));
+      step modus_ponens(exists($z, and(eval_p2(in, t($x), t($z)),
+          eval_p2(in, t($y), t($z)))),
+          exists($z, any($w, implies(or(eq(t($w), t($x)), eq(t($w), t($y))),
+          eval_p2(in, t($w), t($z))))));
+      step set_extraction_unique(or(eq(t($w), t($x)), eq(t($w), t($y))),
+          $z, $w);
+      step generalization($y, exists_unique($z, any($w, iff(
+          eval_p2(in, t($w), t($z)), or(eq(t($w), t($x)),
+          eq(t($w), t($y)))))));
+      step generalization($x, any($y, exists_unique($z, any($w, iff(
+          eval_p2(in, t($w), t($z)), or(eq(t($w), t($x)),
+          eq(t($w), t($y))))))));
     }
-
-    axiom singleton_unique() {
-      infer any(vars.a, exists_unique(vars.y, any(vars.x, iff(
-          eval_p2(in, t(vars.x), t(vars.y)), eq(t(vars.x), t(vars.a))))));
-    }
-  }
-
-  theorem singleton_containing() {
-    infer any(vars.a, any(vars.x, iff(eval_p2(in, t(vars.x),
-        eval_f1(singleton, t(vars.a))), eq(t(vars.x), t(vars.a)))));
-
-    step lemma.singleton_unique();
-    step extend_function1(singleton, any(vars.x, iff(
-        eval_p2(in, t(vars.x), t(vars.y)), eq(t(vars.x), t(vars.a)))),
-        any(vars.x, iff(eval_p2(in, t(vars.x), eval_f1(singleton, t(vars.a))),
-        eq(t(vars.x), t(vars.a)))), vars.a);
   }
 
   const pair : Function2 {
     latex "\\{ \\cdot_1 , \\cdot_2 \\}";
   }
 
+  theorem pair_containing(x : Variable, y : Variable, z : Variable,
+      w : Variable) {
+    require distinct($x, $y, $z, $w);
+
+    infer any($x, any($y, any($w, iff(eval_p2(in, t($w), eval_f2(pair,
+        t($x), t($y))), or(eq(t($w), t($x)), eq(t($w), t($y)))))));
+
+    step lemma.unordered_pair_existence_uniqueness($x, $y, $z, $w);
+    step extend_function2(pair, $z, any($w, iff(
+        eval_p2(in, t($w), t($z)),
+        or(eq(t($w), t($x)), eq(t($w), t($y))))),
+        any($w, iff(eval_p2(in, t($w), eval_f2(pair, t($x), t($y))),
+        or(eq(t($w), t($x)), eq(t($w), t($y))))), $x, $y);
+  }
+
   namespace lemma {
-    /* TODO: prove this from pairing. */
-    axiom pair_exists() {
-      infer any(vars.a, any(vars.b, exists(vars.y, any(vars.x,
-          iff(eval_p2(in, t(vars.x), t(vars.y)),
-          or(eq(t(vars.x), t(vars.a)), eq(t(vars.x), t(vars.b))))))));
-    }
+    theorem singleton_existence_uniqueness(x : Variable,
+        z : Variable, w : Variable) {
+      require distinct($x, $z, $w);
 
-    axiom pair_unique() {
-      infer any(vars.a, any(vars.b, exists_unique(vars.y, any(vars.x,
-          iff(eval_p2(in, t(vars.x), t(vars.y)),
-          or(eq(t(vars.x), t(vars.a)), eq(t(vars.x), t(vars.b))))))));
+      infer any($x, exists_unique($z, any($w, iff(eval_p2(in, t($w), t($z)),
+          eq(t($w), t($x))))));
+
+      step pairing($x, vars.dummyy, $z);
+      step instantiation_elimination_meta($x,
+          any(vars.dummyy, exists($z, and(eval_p2(in, t($x), t($z)),
+          eval_p2(in, t(vars.dummyy), t($z))))));
+      step instantiation_elimination_meta(vars.dummyy,
+          exists($z, and(eval_p2(in, t($x), t($z)),
+          eval_p2(in, t(vars.dummyy), t($z)))));
+      step equality_substitution_reversed_2($x, eval_p2(in, t($x), t($z)),
+          $w, eval_p2(in, t($w), t($z)));
+      step conjunction_elimination_left(eval_p2(in, t($x), t($z)),
+          eval_p2(in, t(vars.dummyy), t($z)));
+      step hypothetical_syllogism_meta(and(eval_p2(in, t($x), t($z)),
+          eval_p2(in, t(vars.dummyy), t($z))), eval_p2(in, t($x), t($z)),
+          implies(eq(t($w), t($x)), eval_p2(in, t($w), t($z))));
+      step quantified_implication_meta($w, and(eval_p2(in, t($x), t($z)),
+          eval_p2(in, t(vars.dummyy), t($z))), implies(eq(t($w), t($x)),
+          eval_p2(in, t($w), t($z))));
+      step bound_generalization($w, and(eval_p2(in, t($x), t($z)),
+          eval_p2(in, t(vars.dummyy), t($z))));
+      step hypothetical_syllogism_meta(and(eval_p2(in, t($x), t($z)),
+          eval_p2(in, t(vars.dummyy), t($z))), any($w,
+          and(eval_p2(in, t($x), t($z)),
+          eval_p2(in, t(vars.dummyy), t($z)))),
+          any($w, implies(eq(t($w), t($x)),
+          eval_p2(in, t($w), t($z)))));
+      step implication_generalization_existential($z, and(
+          eval_p2(in, t($x), t($z)), eval_p2(in, t(vars.dummyy), t($z))),
+          any($w, implies(eq(t($w), t($x)),
+          eval_p2(in, t($w), t($z)))));
+      step modus_ponens(exists($z, and(eval_p2(in, t($x), t($z)),
+          eval_p2(in, t(vars.dummyy), t($z)))),
+          exists($z, any($w, implies(eq(t($w), t($x)),
+          eval_p2(in, t($w), t($z))))));
+      step set_extraction_unique(eq(t($w), t($x)),
+          $z, $w);
+      step generalization($x, exists_unique($z, any($w, iff(
+          eval_p2(in, t($w), t($z)), eq(t($w), t($x))))));
     }
   }
 
-  theorem pair_containing() {
-    infer any(vars.a, any(vars.b, any(vars.x, iff(
-        eval_p2(in, t(vars.x), eval_f2(pair, t(vars.a), t(vars.b))),
-        or(eq(t(vars.x), t(vars.a)), eq(t(vars.x), t(vars.b)))))));
-
-    step lemma.pair_unique();
-    step extend_function2(pair, any(vars.x, iff(
-        eval_p2(in, t(vars.x), t(vars.y)),
-        or(eq(t(vars.x), t(vars.a)), eq(t(vars.x), t(vars.b))))),
-        any(vars.x, iff(eval_p2(in, t(vars.x),
-        eval_f2(pair, t(vars.a), t(vars.b))), or(eq(t(vars.x), t(vars.a)),
-        eq(t(vars.x), t(vars.b))))), vars.a, vars.b);
+  const singleton : Function1 {
+    latex "\\{ \\cdot_1 \\}";
   }
+
+  theorem singleton_containing(x : Variable, z : Variable, w : Variable) {
+    require distinct($x, $z, $w);
+
+    infer any($x, any($w, iff(eval_p2(in, t($w), eval_f1(singleton, t($x))),
+        eq(t($w), t($x)))));
+
+    step lemma.singleton_existence_uniqueness($x, $z, $w);
+    step extend_function1(singleton, $z, any($w, iff(
+        eval_p2(in, t($w), t($z)), eq(t($w), t($x)))),
+        any($w, iff(eval_p2(in, t($w), eval_f1(singleton, t($x))),
+        eq(t($w), t($x)))), $x);
+  }
+
+  namespace lemma {
+    /* TODO: this should be a general theorem for terms. */
+    theorem singleton_equality_1(x : Variable, y : Variable) {
+      require distinct($x, $y);
+
+      infer any($x, any($y, implies(eq(t($x), t($y)),
+          eq(eval_f1(singleton, t($x)), eval_f1(singleton, t($y))))));
+
+      step equality_substitution($x,
+          eq(eval_f1(singleton, t($x)), eval_f1(singleton, t($x))),
+          $y, eq(eval_f1(singleton, t($x)), eval_f1(singleton, t($y))));
+      step equality_reflexive_v($x);
+      step instantiation_meta($x, eq(t($x), t($x)),
+          eval_f1(singleton, t($x)),
+          eq(eval_f1(singleton, t($x)), eval_f1(singleton, t($x))));
+      step intermediate_elimination(eq(t($x), t($y)),
+          eq(eval_f1(singleton, t($x)), eval_f1(singleton, t($x))),
+          eq(eval_f1(singleton, t($x)), eval_f1(singleton, t($y))));
+      step generalization($y, implies(eq(t($x), t($y)),
+          eq(eval_f1(singleton, t($x)), eval_f1(singleton, t($y)))));
+      step generalization($x, any($y, implies(eq(t($x), t($y)),
+          eq(eval_f1(singleton, t($x)), eval_f1(singleton, t($y))))));
+    }
+  }
+
+  const ordered_pair : Function2 {
+    latex "\\cdot_1 , \\cdot_2";
+  }
+
+  theorem ordered_pair_containing(x : Variable, y : Variable) {
+    require distinct($x, $y);
+
+    infer any($x, any($y, eq(eval_f2(ordered_pair, t($x), t($y)),
+        eval_f2(pair, eval_f1(singleton, t($x)),
+        eval_f2(pair, t($x), t($y))))));
+
+    step extend_term_function2(ordered_pair,
+        eval_f2(pair, eval_f1(singleton, t($x)), eval_f2(pair, t($x), t($y))),
+        $x, $y);
+  }
+
+  /*theorem ordered_pair_containing(x : Variable, y : Variable, z : Variable,
+      w : Variable) {
+    require distinct($x, $y, $z, $w, vars.dummyx, vars.dummyy);
+
+    infer any($x, any($y, any($w, iff(eval_p2(in, t($w),
+        eval_f2(ordered_pair, t($x), t($y))),
+        or(eq(t($w), eval_f1(singleton, t($x))),
+        eq(t($w), eval_f2(pair, t($x), t($y))))))));
+
+    step lemma.unordered_pair_existence_uniqueness(vars.dummyx, vars.dummyy,
+        $z, $w);
+    step instantiation_meta(vars.dummyx, any(vars.dummyy,
+        exists_unique($z, any($w, iff(eval_p2(in, t($w), t($z)),
+        or(eq(t($w), t(vars.dummyx)), eq(t($w), t(vars.dummyy))))))),
+        eval_f1(singleton, t($x)), any(vars.dummyy,
+        exists_unique($z, any($w, iff(eval_p2(in, t($w), t($z)),
+        or(eq(t($w), eval_f1(singleton, t($x))),
+        eq(t($w), t(vars.dummyy))))))));
+    step instantiation_meta(vars.dummyy, exists_unique($z, any($w,
+        iff(eval_p2(in, t($w), t($z)), or(eq(t($w),
+        eval_f1(singleton, t($x))), eq(t($w), t(vars.dummyy)))))),
+        eval_f2(pair, t($x), t($y)), exists_unique($z, any($w,
+        iff(eval_p2(in, t($w), t($z)), or(eq(t($w), eval_f1(singleton, t($x))),
+        eq(t($w), eval_f2(pair, t($x), t($y))))))));
+    step generalization($y, exists_unique($z, any($w,
+        iff(eval_p2(in, t($w), t($z)), or(eq(t($w), eval_f1(singleton, t($x))),
+        eq(t($w), eval_f2(pair, t($x), t($y))))))));
+    step generalization($x, any($y, exists_unique($z, any($w,
+        iff(eval_p2(in, t($w), t($z)), or(eq(t($w), eval_f1(singleton, t($x))),
+        eq(t($w), eval_f2(pair, t($x), t($y)))))))));
+    step extend_function2(ordered_pair, $z, any($w, iff(
+        eval_p2(in, t($w), t($z)),
+        or(eq(t($w), eval_f1(singleton, t($x))),
+        eq(t($w), eval_f2(pair, t($x), t($y)))))),
+        any($w, iff(eval_p2(in, t($w), eval_f2(ordered_pair, t($x), t($y))),
+        or(eq(t($w), eval_f1(singleton, t($x))),
+        eq(t($w), eval_f2(pair, t($x), t($y)))))), $x, $y);
+  }*/
 
   axiom union(F : Variable, A : Variable, Y : Variable, x : Variable) {
+    require distinct($F, $A, $Y, $x);
+
     infer any($F, exists($A, any($Y, any($x,
         implies(and(eval_p2(in, t($x), t($Y)), eval_p2(in, t($Y), t($F))),
         eval_p2(in, t($x), t($A)))))));
   }
+
+  /*namespace lemma {
+    theorem union_existence_uniqueness(F : Variable, A : Variable,
+        Y : Variable, x : Variable) {
+      require distinct($F, $A, $Y, $x);
+
+      /*infer any($F, exists_unique($A, any($Y, any($x,
+          iff(eval_p2(in, t($x), t($A)), and(eval_p2(in, t($x), t($Y)),
+          eval_p2(in, t($Y), t($F))))))));*/
+
+      step union($F, $A, $Y, $x);
+      step instantiation_elimination_meta($F, exists($A, any($Y, any($x,
+          implies(and(eval_p2(in, t($x), t($Y)), eval_p2(in, t($Y), t($F))),
+          eval_p2(in, t($x), t($A)))))));
+      step set_extraction_unique(and(eval_p2(in, t($x), t($Y)),
+          eval_p2(in, t($Y), t($F))), $x, $A);
+    }
+  }*/
 
   const union_of : Function1 {
     latex "\\cup \\cdot_1";
@@ -356,20 +536,57 @@ namespace zfc {
     latex "\\subset";
   }
 
-  theorem subset_of() {
-    infer any(vars.x, any(vars.y,
-        iff(eval_p2(subset, t(vars.x), t(vars.y)),
-        any(vars.z, implies(eval_p2(in, t(vars.z), t(vars.x)),
-        eval_p2(in, t(vars.z), t(vars.y)))))));
+  theorem subset_of(x : Variable, y : Variable, z : Variable) {
+    require distinct($x, $y, $z);
 
-    step extend_predicate2(subset, any(vars.z, implies(eval_p2(in, t(vars.z),
-        t(vars.x)), eval_p2(in, t(vars.z), t(vars.y)))), vars.x, vars.y);
+    infer any($x, any($y, iff(eval_p2(subset, t($x), t($y)),
+        any($z, implies(eval_p2(in, t($z), t($x)),
+        eval_p2(in, t($z), t($y)))))));
+
+    step extend_predicate2(subset, any($z, implies(eval_p2(in, t($z), t($x)),
+        eval_p2(in, t($z), t($y)))), $x, $y);
   }
 
   axiom power_set(x : Variable, y : Variable, z : Variable) {
+    require distinct($x, $y, $z);
+
     infer any($x, exists($y, any($z,
-        implies(eval_p2(subset, t($z), t($x)),
-        eval_p2(in, t($z), t($y))))));
+        implies(eval_p2(subset, t($z), t($x)), eval_p2(in, t($z), t($y))))));
+  }
+
+  namespace lemma {
+    theorem power_set_existence_uniqueness(x : Variable, y : Variable,
+        z : Variable) {
+      require distinct($x, $y, $z);
+
+      infer any($x, exists_unique($y, any($z,
+          iff(eval_p2(in, t($z), t($y)), eval_p2(subset, t($z), t($x))))));
+
+      step power_set($x, $y, $z);
+      step instantiation_elimination_meta($x, exists($y, any($z,
+          implies(eval_p2(subset, t($z), t($x)), eval_p2(in, t($z), t($y))))));
+      step set_extraction_unique(eval_p2(subset, t($z), t($x)), $y, $z);
+      step generalization($x, exists_unique($y, any($z,
+          iff(eval_p2(in, t($z), t($y)), eval_p2(subset, t($z), t($x))))));
+    }
+  }
+
+  const power_set_of : Function1 {
+    latex "\\mathcal{P}";
+  }
+
+  theorem power_set_of_set(x : Variable, y : Variable, z : Variable) {
+    require distinct($x, $y, $z);
+
+    infer any($x, any($z, iff(eval_p2(in, t($z), eval_f1(power_set_of, t($x))),
+        eval_p2(subset, t($z), t($x)))));
+
+    step lemma.power_set_existence_uniqueness($x, $y, $z);
+    step extend_function1(power_set_of, $y,
+        any($z, iff(eval_p2(in, t($z), t($y)),
+        eval_p2(subset, t($z), t($x)))),
+        any($z, iff(eval_p2(in, t($z), eval_f1(power_set_of, t($x))),
+        eval_p2(subset, t($z), t($x)))), $x);
   }
 
   const naturals_ordinals : Function0 {
@@ -378,10 +595,6 @@ namespace zfc {
 
   const zero_ordinal : Function0 {
     latex "0";
-  }
-
-  const ordered_pair : Function2 {
-    latex "\\cdot_1 , \\cdot_2";
   }
 
   const cartesian_product : Function2 {

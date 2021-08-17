@@ -399,9 +399,6 @@ namespace propositional_calculus {
 
   /* Extend the system to include the other connectives we use and prove common
      theorems. */
-  /* TODO: Instead of explicitly adding these connectives and their properties
-     as axioms, add them as extension by definition and prove these properties
-     as theorems. */
   expr Formula and(phi : Formula, psi : Formula) {
     as not(implies($phi, not($psi)));
     latex "\\left( " + $phi + " \\land " + $psi + " \\right)";
@@ -551,6 +548,36 @@ namespace propositional_calculus {
         implies($phi, and($psi, $chi)));
   }
 
+  theorem conjunction_to_implication(phi : Formula, psi : Formula) {
+    infer implies(and($phi, $psi), implies($phi, $psi));
+
+    step simplification($psi, $phi);
+    step simplification_meta(implies($psi, implies($phi, $psi)),
+        and($phi, $psi));
+    step conjunction_elimination_right($phi, $psi);
+    step distributive_meta_2(and($phi, $psi), $psi, implies($phi, $psi));
+  }
+
+  theorem hypothetical_implication_to_conjunction(phi : Formula, psi : Formula,
+      chi : Formula) {
+    infer implies(implies($phi, implies($psi, $chi)),
+        implies(and($phi, $psi), $chi));
+
+    step hypothetical_syllogism_2(and($phi, $psi), $phi, implies($psi, $chi));
+    step conjunction_elimination_left($phi, $psi);
+    step modus_ponens(implies(and($phi, $psi), $phi),
+        implies(implies($phi, implies($psi, $chi)), implies(and($phi, $psi),
+        implies($psi, $chi))));
+    step distributive(and($phi, $psi), $psi, $chi);
+    step conjunction_elimination_right($phi, $psi);
+    step intermediate_elimination(implies(and($phi, $psi),
+        implies($psi, $chi)), implies(and($phi, $psi), $psi),
+        implies(and($phi, $psi), $chi));
+    step hypothetical_syllogism_meta(implies($phi, implies($psi, $chi)),
+        implies(and($phi, $psi), implies($psi, $chi)),
+        implies(and($phi, $psi), $chi));
+  }
+
   expr Formula or(phi : Formula, psi : Formula) {
     as implies(not($phi), $psi);
     latex "\\left( " + $phi + " \\lor " + $psi + " \\right)";
@@ -588,9 +615,18 @@ namespace propositional_calculus {
     step modus_ponens($psi, or($phi, $psi));
   }
 
+  /* TODO: prove. */
   axiom disjunction_elimination(phi : Formula, psi : Formula, chi : Formula) {
     infer implies(implies(implies($phi, $chi), implies($psi, $chi)),
         implies(or($phi, $psi), $chi));
+  }
+
+  axiom hypothetical_disjunction_elimination_meta(phi : Formula, psi : Formula,
+      chi : Formula, theta : Formula) {
+    assume implies($phi, implies($chi, $psi));
+    assume implies($phi, implies($theta, $psi));
+
+    infer implies($phi, implies(or($chi, $theta), $psi));
   }
 
   theorem disjunction_elimination_meta(phi : Formula, psi : Formula,
@@ -749,6 +785,24 @@ namespace propositional_calculus {
     step lemma.conjunction_commutation_l1($phi, $psi);
     step lemma.conjunction_commutation_l1($psi, $phi);
     step biconditional_introduction_meta(and($phi, $psi), and($psi, $phi));
+  }
+
+  namespace lemma {
+    theorem disjunction_commutation_l1(phi : Formula, psi : Formula) {
+      infer implies(or($phi, $psi), or($psi, $phi));
+
+      step transposition_3($phi, $psi);
+    }
+  }
+
+  theorem disjunction_commutation(phi : Formula, psi : Formula) {
+    infer iff(or($phi, $psi), or($psi, $phi));
+    infer implies(or($phi, $psi), or($psi, $phi));
+    infer implies(or($psi, $phi), or($phi, $psi));
+
+    step lemma.disjunction_commutation_l1($phi, $psi);
+    step lemma.disjunction_commutation_l1($psi, $phi);
+    step biconditional_introduction_meta(or($phi, $psi), or($psi, $phi));
   }
 
   namespace lemma {
