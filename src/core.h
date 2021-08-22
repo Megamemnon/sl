@@ -25,9 +25,21 @@ struct sl_SymbolPath
 
 struct Parameter
 {
-  char *name;
-  const struct Type *type;
+  uint32_t name_id;
+  uint32_t type_id;
 };
+
+const char * logic_state_get_string(const sl_LogicState *state,
+    uint32_t index);
+
+sl_LogicError sl_logic_get_symbol_id(const sl_LogicState *state,
+    const sl_SymbolPath *path, uint32_t *id);
+
+sl_LogicSymbol * sl_logic_get_symbol_by_id(sl_LogicState *state,
+    uint32_t id);
+
+const sl_SymbolPath * sl_logic_get_symbol_path_by_id(
+    const sl_LogicState *state, uint32_t id);
 
 struct Type
 {
@@ -36,6 +48,7 @@ struct Type
 
   bool atomic;
   bool binds;
+  bool dummies;
 };
 
 struct LatexFormatSegment
@@ -53,7 +66,7 @@ struct Constant
 {
   uint32_t id;
   const sl_SymbolPath *path;
-  const struct Type *type;
+  uint32_t type_id;
   char *latex_format;
 };
 
@@ -63,12 +76,21 @@ struct Constspace
   const struct Type *type;
 };
 
+struct sl_Parameter {
+  uint32_t name_id;
+  const struct Type *type;
+};
+
+struct sl_ParametrizedBlock {
+  ARR(struct sl_Parameter) parameters;
+};
+
 struct Expression
 {
   uint32_t id;
   const sl_SymbolPath *path;
 
-  const struct Type *type;
+  uint32_t type_id;
   ARR(struct Parameter) parameters;
   ARR(Value *) bindings;
   Value *replace_with;
@@ -90,19 +112,22 @@ struct Value
 {
   enum ValueType value_type;
   const struct Type *type;
+  Value *parent;
 
   /* TODO: use a union? */
-  char *variable_name;
+  union {
+    uint32_t variable_name_id;
+  } content;
+  uint32_t variable_name_id;
   sl_SymbolPath *constant_path;
   const char *constant_latex;
   const struct Expression *expression;
   ValueArray arguments;
-  Value *parent;
 };
 
 struct Argument
 {
-  char *name;
+  uint32_t name_id;
   Value *value;
 };
 typedef ARR(struct Argument) ArgumentArray;

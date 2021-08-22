@@ -20,8 +20,7 @@ static uint32_t logic_state_add_string(sl_LogicState *state, const char *str)
   return index;
 }
 
-static const char * logic_state_get_string(const sl_LogicState *state,
-  uint32_t index)
+const char * logic_state_get_string(const sl_LogicState *state, uint32_t index)
 {
   if (state == NULL)
     return NULL;
@@ -148,13 +147,6 @@ sl_symbol_paths_equal(const sl_SymbolPath *a, const sl_SymbolPath *b)
   return TRUE;
 }
 
-/* Parameters */
-static void
-free_parameter(struct Parameter *param)
-{
-  free(param->name);
-}
-
 /* Types */
 static void
 free_type(struct Type *type)
@@ -166,11 +158,6 @@ free_type(struct Type *type)
 static void
 free_expression(struct Expression *expr)
 {
-  for (size_t i = 0; i < ARR_LENGTH(expr->parameters); ++i)
-  {
-    struct Parameter *param = ARR_GET(expr->parameters, i);
-    free_parameter(param);
-  }
   ARR_FREE(expr->parameters);
   for (size_t i = 0; i < ARR_LENGTH(expr->bindings); ++i)
   {
@@ -196,7 +183,9 @@ string_from_expression(const sl_LogicState *state,
 {
   size_t len = 5; /* two pairs of parentheses "()" and terminator. */
   char *path = sl_string_from_symbol_path(state, expr->path);
-  char *type = sl_string_from_symbol_path(state, expr->type->path);
+  const sl_SymbolPath *type_path =
+      sl_logic_get_symbol_path_by_id(state, expr->type_id);
+  char *type = sl_string_from_symbol_path(state, type_path);
   len += strlen(path) + strlen(type) + 3; /* '[NAME] : [TYPE]' */
 
   if (ARR_LENGTH(expr->parameters) == 0)
@@ -232,8 +221,11 @@ string_from_expression(const sl_LogicState *state,
       if (first_param)
         first_param = FALSE;
       const struct Parameter *param = ARR_GET(expr->parameters, i);
-      char *param_type = sl_string_from_symbol_path(state, param->type->path);
-      len += strlen(param->name) + strlen(param_type) + 3; /* '[NAME] : [TYPE]' */
+      const sl_SymbolPath *type_path =
+          sl_logic_get_symbol_path_by_id(state, param->type_id);
+      const char *param_name = logic_state_get_string(state, param->name_id);
+      char *param_type = sl_string_from_symbol_path(state, type_path);
+      len += strlen(param_name) + strlen(param_type) + 3; /* '[NAME] : [TYPE]' */
       ARR_APPEND(param_types, param_type);
     }
 
@@ -263,8 +255,11 @@ string_from_expression(const sl_LogicState *state,
         first_param = FALSE;
       const struct Parameter *param = ARR_GET(expr->parameters, i);
       char *param_type = *ARRAY_GET(param_types, char *, i);
-      strcpy(c, param->name);
-      c += strlen(param->name);
+      const sl_SymbolPath *type_path =
+          sl_logic_get_symbol_path_by_id(state, param->type_id);
+      const char *param_name = logic_state_get_string(state, param->name_id);
+      strcpy(c, param_name);
+      c += strlen(param_name);
       strcpy(c, " : ");
       c += 3;
       strcpy(c, param_type);
@@ -292,11 +287,6 @@ free_constant(struct Constant *c)
 static void
 free_theorem(struct Theorem *thm)
 {
-  for (size_t i = 0; i < ARR_LENGTH(thm->parameters); ++i)
-  {
-    struct Parameter *param = ARR_GET(thm->parameters, i);
-    free_parameter(param);
-  }
   ARR_FREE(thm->parameters);
 
   for (size_t i = 0; i < ARR_LENGTH(thm->requirements); ++i) {
@@ -480,6 +470,40 @@ locate_symbol_with_type(sl_LogicState *state, const sl_SymbolPath *path,
   return sym;
 }
 
+sl_LogicError sl_logic_get_symbol_id(const sl_LogicState *state,
+    const sl_SymbolPath *path, uint32_t *id)
+{
+  for (size_t i = 0; i < ARR_LENGTH(state->symbol_table); ++i) {
+    sl_LogicSymbol *sym;
+    sym = ARR_GET(state->symbol_table, i);
+    if (sl_symbol_paths_equal(sym->path, path)) {
+      *id = i;
+      return sl_LogicError_None;
+    }
+  }
+  return sl_LogicError_NoSymbol;
+}
+
+sl_LogicSymbol * sl_logic_get_symbol_by_id(sl_LogicState *state,
+    uint32_t id)
+{
+  if (id >= ARR_LENGTH(state->symbol_table))
+    return NULL;
+  else
+    return ARR_GET(state->symbol_table, id);
+}
+
+const sl_SymbolPath * sl_logic_get_symbol_path_by_id(
+    const sl_LogicState *state, uint32_t id)
+{
+  if (id >= ARR_LENGTH(state->symbol_table)) {
+    return NULL;
+  } else {
+    const sl_LogicSymbol *sym = ARR_GET(state->symbol_table, id);
+    return sym->path;
+  }
+}
+
 static sl_LogicError
 add_symbol(sl_LogicState *state, sl_LogicSymbol sym)
 {
@@ -537,19 +561,18 @@ sl_logic_make_namespace(sl_LogicState *state,
   return sl_LogicError_None;
 }
 
-sl_LogicError
-sl_logic_make_type(sl_LogicState *state, const sl_SymbolPath *type_path,
-  bool atomic, bool binds)
+sl_LogicError sl_logic_make_type(sl_LogicState *state,
+    const sl_SymbolPath *type_path, bool atomic, bool binds, bool dummies)
 {
   struct Type *t;
   sl_LogicSymbol sym;
   sl_LogicError err;
-  if (!atomic && binds)
-  {
+  if (!atomic && binds) {
     char *type_str;
     type_str = sl_string_from_symbol_path(state, type_path);
     LOG_NORMAL(state->log_out,
-      "Cannot add type '%s' because it binds but is not atomic.\n", type_str);
+        "Cannot add type '%s' because it binds but is not atomic.\n",
+        type_str);
     free(type_str);
     return sl_LogicError_CannotBindNonAtomic;
   }
@@ -558,20 +581,18 @@ sl_logic_make_type(sl_LogicState *state, const sl_SymbolPath *type_path,
   t->id = state->next_id++;
   t->atomic = atomic;
   t->binds = binds;
+  t->dummies = dummies;
   sym.path = sl_copy_symbol_path(type_path);
   sym.type = sl_LogicSymbolType_Type;
   sym.object = t;
   t->path = sym.path;
 
   err = add_symbol(state, sym);
-  if (err != sl_LogicError_None)
-  {
+  if (err != sl_LogicError_None) {
     free(t);
     sl_free_symbol_path(sym.path);
     return err;
-  }
-  else
-  {
+  } else {
     char *type_str;
     type_str = sl_string_from_symbol_path(state, type_path);
     LOG_NORMAL(state->log_out, "Successfully added type '%s'.\n", type_str);
@@ -590,13 +611,13 @@ sl_LogicError
 sl_logic_make_constant(sl_LogicState *state, const sl_SymbolPath *constant_path,
   const sl_SymbolPath *type_path, const char *latex_format)
 {
-  sl_LogicSymbol *type_symbol;
+  uint32_t type_id;
   struct Constant *c;
   sl_LogicSymbol sym;
   sl_LogicError err;
-  type_symbol = locate_symbol_with_type(state, type_path,
-    sl_LogicSymbolType_Type);
-  if (type_symbol == NULL)
+  err = sl_logic_get_symbol_id(state, type_path,
+      &type_id);
+  if (err != sl_LogicError_None)
   {
     char *const_str, *type_str;
     const_str = sl_string_from_symbol_path(state, constant_path);
@@ -611,7 +632,7 @@ sl_logic_make_constant(sl_LogicState *state, const sl_SymbolPath *constant_path,
 
   c = SL_NEW(struct Constant);
   c->id = state->next_id++;
-  c->type = (struct Type *)type_symbol->object;
+  c->type_id = type_id;
   if (latex_format != NULL)
     c->latex_format = strdup(latex_format);
   else
@@ -688,9 +709,81 @@ sl_logic_make_constspace(sl_LogicState *state,
   return sl_LogicError_None;
 }
 
+sl_LogicError sl_logic_make_block(sl_LogicState *state,
+    struct sl_PrototypeParameter **parameters, sl_ParametrizedBlock **block)
+{
+  size_t params_n = 0;
+  if (state == NULL || parameters == NULL || block == NULL)
+    return sl_LogicError_None;
+
+  /* Verify the parameters. */
+  for (struct sl_PrototypeParameter **_param = parameters; *_param != NULL;
+      ++_param) {
+    struct sl_PrototypeParameter *param;
+    sl_LogicSymbol *type_symbol;
+    param = *_param;
+    /* Is this parameter repeated? */
+    for (struct sl_PrototypeParameter **_param2 = parameters;
+        _param2 != _param; ++_param2) {
+      struct sl_PrototypeParameter *param2;
+      param2 = *_param2;
+      if (strcmp(param->name, param2->name) == 0) {
+        LOG_NORMAL(state->log_out,
+            "Couldn't create a parametrized block because the parameter '%s' was repeated.\n",
+            param->name);
+        return sl_LogicError_RepeatedParameter;
+      }
+    }
+    type_symbol = locate_symbol_with_type(state, param->type_path,
+        sl_LogicSymbolType_Type);
+    if (type_symbol == NULL)
+    {
+      char *type_str;
+      type_str = sl_string_from_symbol_path(state, param->type_path);
+      LOG_NORMAL(state->log_out,
+          "Couldn't create a parametrized block because the parameter '%s' refers to a nonexistent type '%s'.\n",
+          param->name, type_str);
+      free(type_str);
+      return sl_LogicError_NoType;
+    }
+    params_n += 1;
+  }
+
+  /* After checking the validity of the parameters, go ahead and construct
+     the block. */
+  *block = SL_NEW(sl_ParametrizedBlock);
+  if (*block == NULL)
+    return sl_LogicError_Memory;
+  ARR_INIT_RESERVE((*block)->parameters, params_n);
+  for (struct sl_PrototypeParameter **_param = parameters; *_param != NULL;
+      ++_param) {
+    struct sl_PrototypeParameter *proto;
+    sl_LogicSymbol *type_symbol;
+    struct sl_Parameter param;
+    proto = *_param;
+    type_symbol = locate_symbol_with_type(state, proto->type_path,
+        sl_LogicSymbolType_Type);
+    param.name_id = logic_state_add_string(state, proto->name);
+    param.type = (struct Type *)type_symbol->object;
+    ARR_APPEND((*block)->parameters, param);
+  }
+
+  return sl_LogicError_None;
+}
+
+void sl_logic_free_block(sl_ParametrizedBlock *block)
+{
+  if (block == NULL)
+    return;
+  ARR_FREE(block->parameters);
+  free(block);
+}
+
 sl_LogicError
 add_expression(sl_LogicState *state, struct PrototypeExpression proto)
 {
+  uint32_t type_id;
+  sl_LogicError err;
   if (locate_symbol(state, proto.expression_path) != NULL)
   {
     char *expr_str = sl_string_from_symbol_path(state, proto.expression_path);
@@ -706,7 +799,8 @@ add_expression(sl_LogicState *state, struct PrototypeExpression proto)
 
   sl_LogicSymbol *type_symbol = locate_symbol_with_type(state,
     proto.expression_type, sl_LogicSymbolType_Type);
-  if (type_symbol == NULL)
+  err = sl_logic_get_symbol_id(state, proto.expression_type, &type_id);
+  if (err != sl_LogicError_None)
   {
     char *expr_str = sl_string_from_symbol_path(state, proto.expression_path);
     char *type_str = sl_string_from_symbol_path(state, proto.expression_type);
@@ -718,7 +812,7 @@ add_expression(sl_LogicState *state, struct PrototypeExpression proto)
     free(e);
     return sl_LogicError_SymbolAlreadyExists;
   }
-  e->type = (struct Type *)type_symbol->object;
+  e->type_id = type_id;
   if (proto.latex.segments != NULL)
   {
     e->has_latex = TRUE;
@@ -738,17 +832,21 @@ add_expression(sl_LogicState *state, struct PrototypeExpression proto)
   }
 
   /* The type of the expression must not be atomic. */
-  if (e->type->atomic)
   {
-    char *expr_str = sl_string_from_symbol_path(state, proto.expression_path);
-    char *type_str = sl_string_from_symbol_path(state, proto.expression_type);
-    LOG_NORMAL(state->log_out,
-      "Cannot add expression '%s' because the type '%s' is atomic.\n",
-      expr_str, type_str);
-    free(expr_str);
-    free(type_str);
-    free(e);
-    return sl_LogicError_SymbolAlreadyExists;
+    const sl_LogicSymbol *type_sym = sl_logic_get_symbol_by_id(state, type_id);
+    const struct Type *type = (struct Type *)type_sym->object;
+    if (type->atomic)
+    {
+      char *expr_str = sl_string_from_symbol_path(state, proto.expression_path);
+      char *type_str = sl_string_from_symbol_path(state, proto.expression_type);
+      LOG_NORMAL(state->log_out,
+        "Cannot add expression '%s' because the type '%s' is atomic.\n",
+        expr_str, type_str);
+      free(expr_str);
+      free(type_str);
+      free(e);
+      return sl_LogicError_SymbolAlreadyExists;
+    }
   }
 
   ARR_INIT(e->parameters);
@@ -756,9 +854,10 @@ add_expression(sl_LogicState *state, struct PrototypeExpression proto)
     *param != NULL; ++param)
   {
     struct Parameter p;
-    type_symbol = locate_symbol_with_type(state,
-      (*param)->type, sl_LogicSymbolType_Type);
-    if (type_symbol == NULL)
+    uint32_t type_id;
+    sl_LogicError err;
+    err = sl_logic_get_symbol_id(state, (*param)->type, &type_id);
+    if (err != sl_LogicError_None)
     {
       char *expr_str = sl_string_from_symbol_path(state, proto.expression_path);
       char *type_str = sl_string_from_symbol_path(state, (*param)->type);
@@ -771,8 +870,8 @@ add_expression(sl_LogicState *state, struct PrototypeExpression proto)
       free(e);
       return sl_LogicError_SymbolAlreadyExists;
     }
-    p.type = (struct Type *)type_symbol->object;
-    p.name = strdup((*param)->name);
+    p.name_id = logic_state_add_string(state, (*param)->name);
+    p.type_id = type_id;
     ARR_APPEND(e->parameters, p);
   }
 
@@ -827,7 +926,7 @@ new_variable_value(sl_LogicState *state, const char *name, const sl_SymbolPath *
 {
   Value *value = malloc(sizeof(Value));
 
-  value->variable_name = strdup(name);
+  value->variable_name_id = logic_state_add_string(state, name);
   value->value_type = ValueTypeVariable;
   value->parent = NULL;
   sl_LogicSymbol *type_symbol = locate_symbol_with_type(state,
@@ -838,7 +937,6 @@ new_variable_value(sl_LogicState *state, const char *name, const sl_SymbolPath *
     LOG_NORMAL(state->log_out,
       "Cannot create value because there is no such type '%s'.\n", type_str);
     free(type_str);
-    free(value->variable_name);
     free(value);
     return NULL;
   }
@@ -890,7 +988,12 @@ new_constant_value(sl_LogicState *state, const sl_SymbolPath *constant)
   const struct Constant *constant_obj =
     (struct Constant *)constant_symbol->object;
   value->constant_path = sl_copy_symbol_path(constant_obj->path);
-  value->type = constant_obj->type;
+  {
+    /* TODO: the value should reference its type by id, not pointer. */
+    sl_LogicSymbol *type_symbol = sl_logic_get_symbol_by_id(state,
+        constant_obj->type_id);
+    value->type = (struct Type *)type_symbol->object;
+  }
   value->constant_latex = strdup(constant_obj->latex_format);
 
   return value;
@@ -917,7 +1020,12 @@ new_composition_value(sl_LogicState *state, const sl_SymbolPath *expr_path,
     return NULL;
   }
   value->expression = (struct Expression *)expr_symbol->object;
-  value->type = value->expression->type;
+  {
+    /* TODO: the value should reference its type by id, not pointer. */
+    sl_LogicSymbol *type_symbol = sl_logic_get_symbol_by_id(state,
+        value->expression->type_id);
+    value->type = (struct Type *)type_symbol->object;
+  }
 
   ARR_INIT(value->arguments);
   for (Value * const *arg = args;
@@ -947,10 +1055,14 @@ new_composition_value(sl_LogicState *state, const sl_SymbolPath *expr_path,
     Value *arg = *ARR_GET(value->arguments, i);
     const struct Parameter *param = ARR_GET(value->expression->parameters, i);
     struct Argument argument;
-    argument.name = strdup(param->name);
+    const sl_LogicSymbol *type_symbol;
+    const struct Type *type;
+    type_symbol = sl_logic_get_symbol_by_id(state, param->type_id);
+    type = (struct Type *)type_symbol->object;
+    argument.name_id = param->name_id;
     argument.value = copy_value(arg);
     ARR_APPEND(args_array, argument);
-    if (!types_equal(arg->type, param->type))
+    if (!types_equal(arg->type, type))
     {
       char *expr_str = sl_string_from_symbol_path(state, expr_path);
       LOG_NORMAL(state->log_out,
@@ -963,7 +1075,6 @@ new_composition_value(sl_LogicState *state, const sl_SymbolPath *expr_path,
   }
   for (size_t i = 0; i < ARR_LENGTH(args_array); ++i) {
     struct Argument *arg = ARR_GET(args_array, i);
-    free(arg->name);
     free_value(arg->value);
   }
   ARR_FREE(args_array);
@@ -994,9 +1105,10 @@ add_axiom(sl_LogicState *state, struct PrototypeTheorem proto)
     *param != NULL; ++param)
   {
     struct Parameter p;
-    const sl_LogicSymbol *type_symbol = locate_symbol_with_type(state,
-      (*param)->type, sl_LogicSymbolType_Type);
-    if (type_symbol == NULL)
+    uint32_t type_id;
+    sl_LogicError err;
+    err = sl_logic_get_symbol_id(state, (*param)->type, &type_id);
+    if (err != sl_LogicError_None)
     {
       char *axiom_str = sl_string_from_symbol_path(state, proto.theorem_path);
       char *type_str = sl_string_from_symbol_path(state, (*param)->type);
@@ -1009,8 +1121,8 @@ add_axiom(sl_LogicState *state, struct PrototypeTheorem proto)
       free(a);
       return sl_LogicError_SymbolAlreadyExists;
     }
-    p.type = (struct Type *)type_symbol->object;
-    p.name = strdup((*param)->name);
+    p.name_id = logic_state_add_string(state, (*param)->name);
+    p.type_id = type_id;
     ARR_APPEND(a->parameters, p);
   }
 
@@ -1216,9 +1328,10 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
     *param != NULL; ++param)
   {
     struct Parameter p;
-    const sl_LogicSymbol *type_symbol = locate_symbol_with_type(state,
-      (*param)->type, sl_LogicSymbolType_Type);
-    if (type_symbol == NULL)
+    uint32_t type_id;
+    sl_LogicError err;
+    err = sl_logic_get_symbol_id(state, (*param)->type, &type_id);
+    if (err != sl_LogicError_None)
     {
       char *axiom_str = sl_string_from_symbol_path(state, proto.theorem_path);
       char *type_str = sl_string_from_symbol_path(state, (*param)->type);
@@ -1231,8 +1344,8 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
       free(a);
       return sl_LogicError_SymbolAlreadyExists;
     }
-    p.type = (struct Type *)type_symbol->object;
-    p.name = strdup((*param)->name);
+    p.name_id = logic_state_add_string(state, (*param)->name);
+    p.type_id = type_id;
     ARR_APPEND(a->parameters, p);
     ARR_APPEND(env->parameters, p);
   }
@@ -1303,12 +1416,16 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
       struct Parameter *param = ARR_GET(ref.theorem->parameters, i);
 
       struct Argument arg;
-      arg.name = strdup(param->name);
+      const sl_LogicSymbol *type_sym;
+      const struct Type *type;
+      arg.name_id = param->name_id;
       arg.value = copy_value((*step)->arguments[i]);
+      type_sym = sl_logic_get_symbol_by_id(state, param->type_id);
+      type = (struct Type *)type_sym->object;
 
       ARR_APPEND(ref.arguments, copy_value(arg.value));
 
-      if (!types_equal(param->type, arg.value->type))
+      if (!types_equal(type, arg.value->type))
       {
         LOG_NORMAL(state->log_out,
           "Cannot add theorem because an axiom/theorem referenced received an argument with the wrong type.\n");
@@ -1329,7 +1446,6 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
     for (size_t i = 0; i < args_n; ++i)
     {
       struct Argument *arg = ARR_GET(args, i);
-      free(arg->name);
       free_value(arg->value);
     }
     ARR_FREE(args);

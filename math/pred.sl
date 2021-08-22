@@ -12,7 +12,7 @@ namespace predicate_calculus {
   use propositional_calculus;
 
   type Term;
-  type Variable atomic binds;
+  type Variable atomic binds dummy;
 
   constspace vars Variable;
 

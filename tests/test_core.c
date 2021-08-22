@@ -125,9 +125,9 @@ run_test_types(struct TestState *state)
   {
     sl_SymbolPath *path = sl_new_symbol_path();
     sl_push_symbol_path(logic, path, "type1");
-    if (sl_logic_make_type(logic, path, FALSE, FALSE) != sl_LogicError_None)
+    if (sl_logic_make_type(logic, path, FALSE, FALSE, FALSE) != sl_LogicError_None)
       return 1;
-    if (sl_logic_make_type(logic, path, FALSE, FALSE)
+    if (sl_logic_make_type(logic, path, FALSE, FALSE, FALSE)
       != sl_LogicError_SymbolAlreadyExists)
       return 1;
     sl_free_symbol_path(path);
@@ -136,7 +136,8 @@ run_test_types(struct TestState *state)
   {
     sl_SymbolPath *path = sl_new_symbol_path();
     sl_push_symbol_path(logic, path, "type2");
-    if (sl_logic_make_type(logic, path, TRUE, FALSE) != sl_LogicError_None)
+    if (sl_logic_make_type(logic, path, TRUE, FALSE, FALSE)
+        != sl_LogicError_None)
       return 1;
     sl_free_symbol_path(path);
   }
@@ -144,10 +145,11 @@ run_test_types(struct TestState *state)
   {
     sl_SymbolPath *path = sl_new_symbol_path();
     sl_push_symbol_path(logic, path, "type3");
-    if (sl_logic_make_type(logic, path, FALSE, TRUE)
+    if (sl_logic_make_type(logic, path, FALSE, TRUE, FALSE)
       != sl_LogicError_CannotBindNonAtomic)
       return 1;
-    if (sl_logic_make_type(logic, path, TRUE, TRUE) != sl_LogicError_None)
+    if (sl_logic_make_type(logic, path, TRUE, TRUE, FALSE)
+        != sl_LogicError_None)
       return 1;
     sl_free_symbol_path(path);
   }
@@ -156,7 +158,7 @@ run_test_types(struct TestState *state)
     sl_SymbolPath *path = sl_new_symbol_path();
     sl_push_symbol_path(logic, path, "a");
     sl_push_symbol_path(logic, path, "b");
-    if (sl_logic_make_type(logic, path, FALSE, FALSE) != sl_LogicError_NoParent)
+    if (sl_logic_make_type(logic, path, FALSE, FALSE, FALSE) != sl_LogicError_NoParent)
       return 1;
     sl_free_symbol_path(path);
   }
@@ -165,7 +167,8 @@ run_test_types(struct TestState *state)
     sl_SymbolPath *path = sl_new_symbol_path();
     sl_push_symbol_path(logic, path, "type3");
     sl_push_symbol_path(logic, path, "child");
-    if (sl_logic_make_type(logic, path, FALSE, FALSE) != sl_LogicError_NoParent)
+    if (sl_logic_make_type(logic, path, FALSE, FALSE, FALSE)
+        != sl_LogicError_NoParent)
       return 1;
     sl_free_symbol_path(path);
   }
@@ -178,11 +181,101 @@ run_test_types(struct TestState *state)
     sl_push_symbol_path(logic, type_path, "type");
     if (sl_logic_make_namespace(logic, namespace_path) != sl_LogicError_None)
       return 1;
-    if (sl_logic_make_type(logic, type_path, FALSE, FALSE)
+    if (sl_logic_make_type(logic, type_path, FALSE, FALSE, FALSE)
       != sl_LogicError_None)
       return 1;
     sl_free_symbol_path(namespace_path);
     sl_free_symbol_path(type_path);
+  }
+
+  sl_free_logic_state(logic);
+  return 0;
+}
+
+static int run_test_blocks(struct TestState *state)
+{
+  sl_LogicState *logic;
+  logic = sl_new_logic_state(NULL);
+
+  {
+    sl_SymbolPath *path = sl_new_symbol_path();
+    sl_push_symbol_path(logic, path, "type1");
+    if (sl_logic_make_type(logic, path, FALSE, FALSE, FALSE)
+        != sl_LogicError_None)
+      return 1;
+    sl_free_symbol_path(path);
+  }
+
+  {
+    sl_SymbolPath *path = sl_new_symbol_path();
+    sl_push_symbol_path(logic, path, "type2");
+    if (sl_logic_make_type(logic, path, FALSE, FALSE, FALSE)
+        != sl_LogicError_None)
+      return 1;
+    sl_free_symbol_path(path);
+  }
+
+  /* Creating a block with a parameter of a type that does not exist. */
+  {
+    sl_ParametrizedBlock *block;
+    struct sl_PrototypeParameter param1;
+    param1.name = "param1";
+    param1.type_path = sl_new_symbol_path();
+    sl_push_symbol_path(logic, param1.type_path, "type_bad");
+    {
+      struct sl_PrototypeParameter *params[] = { &param1, NULL };
+      if (sl_logic_make_block(logic, params, &block)
+          != sl_LogicError_NoType)
+        return 1;
+    }
+    sl_free_symbol_path(param1.type_path);
+  }
+
+  /* Creating a block with repeated parameters. */
+  {
+    sl_ParametrizedBlock *block;
+    struct sl_PrototypeParameter param1, param2;
+    param1.name = "param1";
+    param1.type_path = sl_new_symbol_path();
+    sl_push_symbol_path(logic, param1.type_path, "type1");
+    param2.name = "param1";
+    param2.type_path = sl_new_symbol_path();
+    sl_push_symbol_path(logic, param2.type_path, "type2");
+    {
+      struct sl_PrototypeParameter *params[] = { &param1, &param2, NULL };
+      if (sl_logic_make_block(logic, params, &block)
+          != sl_LogicError_RepeatedParameter)
+        return 1;
+    }
+    sl_free_symbol_path(param1.type_path);
+    sl_free_symbol_path(param2.type_path);
+  }
+
+  /* Creating a block with OK parameters. */
+  {
+    sl_ParametrizedBlock *block;
+    struct sl_PrototypeParameter param1, param2, param3;
+    param1.name = "p1";
+    param1.type_path = sl_new_symbol_path();
+    sl_push_symbol_path(logic, param1.type_path, "type1");
+    param2.name = "p2";
+    param2.type_path = sl_new_symbol_path();
+    sl_push_symbol_path(logic, param2.type_path, "type2");
+    param3.name = "p3";
+    param3.type_path = sl_new_symbol_path();
+    sl_push_symbol_path(logic, param3.type_path, "type2");
+    {
+      struct sl_PrototypeParameter *params[] = { &param1, &param2, &param3,
+          NULL };
+      if (sl_logic_make_block(logic, params, &block) != sl_LogicError_None)
+        return 1;
+      if (block == NULL)
+        return 1;
+    }
+    sl_logic_free_block(block);
+    sl_free_symbol_path(param1.type_path);
+    sl_free_symbol_path(param2.type_path);
+    sl_free_symbol_path(param3.type_path);
   }
 
   sl_free_logic_state(logic);
@@ -198,7 +291,8 @@ run_test_constants(struct TestState *state)
 
   type_path = sl_new_symbol_path();
   sl_push_symbol_path(logic, type_path, "type_A");
-  if (sl_logic_make_type(logic, type_path, FALSE, FALSE) != sl_LogicError_None)
+  if (sl_logic_make_type(logic, type_path, FALSE, FALSE, FALSE)
+      != sl_LogicError_None)
     return 1;
 
   {
@@ -247,6 +341,7 @@ run_test_require(struct TestState *state)
 struct TestCase test_paths = { "Paths", &run_test_paths };
 struct TestCase test_namespaces = { "Namespaces", &run_test_namespaces };
 struct TestCase test_types = { "Types", &run_test_types };
+struct TestCase test_blocks = { "Blocks", &run_test_blocks };
 struct TestCase test_constants = { "Constants", &run_test_constants };
 struct TestCase test_values = { "Values", &run_test_values };
 struct TestCase test_require = { "Require", &run_test_require };

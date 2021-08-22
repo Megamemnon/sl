@@ -114,6 +114,7 @@ validate_type(struct ValidationState *state,
   sl_SymbolPath *type_path;
   bool atomic;
   bool binds;
+  bool dummies;
   sl_LogicError err;
 
   if (sl_node_get_type(type) != sl_ASTNodeType_Type)
@@ -129,16 +130,18 @@ validate_type(struct ValidationState *state,
 
   atomic = FALSE;
   binds = FALSE;
-  for (size_t i = 0; i < sl_node_get_child_count(type); ++i)
-  {
+  dummies = FALSE;
+  for (size_t i = 0; i < sl_node_get_child_count(type); ++i) {
     const sl_ASTNode *child = sl_node_get_child(type, i);
     if (sl_node_get_type(child) == sl_ASTNodeType_AtomicFlag)
       atomic = TRUE;
     else if (sl_node_get_type(child) == sl_ASTNodeType_BindsFlag)
       binds = TRUE;
+    else if (sl_node_get_type(child) == sl_ASTNodeType_DummyFlag)
+      dummies = TRUE;
   }
 
-  err = sl_logic_make_type(state->logic, type_path, atomic, binds);
+  err = sl_logic_make_type(state->logic, type_path, atomic, binds, dummies);
   if (err != sl_LogicError_None)
   {
     sl_node_show_message(state->text, type,

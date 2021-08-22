@@ -9,6 +9,7 @@ main(int argc, char **argv)
     test_paths,
     test_namespaces,
     test_types,
+    test_blocks,
     test_constants,
     test_values,
     test_require,

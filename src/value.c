@@ -6,7 +6,7 @@ free_value(Value *value)
 {
   if (value->value_type == ValueTypeVariable)
   {
-    free(value->variable_name);
+
   }
   else if (value->value_type == ValueTypeConstant)
   {
@@ -33,7 +33,7 @@ copy_value_to(Value *dst, const Value *src)
   dst->type = src->type;
   if (src->value_type == ValueTypeVariable)
   {
-    dst->variable_name = strdup(src->variable_name);
+    dst->variable_name_id = src->variable_name_id;
   }
   else if (src->value_type == ValueTypeConstant)
   {
@@ -80,7 +80,7 @@ values_equal(const Value *a, const Value *b)
     case ValueTypeVariable:
       if (!types_equal(a->type, b->type))
         return FALSE;
-      if (strcmp(a->variable_name, b->variable_name) != 0)
+      if (a->variable_name_id != b->variable_name_id)
         return FALSE;
       break;
     case ValueTypeComposition:
@@ -205,13 +205,14 @@ string_from_value(const sl_LogicState *state, const Value *value)
       break;
     case ValueTypeVariable:
       {
-        size_t len = 2 + strlen(value->variable_name);
+        size_t len = 2 + strlen(logic_state_get_string(state,
+            value->variable_name_id));
         char *str = malloc(len);
         char *c = str;
         *c = '$';
         ++c;
-        strcpy(c, value->variable_name);
-        c += strlen(value->variable_name);
+        strcpy(c, logic_state_get_string(state, value->variable_name_id));
+        c += strlen(logic_state_get_string(state, value->variable_name_id));
         *c = '\0';
         return str;
       }
@@ -324,14 +325,13 @@ do_reduction_step(const Value *value)
             struct Argument arg;
             const struct Parameter *param;
             param = ARR_GET(value->expression->parameters, i);
-            arg.name = strdup(param->name);
+            arg.name_id = param->name_id;
             arg.value = do_reduction_step(*ARR_GET(value->arguments, i));
             ARR_APPEND(args, arg);
           }
           new = instantiate_value(value->expression->replace_with, args);
           for (size_t i = 0; i < ARR_LENGTH(args); ++i) {
             struct Argument *arg = ARR_GET(args, i);
-            free(arg->name);
             free_value(arg->value);
           }
           ARR_FREE(args);
@@ -374,8 +374,7 @@ instantiate_value(const Value *src, ArgumentArray args)
         for (size_t i = 0; i < ARR_LENGTH(args); ++i)
         {
           const struct Argument *a = ARR_GET(args, i);
-          if (strcmp(a->name, src->variable_name) == 0)
-          {
+          if (a->name_id == src->variable_name_id) {
             arg = a;
             break;
           }

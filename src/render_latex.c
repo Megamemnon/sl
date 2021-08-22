@@ -255,7 +255,8 @@ latex_render_value(const sl_LogicState *state, const Value *v)
           v->constant_path));
       break;
     case ValueTypeVariable:
-      return latex_render_string(v->variable_name);
+      return latex_render_string(logic_state_get_string(state,
+          v->variable_name_id));
       break;
     case ValueTypeComposition:
       if (v->expression->has_latex)
@@ -277,7 +278,8 @@ latex_render_value(const sl_LogicState *state, const Value *v)
             {
               const struct Parameter *param =
                 ARR_GET(v->expression->parameters, j);
-              if (strcmp(param->name, seg->string) == 0)
+              if (strcmp(logic_state_get_string(state, param->name_id),
+                  seg->string) == 0)
               {
                 arg_index = j;
                 break;

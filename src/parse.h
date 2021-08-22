@@ -122,6 +122,7 @@ enum sl_ASTNodeType
   sl_ASTNodeType_Type,
   sl_ASTNodeType_AtomicFlag,
   sl_ASTNodeType_BindsFlag,
+  sl_ASTNodeType_DummyFlag,
   sl_ASTNodeType_ConstantDeclaration,
   sl_ASTNodeType_Constspace,
   sl_ASTNodeType_Expression,

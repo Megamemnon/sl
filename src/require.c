@@ -205,7 +205,7 @@ static bool value_gets_bound(const sl_LogicState *state,
           const struct Parameter *param =
             ARR_GET(scope->expression->parameters, i);
           struct Argument argument;
-          argument.name = param->name;
+          argument.name_id = param->name_id;
           argument.value = arg;
           ARR_APPEND(args_array, argument);
         }
@@ -240,7 +240,7 @@ static bool value_gets_bound(const sl_LogicState *state,
           const struct Parameter *param =
             ARR_GET(scope->expression->parameters, i);
           struct Argument argument;
-          argument.name = param->name;
+          argument.name_id = param->name_id;
           argument.value = arg;
           ARR_APPEND(args_array, argument);
         }

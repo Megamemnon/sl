@@ -134,6 +134,9 @@ print_node(char *buf, size_t len, const sl_ASTNode *node)
     case sl_ASTNodeType_BindsFlag:
       snprintf(buf, len, "Binds<>");
       break;
+    case sl_ASTNodeType_DummyFlag:
+      snprintf(buf, len, "Dummy<>");
+      break;
     case sl_ASTNodeType_Expression:
       snprintf(buf, len, "Expression<\"%s\">", node->name);
       break;
@@ -482,48 +485,75 @@ static int
 parse_namespace(struct ParserState *state,
   union ParserStepUserData user_data);
 
-static int
-parse_binds_flag(struct ParserState *state,
-  union ParserStepUserData user_data)
+static int parse_type_flag(struct ParserState *state,
+    union ParserStepUserData user_data);
+
+static int parse_dummy_flag(struct ParserState *state,
+    union ParserStepUserData user_data)
 {
-  if (next_is_keyword(state, "binds"))
-  {
+  if (next_is_keyword(state, "dummy")) {
+    add_step_to_stack(state, &parse_type_flag, user_data_none());
+    add_step_to_stack(state, &ascend, user_data_none());
+    add_step_to_stack(state, &consume_keyword, user_data_str("dummy"));
+    add_step_to_stack(state, &set_node_location, user_data_none());
+    add_step_to_stack(state, &descend,
+        user_data_node_type(sl_ASTNodeType_DummyFlag));
+  }
+  return 0;
+}
+
+static int parse_binds_flag(struct ParserState *state,
+    union ParserStepUserData user_data)
+{
+  if (next_is_keyword(state, "binds")) {
+    add_step_to_stack(state, &parse_type_flag, user_data_none());
     add_step_to_stack(state, &ascend, user_data_none());
     add_step_to_stack(state, &consume_keyword, user_data_str("binds"));
     add_step_to_stack(state, &set_node_location, user_data_none());
     add_step_to_stack(state, &descend,
-      user_data_node_type(sl_ASTNodeType_BindsFlag));
+        user_data_node_type(sl_ASTNodeType_BindsFlag));
   }
   return 0;
 }
 
-static int
-parse_atomic(struct ParserState *state, union ParserStepUserData user_data)
+static int parse_atomic(struct ParserState *state,
+    union ParserStepUserData user_data)
 {
-  if (next_is_keyword(state, "atomic"))
-  {
-    add_step_to_stack(state, &parse_binds_flag, user_data_none());
+  if (next_is_keyword(state, "atomic")) {
+    add_step_to_stack(state, &parse_type_flag, user_data_none());
     add_step_to_stack(state, &ascend, user_data_none());
     add_step_to_stack(state, &consume_keyword, user_data_str("atomic"));
     add_step_to_stack(state, &set_node_location, user_data_none());
     add_step_to_stack(state, &descend,
-      user_data_node_type(sl_ASTNodeType_AtomicFlag));
+        user_data_node_type(sl_ASTNodeType_AtomicFlag));
   }
   return 0;
 }
 
-static int
-parse_type(struct ParserState *state, union ParserStepUserData user_data)
+static int parse_type_flag(struct ParserState *state,
+    union ParserStepUserData user_data)
+{
+  if (next_is_keyword(state, "dummy"))
+    add_step_to_stack(state, &parse_dummy_flag, user_data_none());
+  else if (next_is_keyword(state, "binds"))
+    add_step_to_stack(state, &parse_binds_flag, user_data_none());
+  else if (next_is_keyword(state, "atomic"))
+    add_step_to_stack(state, &parse_atomic, user_data_none());
+  return 0;
+}
+
+static int parse_type(struct ParserState *state,
+    union ParserStepUserData user_data)
 {
   add_step_to_stack(state, &ascend, user_data_none());
   add_step_to_stack(state, &consume_symbol,
-    user_data_token_type(sl_LexerTokenType_Semicolon));
-  add_step_to_stack(state, &parse_atomic, user_data_none());
+      user_data_token_type(sl_LexerTokenType_Semicolon));
+  add_step_to_stack(state, &parse_type_flag, user_data_none());
   add_step_to_stack(state, &consume_name, user_data_none());
   add_step_to_stack(state, &set_node_location, user_data_none());
   add_step_to_stack(state, &consume_keyword, user_data_str("type"));
   add_step_to_stack(state, &descend,
-    user_data_node_type(sl_ASTNodeType_Type));
+      user_data_node_type(sl_ASTNodeType_Type));
   return 0;
 }
 

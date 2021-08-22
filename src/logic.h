@@ -67,7 +67,10 @@ enum sl_LogicError
   sl_LogicError_SymbolAlreadyExists,
   sl_LogicError_NoParent,
   sl_LogicError_CannotBindNonAtomic,
-  sl_LogicError_NoType
+  sl_LogicError_NoType,
+  sl_LogicError_RepeatedParameter,
+  sl_LogicError_Memory,
+  sl_LogicError_NoSymbol
 };
 typedef enum sl_LogicError sl_LogicError;
 
@@ -101,9 +104,8 @@ sl_logic_make_namespace(sl_LogicState *state,
   const sl_SymbolPath *namespace_path);
 
 /* Types. */
-sl_LogicError
-sl_logic_make_type(sl_LogicState *state, const sl_SymbolPath *type_path,
-  bool atomic, bool binds);
+sl_LogicError sl_logic_make_type(sl_LogicState *state,
+    const sl_SymbolPath *type_path, bool atomic, bool binds, bool dummies);
 
 /* Constants. */
 sl_LogicError
@@ -134,6 +136,19 @@ struct PrototypeParameter
   char *name;
   sl_SymbolPath *type;
 };
+
+/* Parameter Lists. */
+struct sl_PrototypeParameter {
+  const char *name;
+  sl_SymbolPath *type_path;
+};
+
+typedef struct sl_ParametrizedBlock sl_ParametrizedBlock;
+
+sl_LogicError sl_logic_make_block(sl_LogicState *state,
+    struct sl_PrototypeParameter **parameters, sl_ParametrizedBlock **block);
+
+void sl_logic_free_block(sl_ParametrizedBlock *block);
 
 struct PrototypeExpression
 {

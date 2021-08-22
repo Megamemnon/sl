@@ -36,7 +36,8 @@ html_render_value(const sl_LogicState *state, const Value *v)
         sl_get_symbol_path_last_segment(state, v->constant_path));
       break;
     case ValueTypeVariable:
-      asprintf(&str, "$%s", v->variable_name);
+      asprintf(&str, "$%s",
+          logic_state_get_string(state, v->variable_name_id));
       break;
     case ValueTypeComposition:
       if (ARR_LENGTH(v->arguments) == 0)
@@ -144,11 +145,13 @@ html_render_constant(const sl_LogicState *state,
     free(type_label);
   }
   {
-    char *const_type = sl_string_from_symbol_path(state, constant->type->path);
+    const sl_SymbolPath *const_path;
+    const_path = sl_logic_get_symbol_path_by_id(state, constant->type_id);
+    char *const_type = sl_string_from_symbol_path(state, const_path);
     char *type_label;
     asprintf(&type_label,
       "<h4>Type: <code><a href=\"#sym-%u\">%s</a></code></h4>\n",
-      constant->type->id, const_type);
+      constant->type_id, const_type);
     fputs(type_label, f);
     free(const_type);
     free(type_label);
@@ -193,11 +196,13 @@ html_render_expression(const sl_LogicState *state,
     free(path_label);
   }
   {
-    char *expr_type = sl_string_from_symbol_path(state, expression->type->path);
+    const sl_SymbolPath *type_path
+        = sl_logic_get_symbol_path_by_id(state, expression->type_id);
+    char *expr_type = sl_string_from_symbol_path(state, type_path);
     char *type_label;
     asprintf(&type_label,
       "<h4>Type: <code><a href=\"#sym-%u\">%s</a></code></h4>\n",
-      expression->type->id, expr_type);
+      expression->type_id, expr_type);
     fputs(type_label, f);
     free(expr_type);
     free(type_label);
@@ -209,12 +214,16 @@ html_render_expression(const sl_LogicState *state,
     for (size_t i = 0; i < ARR_LENGTH(expression->parameters); ++i)
     {
       const struct Parameter *param = ARR_GET(expression->parameters, i);
-      char *param_type = sl_string_from_symbol_path(state, param->type->path);
-      char *param_str = latex_render_string(param->name);
+      const sl_SymbolPath *type_path = sl_logic_get_symbol_path_by_id(state,
+          param->type_id);
+      char *param_type = sl_string_from_symbol_path(state, type_path);
+      char *param_str = latex_render_string(logic_state_get_string(state,
+          param->name_id));
       char *param_label;
       asprintf(&param_label,
         "<li><code>%s</code> : <code><a href=\"#sym-%u\">%s</a></code><br />\\(%s\\)</li>\n",
-        param->name, param->type->id, param_type, param_str);
+        logic_state_get_string(state, param->name_id),
+        param->type_id, param_type, param_str);
       fputs(param_label, f);
       free(param_type);
       free(param_str);
@@ -319,14 +328,17 @@ html_render_theorem(const sl_LogicState *state, const struct Theorem *theorem,
     fputs("<ol>\n", f);
     for (size_t i = 0; i < ARR_LENGTH(theorem->parameters); ++i)
     {
-      const struct Parameter *param =
-        ARR_GET(theorem->parameters, i);
-      char *param_type = sl_string_from_symbol_path(state, param->type->path);
-      char *param_str = latex_render_string(param->name);
+      const struct Parameter *param = ARR_GET(theorem->parameters, i);
+      const sl_SymbolPath *type_path = sl_logic_get_symbol_path_by_id(state,
+          param->type_id);
+      char *param_type = sl_string_from_symbol_path(state, type_path);
+      char *param_str = latex_render_string(logic_state_get_string(state,
+          param->name_id));
       char *param_label;
       asprintf(&param_label,
         "<li><code>%s</code> : <code><a href=\"#sym-%u\">%s</a></code><br />\\(%s\\)</li>\n",
-        param->name, param->type->id, param_type, param_str);
+          logic_state_get_string(state, param->name_id),
+          param->type_id, param_type, param_str);
       fputs(param_label, f);
       free(param_type);
       free(param_str);
@@ -499,12 +511,16 @@ html_render_theorem_page(const sl_LogicState *state,
     for (size_t i = 0; i < ARR_LENGTH(theorem->parameters); ++i)
     {
       const struct Parameter *param = ARR_GET(theorem->parameters, i);
-      char *param_type = sl_string_from_symbol_path(state, param->type->path);
-      char *param_str = latex_render_string(param->name);
+      const sl_SymbolPath *type_path = sl_logic_get_symbol_path_by_id(state,
+          param->type_id);
+      char *param_type = sl_string_from_symbol_path(state, type_path);
+      char *param_str = latex_render_string(logic_state_get_string(state,
+          param->name_id));
       char *param_label;
       asprintf(&param_label,
-        "<li><code>%s</code> : <code><a href=\"#sym-%u\">%s</a></code><br />\\(%s\\)</li>\n",
-        param->name, param->type->id, param_type, param_str);
+          "<li><code>%s</code> : <code><a href=\"#sym-%u\">%s</a></code><br />\\(%s\\)</li>\n",
+          logic_state_get_string(state, param->name_id),
+          param->type_id, param_type, param_str);
       fputs(param_label, f);
       free(param_type);
       free(param_str);
