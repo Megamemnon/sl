@@ -4,24 +4,25 @@
 void
 free_value(Value *value)
 {
-  if (value->value_type == ValueTypeVariable)
-  {
+  if (value->value_type == ValueTypeDummy) {
+
+  } if (value->value_type == ValueTypeVariable) {
 
   }
   else if (value->value_type == ValueTypeConstant)
   {
-    sl_free_symbol_path(value->constant_path);
-    if (value->constant_latex != NULL)
-      free(value->constant_latex);
+    sl_free_symbol_path(value->content.constant.constant_path);
+    if (value->content.constant.constant_latex != NULL)
+      free(value->content.constant.constant_latex);
   }
   else if (value->value_type == ValueTypeComposition)
   {
-    for (size_t i = 0; i < ARR_LENGTH(value->arguments); ++i)
-    {
-      Value *arg = *ARR_GET(value->arguments, i);
+    for (size_t i = 0; i < ARR_LENGTH(value->content.composition.arguments);
+        ++i) {
+      Value *arg = *ARR_GET(value->content.composition.arguments, i);
       free_value(arg);
     }
-    ARR_FREE(value->arguments);
+    ARR_FREE(value->content.composition.arguments);
   }
   free(value);
 }
@@ -30,29 +31,34 @@ void
 copy_value_to(Value *dst, const Value *src)
 {
   dst->value_type = src->value_type;
-  dst->type = src->type;
-  if (src->value_type == ValueTypeVariable)
-  {
-    dst->variable_name_id = src->variable_name_id;
+  dst->type_id = src->type_id;
+  if (src->value_type == ValueTypeDummy) {
+    dst->content.dummy_id = src->content.dummy_id;
+  } if (src->value_type == ValueTypeVariable) {
+    dst->content.variable_name_id = src->content.variable_name_id;
   }
   else if (src->value_type == ValueTypeConstant)
   {
-    dst->constant_path = sl_copy_symbol_path(src->constant_path);
-    if (src->constant_latex != NULL)
-      dst->constant_latex = strdup(src->constant_latex);
+    dst->content.constant.constant_path =
+        sl_copy_symbol_path(src->content.constant.constant_path);
+    if (src->content.constant.constant_latex != NULL)
+      dst->content.constant.constant_latex =
+          strdup(src->content.constant.constant_latex);
     else
-      dst->constant_latex = NULL;
+      dst->content.constant.constant_latex = NULL;
   }
   else if (src->value_type == ValueTypeComposition)
   {
-    dst->expression = src->expression;
-    ARR_INIT(dst->arguments);
-    for (size_t i = 0; i < ARR_LENGTH(src->arguments); ++i)
-    {
-      const struct Value *arg = *ARR_GET(src->arguments, i);
+    dst->content.composition.expression_id =
+        src->content.composition.expression_id;
+    ARR_INIT(dst->content.composition.arguments);
+    for (size_t i = 0; i < ARR_LENGTH(src->content.composition.arguments);
+        ++i) {
+      const struct Value *arg =
+          *ARR_GET(src->content.composition.arguments, i);
       struct Value *arg_copy = copy_value(arg);
       arg_copy->parent = dst;
-      ARR_APPEND(dst->arguments, arg_copy);
+      ARR_APPEND(dst->content.composition.arguments, arg_copy);
     }
   }
 }
@@ -73,27 +79,34 @@ values_equal(const Value *a, const Value *b)
     return FALSE;
   switch (a->value_type)
   {
+    case ValueTypeDummy:
+      if (a->content.dummy_id != b->content.dummy_id)
+        return FALSE;
+      break;
     case ValueTypeConstant:
-      if (!sl_symbol_paths_equal(a->constant_path, b->constant_path)) /* TODO: test for equivalence of constants, not for pointer equality. */
+      if (!sl_symbol_paths_equal(a->content.constant.constant_path,
+          b->content.constant.constant_path))
         return FALSE;
       break;
     case ValueTypeVariable:
-      if (!types_equal(a->type, b->type))
+      if (a->type_id != b->type_id)
         return FALSE;
-      if (a->variable_name_id != b->variable_name_id)
+      if (a->content.variable_name_id != b->content.variable_name_id)
         return FALSE;
       break;
     case ValueTypeComposition:
-      if (!types_equal(a->type, b->type))
+      if (a->type_id != b->type_id)
         return FALSE;
-      if (a->expression != b->expression) /* TODO: Use an equivalence function instead of pointer equality. */
+      if (a->content.composition.expression_id
+          != b->content.composition.expression_id)
         return FALSE;
-      if (ARR_LENGTH(a->arguments) != ARR_LENGTH(b->arguments))
+      if (ARR_LENGTH(a->content.composition.arguments)
+          != ARR_LENGTH(b->content.composition.arguments))
         return FALSE;
-      for (size_t i = 0; i < ARR_LENGTH(a->arguments); ++i)
-      {
-        const Value *arg_a = *ARR_GET(a->arguments, i);
-        const Value *arg_b = *ARR_GET(b->arguments, i);
+      for (size_t i = 0; i < ARR_LENGTH(a->content.composition.arguments);
+        ++i) {
+        const Value *arg_a = *ARR_GET(a->content.composition.arguments, i);
+        const Value *arg_b = *ARR_GET(b->content.composition.arguments, i);
         if (!values_equal(arg_a, arg_b))
           return FALSE;
       }
@@ -102,22 +115,34 @@ values_equal(const Value *a, const Value *b)
   return TRUE;
 }
 
-bool
-value_terminal(const Value *v)
+bool value_terminal(const sl_LogicState *state, const Value *v)
 {
   switch (v->value_type)
   {
+    case ValueTypeDummy:
+      {
+        const sl_LogicSymbol *type_sym = sl_logic_get_symbol_by_id(state,
+            v->type_id);
+        const struct Type *type = (struct Type *)type_sym->object;
+        return type->atomic;
+      }
+      break;
     case ValueTypeConstant:
       return TRUE;
       break;
     case ValueTypeVariable:
-      return v->type->atomic;
+      {
+        const sl_LogicSymbol *type_sym = sl_logic_get_symbol_by_id(state,
+            v->type_id);
+        const struct Type *type = (struct Type *)type_sym->object;
+        return type->atomic;
+      }
       break;
     case ValueTypeComposition:
-      for (size_t i = 0; i < ARR_LENGTH(v->arguments); ++i)
-      {
-        Value *arg = *ARR_GET(v->arguments, i);
-        if (!value_terminal(arg))
+      for (size_t i = 0; i < ARR_LENGTH(v->content.composition.arguments);
+        ++i) {
+        Value *arg = *ARR_GET(v->content.composition.arguments, i);
+        if (!value_terminal(state, arg))
           return FALSE;
       }
       return TRUE;
@@ -130,12 +155,21 @@ string_from_value(const sl_LogicState *state, const Value *value)
 {
   switch (value->value_type)
   {
+    case ValueTypeDummy:
+      {
+        char *dummy_str;
+        asprintf(&dummy_str, "Dummy #%u", value->content.dummy_id);
+        return dummy_str;
+      }
+      break;
     case ValueTypeComposition:
       {
-        char *expr_str = sl_string_from_symbol_path(state,
-          value->expression->path);
+        const sl_LogicSymbol *expr_sym = sl_logic_get_symbol_by_id(state,
+            value->content.composition.expression_id);
+        const struct Expression *expr = (struct Expression *)expr_sym->object;
+        char *expr_str = sl_string_from_symbol_path(state, expr->path);
         char *str;
-        if (ARR_LENGTH(value->arguments) == 0)
+        if (ARR_LENGTH(value->content.composition.arguments) == 0)
         {
           size_t len = 3 + strlen(expr_str);
           str = malloc(len);
@@ -150,14 +184,16 @@ string_from_value(const sl_LogicState *state, const Value *value)
         else
         {
           size_t len = 3 + strlen(expr_str);
-          char **args = malloc(sizeof(char *) * ARR_LENGTH(value->arguments));
-          for (size_t i = 0; i < ARR_LENGTH(value->arguments); ++i)
-          {
-            const struct Value *arg = *ARR_GET(value->arguments, i);
+          char **args = malloc(sizeof(char *)
+              * ARR_LENGTH(value->content.composition.arguments));
+          for (size_t i = 0;
+              i < ARR_LENGTH(value->content.composition.arguments); ++i) {
+            const struct Value *arg =
+                *ARR_GET(value->content.composition.arguments, i);
             args[i] = string_from_value(state, arg);
             len += strlen(args[i]);
           }
-          len += (ARR_LENGTH(value->arguments) - 1) * 2;
+          len += (ARR_LENGTH(value->content.composition.arguments) - 1) * 2;
 
           str = malloc(len);
           char *c = str;
@@ -166,8 +202,8 @@ string_from_value(const sl_LogicState *state, const Value *value)
           *c = '(';
           ++c;
           bool first_arg = TRUE;
-          for (size_t i = 0; i < ARR_LENGTH(value->arguments); ++i)
-          {
+          for (size_t i = 0;
+              i < ARR_LENGTH(value->content.composition.arguments); ++i) {
             if (!first_arg)
             {
               strcpy(c, ", ");
@@ -192,7 +228,7 @@ string_from_value(const sl_LogicState *state, const Value *value)
     case ValueTypeConstant:
       {
         char *const_str = sl_string_from_symbol_path(state,
-          value->constant_path);
+            value->content.constant.constant_path);
         size_t len = 1 + strlen(const_str);
         char *str = malloc(len);
         char *c = str;
@@ -206,13 +242,15 @@ string_from_value(const sl_LogicState *state, const Value *value)
     case ValueTypeVariable:
       {
         size_t len = 2 + strlen(logic_state_get_string(state,
-            value->variable_name_id));
+            value->content.variable_name_id));
         char *str = malloc(len);
         char *c = str;
         *c = '$';
         ++c;
-        strcpy(c, logic_state_get_string(state, value->variable_name_id));
-        c += strlen(logic_state_get_string(state, value->variable_name_id));
+        strcpy(c, logic_state_get_string(state,
+            value->content.variable_name_id));
+        c += strlen(logic_state_get_string(state,
+            value->content.variable_name_id));
         *c = '\0';
         return str;
       }
@@ -230,9 +268,9 @@ enumerate_value_occurrences(const Value *target, const Value *search_in,
   }
   else if (search_in->value_type == ValueTypeComposition)
   {
-    for (size_t i = 0; i < ARR_LENGTH(search_in->arguments); ++i)
-    {
-      const Value *arg = *ARR_GET(search_in->arguments, i);
+    for (size_t i = 0;
+        i < ARR_LENGTH(search_in->content.composition.arguments); ++i) {
+      const Value *arg = *ARR_GET(search_in->content.composition.arguments, i);
       enumerate_value_occurrences(target, arg, occurrences);
     }
   }
@@ -245,10 +283,10 @@ count_value_occurrences(const Value *target, const Value *search_in)
     return 1;
   } else if (search_in->value_type == ValueTypeComposition) {
     unsigned int child_occurrences = 0;
-    for (size_t i = 0; i < ARR_LENGTH(search_in->arguments); ++i) {
-      const Value *arg = *ARR_GET(search_in->arguments, i);
-      child_occurrences +=
-          count_value_occurrences(target, arg);
+    for (size_t i = 0;
+        i < ARR_LENGTH(search_in->content.composition.arguments); ++i) {
+      const Value *arg = *ARR_GET(search_in->content.composition.arguments, i);
+      child_occurrences += count_value_occurrences(target, arg);
     }
     return child_occurrences;
   } else {
@@ -256,11 +294,14 @@ count_value_occurrences(const Value *target, const Value *search_in)
   }
 }
 
-static bool
-value_is_irreducible(const Value *value)
+static bool value_is_irreducible(const sl_LogicState *state,
+    const Value *value)
 {
   switch (value->value_type)
   {
+    case ValueTypeDummy:
+      return TRUE;
+      break;
     case ValueTypeConstant:
       return TRUE;
       break;
@@ -268,24 +309,32 @@ value_is_irreducible(const Value *value)
       return TRUE;
       break;
     case ValueTypeComposition:
-      if (value->expression->replace_with != NULL)
-        return FALSE;
-      for (size_t i = 0; i < ARR_LENGTH(value->arguments); ++i)
       {
-        const Value *arg = *ARR_GET(value->arguments, i);
-        if (!value_is_irreducible(arg))
+        const sl_LogicSymbol *expr_sym = sl_logic_get_symbol_by_id(state,
+            value->content.composition.expression_id);
+        const struct Expression *expr = (struct Expression *)expr_sym->object;
+        if (expr->replace_with != NULL)
           return FALSE;
+        for (size_t i = 0;
+            i < ARR_LENGTH(value->content.composition.arguments); ++i) {
+          const Value *arg = *ARR_GET(value->content.composition.arguments, i);
+          if (!value_is_irreducible(state, arg))
+            return FALSE;
+        }
+        return TRUE;
       }
-      return TRUE;
       break;
   }
 }
 
-static Value *
-do_reduction_step(const Value *value)
+static Value * do_reduction_step(const sl_LogicState *state,
+    const Value *value)
 {
   switch (value->value_type)
   {
+    case ValueTypeDummy:
+      return copy_value(value);
+      break;
     case ValueTypeConstant:
       return copy_value(value);
       break;
@@ -295,64 +344,70 @@ do_reduction_step(const Value *value)
     case ValueTypeComposition:
       /* TODO: check that types and number of arguments match. Probably best
          to do this here as well as in the expression creation function. */
-      if (value->expression->replace_with == NULL)
       {
-        Value *new = SL_NEW(Value);
-        new->value_type = ValueTypeComposition;
-        new->parent = NULL;
-        new->expression = value->expression;
-        new->type = value->type;
-        ARR_INIT(new->arguments);
-        for (size_t i = 0; i < ARR_LENGTH(value->arguments); ++i)
+        const sl_LogicSymbol *expr_sym = sl_logic_get_symbol_by_id(state,
+            value->content.composition.expression_id);
+        const struct Expression *expr = (struct Expression *)expr_sym->object;
+        if (expr->replace_with == NULL)
         {
-          const Value *arg = *ARR_GET(value->arguments, i);
-          Value *reduced = do_reduction_step(arg);
-          reduced->parent = new;
-          ARR_APPEND(new->arguments, reduced);
-        }
-        return new;
-      }
-      else
-      {
-        Value *new;
-        if (value->expression->replace_with->value_type
-          == ValueTypeComposition)
-        {
-          ArgumentArray args;
-          ARR_INIT(args);
-          for (size_t i = 0; i < ARR_LENGTH(value->arguments); ++i)
+          Value *new = SL_NEW(Value);
+          new->value_type = ValueTypeComposition;
+          new->parent = NULL;
+          new->content.composition.expression_id =
+              value->content.composition.expression_id;
+          new->type_id = value->type_id;
+          ARR_INIT(new->content.composition.arguments);
+          for (size_t i = 0;
+              i < ARR_LENGTH(value->content.composition.arguments); ++i)
           {
-            struct Argument arg;
-            const struct Parameter *param;
-            param = ARR_GET(value->expression->parameters, i);
-            arg.name_id = param->name_id;
-            arg.value = do_reduction_step(*ARR_GET(value->arguments, i));
-            ARR_APPEND(args, arg);
+            const Value *arg =
+                *ARR_GET(value->content.composition.arguments, i);
+            Value *reduced = do_reduction_step(state, arg);
+            reduced->parent = new;
+            ARR_APPEND(new->content.composition.arguments, reduced);
           }
-          new = instantiate_value(value->expression->replace_with, args);
-          for (size_t i = 0; i < ARR_LENGTH(args); ++i) {
-            struct Argument *arg = ARR_GET(args, i);
-            free_value(arg->value);
-          }
-          ARR_FREE(args);
           return new;
         }
         else
         {
-          return copy_value(value->expression->replace_with);
+          Value *new;
+          if (expr->replace_with->value_type == ValueTypeComposition) {
+            ArgumentArray args;
+            ARR_INIT(args);
+            for (size_t i = 0;
+                i < ARR_LENGTH(value->content.composition.arguments); ++i) {
+              struct Argument arg;
+              const struct Parameter *param;
+              param = ARR_GET(expr->parameters, i);
+              arg.name_id = param->name_id;
+              arg.value = do_reduction_step(state,
+                  *ARR_GET(value->content.composition.arguments, i));
+              ARR_APPEND(args, arg);
+            }
+            new = instantiate_value(expr->replace_with, args);
+            for (size_t i = 0; i < ARR_LENGTH(args); ++i) {
+              struct Argument *arg = ARR_GET(args, i);
+              free_value(arg->value);
+            }
+            ARR_FREE(args);
+            return new;
+          }
+          else
+          {
+            return copy_value(expr->replace_with);
+          }
         }
       }
       break;
   }
 }
 
-Value *
-reduce_expressions(const Value *value)
+Value * reduce_expressions(const sl_LogicState *state, const Value *value)
 {
   Value *reduced = copy_value(value);
-  while (!value_is_irreducible(reduced))
+  while (!value_is_irreducible(state, reduced))
   {
-    Value *tmp = do_reduction_step(reduced);
+    Value *tmp = do_reduction_step(state, reduced);
     free_value(reduced);
     reduced = tmp;
   }
@@ -364,6 +419,9 @@ instantiate_value(const Value *src, ArgumentArray args)
 {
   switch (src->value_type)
   {
+    case ValueTypeDummy:
+      return copy_value(src);
+      break;
     case ValueTypeConstant:
       return copy_value(src);
       break;
@@ -374,7 +432,7 @@ instantiate_value(const Value *src, ArgumentArray args)
         for (size_t i = 0; i < ARR_LENGTH(args); ++i)
         {
           const struct Argument *a = ARR_GET(args, i);
-          if (a->name_id == src->variable_name_id) {
+          if (a->name_id == src->content.variable_name_id) {
             arg = a;
             break;
           }
@@ -382,7 +440,7 @@ instantiate_value(const Value *src, ArgumentArray args)
         if (arg == NULL) {
           return NULL;
         }
-        if (!types_equal(arg->value->type, src->type)) {
+        if (arg->value->type_id != src->type_id) {
           return NULL;
         }
         return copy_value(arg->value);
@@ -391,17 +449,18 @@ instantiate_value(const Value *src, ArgumentArray args)
     case ValueTypeComposition:
       {
         Value *dst = SL_NEW(Value);
-        dst->type = src->type;
+        dst->type_id = src->type_id;
         dst->value_type = ValueTypeComposition;
-        dst->expression = src->expression;
+        dst->content.composition.expression_id =
+            src->content.composition.expression_id;
         dst->parent = NULL;
-        ARR_INIT(dst->arguments);
-        for (size_t i = 0; i < ARR_LENGTH(src->arguments); ++i)
-        {
-          const Value *arg = *ARR_GET(src->arguments, i);
+        ARR_INIT(dst->content.composition.arguments);
+        for (size_t i = 0;
+            i < ARR_LENGTH(src->content.composition.arguments); ++i) {
+          const Value *arg = *ARR_GET(src->content.composition.arguments, i);
           Value *instantiated_arg = instantiate_value(arg, args);
           instantiated_arg->parent = dst;
-          ARR_APPEND(dst->arguments, instantiated_arg);
+          ARR_APPEND(dst->content.composition.arguments, instantiated_arg);
         }
         return dst;
       }

@@ -18,6 +18,7 @@ struct ValidationState
   sl_LogicState *logic;
   sl_SymbolPath *prefix_path;
   ARR(sl_SymbolPath *) search_paths;
+  uint32_t next_dummy_id;
 };
 
 static int
@@ -198,8 +199,54 @@ static Value *
 extract_value(struct ValidationState *state,
   const sl_ASTNode *value, const struct TheoremEnvironment *env)
 {
-  if (sl_node_get_type(value) == sl_ASTNodeType_Composition)
-  {
+  if (sl_node_get_type(value) == sl_ASTNodeType_Builtin) {
+    const sl_ASTNode *args_node;
+    Value *v;
+    if (sl_node_get_child_count(value) != 1) {
+      sl_node_show_message(state->text, value,
+          "A builtin node must have one child, the list of parameters.",
+          sl_MessageType_Error);
+      state->valid = FALSE;
+      return NULL;
+    }
+    args_node = sl_node_get_child(value, 0);
+    if (sl_node_get_type(args_node) != sl_ASTNodeType_ArgumentList) {
+      sl_node_show_message(state->text, args_node,
+          "expected an argument list, but found the wrong type of node.",
+          sl_MessageType_Error);
+      state->valid = FALSE;
+      return NULL;
+    }
+
+    /* Is this builtin recognized? */
+    if (strcmp("dummy", sl_node_get_name(value)) == 0) {
+      const sl_ASTNode *type_node;
+      sl_SymbolPath *type_path;
+      if (sl_node_get_child_count(args_node) != 1) {
+        sl_node_show_message(state->text, args_node,
+            "A dummy value declaration should have exactly one argument.",
+            sl_MessageType_Error);
+        state->valid = FALSE;
+        return NULL;
+      }
+      type_node = sl_node_get_child(args_node, 0);
+      {
+        sl_SymbolPath *local_path = extract_path(state, type_node);
+        type_path = lookup_symbol(state, local_path);
+        sl_free_symbol_path(local_path);
+      }
+      v = sl_logic_make_dummy_value(state->logic, state->next_dummy_id++,
+          type_path);
+      sl_free_symbol_path(type_path);
+      return v;
+    } else {
+      sl_node_show_message(state->text, value,
+          "Unrecognized builtin.",
+          sl_MessageType_Error);
+      state->valid = FALSE;
+      return NULL;
+    }
+  } else if (sl_node_get_type(value) == sl_ASTNodeType_Composition) {
     /* Locate the corresponding expression, and verify that the types of
        the arguments match. */
     const sl_ASTNode *expr, *args_node;
@@ -1500,6 +1547,7 @@ sl_verify_and_add_file(const char *path, sl_LogicState *logic)
   state.prefix_path = sl_new_symbol_path();
   state.logic = logic;
   state.prefix = NULL;
+  state.next_dummy_id = 0;
   ARR_INIT(state.files_opened);
   ARR_INIT(state.search_paths);
 

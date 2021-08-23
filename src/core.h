@@ -73,7 +73,7 @@ struct Constant
 struct Constspace
 {
   uint32_t id;
-  const struct Type *type;
+  uint32_t type_id;
 };
 
 struct sl_Parameter {
@@ -103,7 +103,8 @@ enum ValueType
 {
   ValueTypeConstant,
   ValueTypeVariable,
-  ValueTypeComposition
+  ValueTypeComposition,
+  ValueTypeDummy
 };
 
 typedef ARR(Value *) ValueArray;
@@ -111,18 +112,21 @@ typedef ARR(Value *) ValueArray;
 struct Value
 {
   enum ValueType value_type;
-  const struct Type *type;
+  uint32_t type_id; /* TODO: this should be computed. */
   Value *parent;
 
-  /* TODO: use a union? */
   union {
+    uint32_t dummy_id;
     uint32_t variable_name_id;
+    struct {
+      sl_SymbolPath *constant_path;
+      const char *constant_latex;
+    } constant;
+    struct {
+      uint32_t expression_id;
+      ValueArray arguments;
+    } composition;
   } content;
-  uint32_t variable_name_id;
-  sl_SymbolPath *constant_path;
-  const char *constant_latex;
-  const struct Expression *expression;
-  ValueArray arguments;
 };
 
 struct Argument
@@ -143,8 +147,7 @@ enumerate_value_occurrences(const Value *target, const Value *search_in,
 unsigned int
 count_value_occurrences(const Value *target, const Value *search_in);
 
-Value *
-reduce_expressions(const Value *value);
+Value * reduce_expressions(const sl_LogicState *state, const Value *value);
 
 Value *
 instantiate_value(const Value *src, ArgumentArray args);

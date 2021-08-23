@@ -65,7 +65,8 @@ enum sl_LexerTokenType
   sl_LexerTokenType_Semicolon,
   sl_LexerTokenType_Colon,
   sl_LexerTokenType_Percent,
-  sl_LexerTokenType_DollarSign
+  sl_LexerTokenType_DollarSign,
+  sl_LexerTokenType_At
 };
 typedef enum sl_LexerTokenType sl_LexerTokenType;
 
@@ -134,13 +135,13 @@ enum sl_ASTNodeType
   sl_ASTNodeType_Latex,
   sl_ASTNodeType_Bind,
   sl_ASTNodeType_Def,
-  sl_ASTNodeType_Dummy,
   sl_ASTNodeType_Assume,
   sl_ASTNodeType_Require,
   sl_ASTNodeType_Infer,
   sl_ASTNodeType_Step,
   sl_ASTNodeType_LatexString,
   sl_ASTNodeType_LatexVariable,
+  sl_ASTNodeType_Builtin,
   sl_ASTNodeType_Composition,
   sl_ASTNodeType_Constant,
   sl_ASTNodeType_Variable,

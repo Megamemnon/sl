@@ -134,6 +134,9 @@ static bool pair_distinct_in_env(const struct ProofEnvironment *env,
     return TRUE;
   switch (a->value_type)
   {
+    case ValueTypeDummy:
+      return !values_equal(a, b);
+      break;
     case ValueTypeConstant:
       return !values_equal(a, b);
       break;
@@ -143,15 +146,17 @@ static bool pair_distinct_in_env(const struct ProofEnvironment *env,
       return FALSE;
       break;
     case ValueTypeComposition:
-      if (ARR_LENGTH(a->arguments) != ARR_LENGTH(b->arguments))
+      if (ARR_LENGTH(a->content.composition.arguments)
+          != ARR_LENGTH(b->content.composition.arguments))
         return TRUE;
-      if (a->expression->id != b->expression->id) /* TODO: abstract this to its own function. */
+      if (a->content.composition.expression_id
+          != b->content.composition.expression_id)
         return TRUE;
-      for (size_t i = 0; i < ARR_LENGTH(a->arguments); ++i)
-      {
+      for (size_t i = 0; i < ARR_LENGTH(a->content.composition.arguments);
+          ++i) {
         Value *arg_a, *arg_b;
-        arg_a = *ARR_GET(a->arguments, i);
-        arg_b = *ARR_GET(b->arguments, i);
+        arg_a = *ARR_GET(a->content.composition.arguments, i);
+        arg_b = *ARR_GET(b->content.composition.arguments, i);
         if (!pair_distinct_in_env(env, arg_a, arg_b))
           return FALSE;
       }
@@ -160,15 +165,12 @@ static bool pair_distinct_in_env(const struct ProofEnvironment *env,
   return TRUE;
 }
 
-static bool
-evaluate_distinct(sl_LogicState *state, const struct ProofEnvironment *env,
-  ValueArray args)
+static bool evaluate_distinct(sl_LogicState *state,
+    const struct ProofEnvironment *env, ValueArray args)
 {
   /* Evaluate each pair of arguments once for distinctness. */
-  for (size_t i = 0; i < ARR_LENGTH(args); ++i)
-  {
-    for (size_t j = i + 1; j < ARR_LENGTH(args); ++j)
-    {
+  for (size_t i = 0; i < ARR_LENGTH(args); ++i) {
+    for (size_t j = i + 1; j < ARR_LENGTH(args); ++j) {
       const Value *a, *b;
       bool distinct;
       a = *ARR_GET(args, i);
@@ -188,43 +190,99 @@ static bool value_gets_bound(const sl_LogicState *state,
 {
   switch (source->value_type)
   {
+    case ValueTypeDummy:
+      /* For a constant, look up through the parents of context. If there is
+         a binding equal to source, or if there is a variable that gets
+         bound, return true. */
+      {
+        const sl_LogicSymbol *type_sym;
+        const struct Type *type;
+        type_sym = sl_logic_get_symbol_by_id(state, source->type_id);
+        type = (struct Type *)type_sym->object;
+        if (!type->binds)
+          return FALSE;
+        for (const Value *scope = context->parent; scope != NULL;
+            scope = scope->parent) {
+          ArgumentArray args_array;
+          const sl_LogicSymbol *expr_sym;
+          const struct Expression *expr;
+          ARR_INIT(args_array);
+          expr_sym = sl_logic_get_symbol_by_id(state,
+              scope->content.composition.expression_id);
+          expr = (struct Expression *)expr_sym->object;
+          for (size_t i = 0;
+              i < ARR_LENGTH(scope->content.composition.arguments); ++i) {
+            Value *arg = *ARR_GET(scope->content.composition.arguments, i);
+            const struct Parameter *param = ARR_GET(expr->parameters, i);
+            struct Argument argument;
+            argument.name_id = param->name_id;
+            argument.value = arg;
+            ARR_APPEND(args_array, argument);
+          }
+
+          for (size_t i = 0; i < ARR_LENGTH(expr->bindings); ++i) {
+            const Value *binding = *ARR_GET(expr->bindings, i);
+            Value *instantiated_binding =
+                instantiate_value(binding, args_array);
+            if (values_equal(instantiated_binding, source)) {
+              free_value(instantiated_binding);
+              ARR_FREE(args_array);
+              return TRUE;
+              /* TODO: free. */
+            }
+            free_value(instantiated_binding);
+          }
+          ARR_FREE(args_array);
+        }
+      }
+      return FALSE;
+      break;
     case ValueTypeConstant:
       /* For a constant, look up through the parents of context. If there is
          a binding equal to source, or if there is a variable that gets
          bound, return true. */
-      if (!source->type->binds)
-        return FALSE;
-      for (const Value *scope = context->parent; scope != NULL;
-        scope = scope->parent)
       {
-        ArgumentArray args_array;
-        ARR_INIT(args_array);
-        for (size_t i = 0; i < ARR_LENGTH(scope->arguments); ++i)
-        {
-          Value *arg = *ARR_GET(scope->arguments, i);
-          const struct Parameter *param =
-            ARR_GET(scope->expression->parameters, i);
-          struct Argument argument;
-          argument.name_id = param->name_id;
-          argument.value = arg;
-          ARR_APPEND(args_array, argument);
-        }
-
-        for (size_t i = 0; i < ARR_LENGTH(scope->expression->bindings); ++i)
-        {
-          const Value *binding = *ARR_GET(scope->expression->bindings, i);
-          Value *instantiated_binding = instantiate_value(binding, args_array);
-          if (instantiated_binding->value_type == ValueTypeVariable
-            || values_equal(instantiated_binding, source))
-          {
-            free_value(instantiated_binding);
-            ARR_FREE(args_array);
-            return TRUE;
-            /* TODO: free. */
+        const sl_LogicSymbol *type_sym;
+        const struct Type *type;
+        type_sym = sl_logic_get_symbol_by_id(state, source->type_id);
+        type = (struct Type *)type_sym->object;
+        if (!type->binds)
+          return FALSE;
+        for (const Value *scope = context->parent; scope != NULL;
+            scope = scope->parent) {
+          ArgumentArray args_array;
+          const sl_LogicSymbol *expr_sym;
+          const struct Expression *expr;
+          ARR_INIT(args_array);
+          expr_sym = sl_logic_get_symbol_by_id(state,
+              scope->content.composition.expression_id);
+          expr = (struct Expression *)expr_sym->object;
+          for (size_t i = 0;
+              i < ARR_LENGTH(scope->content.composition.arguments); ++i) {
+            Value *arg = *ARR_GET(scope->content.composition.arguments, i);
+            const struct Parameter *param = ARR_GET(expr->parameters, i);
+            struct Argument argument;
+            argument.name_id = param->name_id;
+            argument.value = arg;
+            ARR_APPEND(args_array, argument);
           }
-          free_value(instantiated_binding);
+
+          for (size_t i = 0; i < ARR_LENGTH(expr->bindings); ++i) {
+            const Value *binding = *ARR_GET(expr->bindings, i);
+            Value *instantiated_binding =
+                instantiate_value(binding, args_array);
+            if (instantiated_binding->value_type == ValueTypeVariable
+              || values_equal(instantiated_binding, source))
+            {
+              free_value(instantiated_binding);
+              ARR_FREE(args_array);
+              return TRUE;
+              /* TODO: free. */
+            }
+            free_value(instantiated_binding);
+          }
+          ARR_FREE(args_array);
         }
-        ARR_FREE(args_array);
       }
       return FALSE;
       break;
@@ -233,20 +291,23 @@ static bool value_gets_bound(const sl_LogicState *state,
          bound in context. */
       for (const Value *scope = context->parent; scope != NULL;
           scope = scope->parent) {
+        const sl_LogicSymbol *expr_sym = sl_logic_get_symbol_by_id(state,
+            scope->content.composition.expression_id);
+        const struct Expression *expr = (struct Expression *)expr_sym->object;
         ArgumentArray args_array;
         ARR_INIT(args_array);
-        for (size_t i = 0; i < ARR_LENGTH(scope->arguments); ++i) {
-          Value *arg = *ARR_GET(scope->arguments, i);
-          const struct Parameter *param =
-            ARR_GET(scope->expression->parameters, i);
+        for (size_t i = 0;
+            i < ARR_LENGTH(scope->content.composition.arguments); ++i) {
+          Value *arg = *ARR_GET(scope->content.composition.arguments, i);
+          const struct Parameter *param = ARR_GET(expr->parameters, i);
           struct Argument argument;
           argument.name_id = param->name_id;
           argument.value = arg;
           ARR_APPEND(args_array, argument);
         }
 
-        for (size_t i = 0; i < ARR_LENGTH(scope->expression->bindings); ++i) {
-          const Value *binding = *ARR_GET(scope->expression->bindings, i);
+        for (size_t i = 0; i < ARR_LENGTH(expr->bindings); ++i) {
+          const Value *binding = *ARR_GET(expr->bindings, i);
           Value *instantiated_binding = instantiate_value(binding, args_array);
           /* Is there a distinctness requirement that prevents source from
              being bound? */
@@ -262,9 +323,9 @@ static bool value_gets_bound(const sl_LogicState *state,
       return FALSE;
       break;
     case ValueTypeComposition:
-      for (size_t i = 0; i < ARR_LENGTH(source->arguments); ++i)
-      {
-        const Value *arg = *ARR_GET(source->arguments, i);
+      for (size_t i = 0; i < ARR_LENGTH(source->content.composition.arguments);
+          ++i) {
+        const Value *arg = *ARR_GET(source->content.composition.arguments, i);
         if (value_gets_bound(state, env, arg, context))
           return TRUE;
       }
@@ -309,18 +370,17 @@ free_for_in_env(const sl_LogicState *state, const struct ProofEnvironment *env,
     /* Then, iterate through the source and look for terms that can
        be bound. */
     return !value_gets_bound(state, env, source, context);
-  }
-  else if (context->value_type == ValueTypeConstant)
-  {
+  } else if (context->value_type == ValueTypeConstant
+      || context->value_type == ValueTypeDummy) {
     /* Since we didn't match above, we're all good. */
     return TRUE;
   }
   else if (context->value_type == ValueTypeComposition)
   {
     /* Check all the children. */
-    for (size_t i = 0; i < ARR_LENGTH(context->arguments); ++i)
-    {
-      const Value *arg = *ARR_GET(context->arguments, i);
+    for (size_t i = 0; i < ARR_LENGTH(context->content.composition.arguments);
+        ++i) {
+      const Value *arg = *ARR_GET(context->content.composition.arguments, i);
       if (!free_for_in_env(state, env, source, target, arg))
         return FALSE;
     }
@@ -348,8 +408,9 @@ evaluate_free_for(struct sl_LogicState *state,
 }
 
 /* --- Not Free --- */
-static bool not_free_in_env(const struct ProofEnvironment *env,
-    const Value *target, const Value *context)
+static bool not_free_in_env(const sl_LogicState *state,
+    const struct ProofEnvironment *env, const Value *target,
+    const Value *context)
 {
   /* Check if there is a corresponding requirement in the environment. */
   for (size_t i = 0; i < ARR_LENGTH(env->requirements); ++i)
@@ -376,17 +437,20 @@ static bool not_free_in_env(const struct ProofEnvironment *env,
        context binds the target, then the target cannot be free. If the
        expression does not bind the target, we can only conclude that target
        is not free if it is not free in all the composition's arguments. */
-    for (size_t i = 0; i < ARR_LENGTH(context->expression->bindings); ++i)
+    const sl_LogicSymbol *expr_sym = sl_logic_get_symbol_by_id(state,
+        context->content.composition.expression_id);
+    const struct Expression *expr = (struct Expression *)expr_sym->object;
+    for (size_t i = 0; i < ARR_LENGTH(expr->bindings); ++i)
     {
-      const Value *binding = *ARR_GET(context->expression->bindings, i);
+      const Value *binding = *ARR_GET(expr->bindings, i);
       if (values_equal(target, binding))
         return TRUE;
     }
 
-    for (size_t i = 0; i < ARR_LENGTH(context->arguments); ++i)
-    {
-      const Value *arg = *ARR_GET(context->arguments, i);
-      if (!not_free_in_env(env, target, arg))
+    for (size_t i = 0; i < ARR_LENGTH(context->content.composition.arguments);
+        ++i) {
+      const Value *arg = *ARR_GET(context->content.composition.arguments, i);
+      if (!not_free_in_env(state, env, target, arg))
         return FALSE;
     }
     return TRUE;
@@ -422,7 +486,7 @@ evaluate_not_free(sl_LogicState *state, const struct ProofEnvironment *env,
   target = *ARR_GET(args, 0);
   context = *ARR_GET(args, 1);
 
-  return not_free_in_env(env, target, context);
+  return not_free_in_env(state, env, target, context);
 }
 
 /* --- Cover Free --- */
@@ -469,25 +533,29 @@ static bool cover_free_in_env(const sl_LogicState *state,
   }
 
   if (context->value_type == ValueTypeConstant
-    || context->value_type == ValueTypeVariable)
-  {
+      || context->value_type == ValueTypeDummy
+      || context->value_type == ValueTypeVariable) {
     if (value_gets_bound(state, env, context, context))
       return TRUE;
   }
 
   if (context->value_type == ValueTypeComposition)
   {
-    for (size_t i = 0; i < ARR_LENGTH(context->arguments); ++i)
-    {
-      const Value *arg = *ARR_GET(context->arguments, i);
+    for (size_t i = 0; i < ARR_LENGTH(context->content.composition.arguments);
+        ++i) {
+      const Value *arg = *ARR_GET(context->content.composition.arguments, i);
       if (!cover_free_in_env(state, env, covering, arg))
         return FALSE;
     }
     return TRUE;
   }
-  else if (context->value_type == ValueTypeConstant)
+  else if (context->value_type == ValueTypeConstant
+      || context->value_type == ValueTypeDummy)
   {
-    if (!context->type->binds)
+    const sl_LogicSymbol *type_sym = sl_logic_get_symbol_by_id(state,
+        context->type_id);
+    const struct Type *type = (struct Type *)type_sym->object;
+    if (!type->binds)
       return TRUE;
   }
   return FALSE;
@@ -561,13 +629,15 @@ is_substitution(const struct ProofEnvironment *env, const Value *target,
   {
     if (new_context->value_type != ValueTypeComposition)
       return FALSE;
-    if (ARR_LENGTH(context->arguments) !=
-      ARR_LENGTH(new_context->arguments))
+    if (ARR_LENGTH(context->content.composition.arguments) !=
+        ARR_LENGTH(new_context->content.composition.arguments))
       return FALSE;
-    for (size_t i = 0; i < ARR_LENGTH(context->arguments); ++i)
-    {
-      const Value *ctx_arg = *ARR_GET(context->arguments, i);
-      const Value *new_ctx_arg = *ARR_GET(new_context->arguments, i);
+    for (size_t i = 0; i < ARR_LENGTH(context->content.composition.arguments);
+        ++i) {
+      const Value *ctx_arg =
+          *ARR_GET(context->content.composition.arguments, i);
+      const Value *new_ctx_arg =
+          *ARR_GET(new_context->content.composition.arguments, i);
       if (!is_substitution(env, target, ctx_arg, source, new_ctx_arg))
         return FALSE;
     }
@@ -642,12 +712,15 @@ is_full_substitution(const struct ProofEnvironment *env, const Value *target,
   {
     if (new_context->value_type != ValueTypeComposition)
       return FALSE;
-    if (ARR_LENGTH(context->arguments) != ARR_LENGTH(new_context->arguments))
+    if (ARR_LENGTH(context->content.composition.arguments)
+        != ARR_LENGTH(new_context->content.composition.arguments))
       return FALSE;
-    for (size_t i = 0; i < ARR_LENGTH(context->arguments); ++i)
-    {
-      const Value *ctx_arg = *ARR_GET(context->arguments, i);
-      const Value *new_ctx_arg = *ARR_GET(new_context->arguments, i);
+    for (size_t i = 0; i < ARR_LENGTH(context->content.composition.arguments);
+        ++i) {
+      const Value *ctx_arg =
+          *ARR_GET(context->content.composition.arguments, i);
+      const Value *new_ctx_arg =
+          *ARR_GET(new_context->content.composition.arguments, i);
       if (!is_full_substitution(env, target, ctx_arg, source, new_ctx_arg))
         return FALSE;
     }
@@ -713,9 +786,8 @@ evaluate_unused(sl_LogicState *state, const struct ProofEnvironment *env,
 }
 
 /* --- Evaluation --- */
-bool
-evaluate_requirement(sl_LogicState *state, const struct Requirement *req,
-  ArgumentArray environment_args, const struct ProofEnvironment *env)
+bool evaluate_requirement(sl_LogicState *state, const struct Requirement *req,
+    ArgumentArray environment_args, const struct ProofEnvironment *env)
 {
   bool satisfied = FALSE;
   ValueArray instantiated_args;
@@ -725,7 +797,7 @@ evaluate_requirement(sl_LogicState *state, const struct Requirement *req,
   {
     const Value *arg = *ARR_GET(req->arguments, j);
     Value *instantiated_0 = instantiate_value(arg, environment_args);
-    Value *instantiated = reduce_expressions(instantiated_0);
+    Value *instantiated = reduce_expressions(state, instantiated_0);
     free_value(instantiated_0);
     ARR_APPEND(instantiated_args, instantiated);
   }

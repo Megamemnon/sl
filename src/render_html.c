@@ -30,39 +30,46 @@ html_render_value(const sl_LogicState *state, const Value *v)
   char *str;
   switch (v->value_type)
   {
+    case ValueTypeDummy:
+      asprintf(&str, "Dummy %u", v->content.dummy_id);
+      break;
     case ValueTypeConstant:
       asprintf(&str, "<a href=\"#sym-%u\">%s</a>",
         /*v->constant->id*/ 0,
-        sl_get_symbol_path_last_segment(state, v->constant_path));
+        sl_get_symbol_path_last_segment(state,
+            v->content.constant.constant_path));
       break;
     case ValueTypeVariable:
       asprintf(&str, "$%s",
-          logic_state_get_string(state, v->variable_name_id));
+          logic_state_get_string(state, v->content.variable_name_id));
       break;
     case ValueTypeComposition:
-      if (ARR_LENGTH(v->arguments) == 0)
+      if (ARR_LENGTH(v->content.composition.arguments) == 0)
       {
+        const sl_SymbolPath *expr_path = sl_logic_get_symbol_path_by_id(state,
+            v->content.composition.expression_id);
         asprintf(&str, "<a href=\"#sym-%u\">%s</a>()",
-          v->expression->id,
-          sl_get_symbol_path_last_segment(state, v->expression->path));
+          v->content.composition.expression_id,
+          sl_get_symbol_path_last_segment(state, expr_path));
       }
       else
       {
         size_t args_str_len = 1;
-        char **args = malloc(sizeof(char *) * ARR_LENGTH(v->arguments));
-        for (size_t i = 0; i < ARR_LENGTH(v->arguments); ++i)
-        {
-          const Value *arg = *ARR_GET(v->arguments, i);
+        char **args = malloc(sizeof(char *)
+            * ARR_LENGTH(v->content.composition.arguments));
+        for (size_t i = 0; i < ARR_LENGTH(v->content.composition.arguments);
+            ++i) {
+          const Value *arg = *ARR_GET(v->content.composition.arguments, i);
           args[i] = html_render_value(state, arg);
           args_str_len += strlen(args[i]);
         }
-        args_str_len += (ARR_LENGTH(v->arguments) - 1) * 2;
+        args_str_len += (ARR_LENGTH(v->content.composition.arguments) - 1) * 2;
 
         char *args_str = malloc(args_str_len);
         char *c = args_str;
         bool first_arg = TRUE;
-        for (size_t i = 0; i < ARR_LENGTH(v->arguments); ++i)
-        {
+        for (size_t i = 0; i < ARR_LENGTH(v->content.composition.arguments);
+            ++i) {
           if (!first_arg)
           {
             strcpy(c, ", ");
@@ -77,10 +84,11 @@ html_render_value(const sl_LogicState *state, const Value *v)
         free(args);
         *c = '\0';
 
+        const sl_SymbolPath *expr_path = sl_logic_get_symbol_path_by_id(state,
+            v->content.composition.expression_id);
         asprintf(&str, "<a href=\"#sym-%u\">%s</a>(%s)",
-          v->expression->id,
-          sl_get_symbol_path_last_segment(state, v->expression->path),
-          args_str);
+            v->content.composition.expression_id,
+            sl_get_symbol_path_last_segment(state, expr_path), args_str);
         free(args_str);
       }
       break;

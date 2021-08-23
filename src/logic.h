@@ -14,6 +14,9 @@ sl_new_logic_state(FILE *log_out);
 void
 sl_free_logic_state(sl_LogicState *state);
 
+int sl_logic_state_write_to_interchange_file(const sl_LogicState *state,
+    const char *file_path);
+
 /* Methods to manipulate paths. */
 typedef struct sl_SymbolPath sl_SymbolPath;
 
@@ -176,11 +179,13 @@ bool
 values_equal(const Value *a, const Value *b);
 
 /* True iff all the variables in the expression have atomic types. */
-bool
-value_terminal(const Value *v);
+bool value_terminal(const sl_LogicState *state, const Value *v);
 
 char *
 string_from_value(const sl_LogicState *state, const Value *value);
+
+Value * sl_logic_make_dummy_value(sl_LogicState *state,
+    uint32_t id, const sl_SymbolPath *type_path);
 
 Value *
 new_variable_value(sl_LogicState *state, const char *name, const sl_SymbolPath *type);

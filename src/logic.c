@@ -668,10 +668,10 @@ sl_logic_make_constspace(sl_LogicState *state,
   sl_LogicSymbol *type_symbol;
   struct Constspace *c;
   sl_LogicSymbol sym;
+  uint32_t type_id;
   sl_LogicError err;
-  type_symbol = locate_symbol_with_type(state, type_path,
-    sl_LogicSymbolType_Type);
-  if (type_symbol == NULL)
+  err = sl_logic_get_symbol_id(state, type_path, &type_id);
+  if (err != sl_LogicError_None)
   {
     char *constspace_str, *type_str;
     constspace_str = sl_string_from_symbol_path(state, constspace_path);
@@ -686,7 +686,7 @@ sl_logic_make_constspace(sl_LogicState *state,
 
   c = SL_NEW(struct Constspace);
   c->id = state->next_id++;
-  c->type = (struct Type *)type_symbol->object;
+  c->type_id = type_id;
   sym.path = sl_copy_symbol_path(constspace_path);
   sym.type = sl_LogicSymbolType_Constspace;
   sym.object = c;
@@ -921,17 +921,64 @@ add_expression(sl_LogicState *state, struct PrototypeExpression proto)
 }
 
 /* Values */
+Value * sl_logic_make_dummy_value(sl_LogicState *state,
+    uint32_t id, const sl_SymbolPath *type_path)
+{
+  Value *value;
+  uint32_t type_id;
+  const sl_LogicSymbol *type_sym;
+  const struct Type *type;
+  sl_LogicError err;
+  value = SL_NEW(Value);
+  value->value_type = ValueTypeDummy;
+  value->parent = NULL;
+  err = sl_logic_get_symbol_id(state, type_path, &type_id);
+  if (err != sl_LogicError_None) {
+    char *type_str = sl_string_from_symbol_path(state, type_path);
+    LOG_NORMAL(state->log_out,
+        "Cannot create dummy value because there is no such type '%s'.\n",
+        type_str);
+    free(type_str);
+    free(value);
+    return NULL;
+  }
+  type_sym = sl_logic_get_symbol_by_id(state, type_id);
+  if (type_sym->type != sl_LogicSymbolType_Type) {
+    char *type_str = sl_string_from_symbol_path(state, type_path);
+    LOG_NORMAL(state->log_out,
+        "Cannot create dummy value because '%s' is not a type.\n",
+        type_str);
+    free(type_str);
+    free(value);
+    return NULL;
+  }
+  type = (struct Type *)type_sym->object;
+  if (!type->dummies) {
+    char *type_str = sl_string_from_symbol_path(state, type_path);
+    LOG_NORMAL(state->log_out,
+        "Cannot create dummy value because type '%s' does not support dummies.\n",
+        type_str);
+    free(type_str);
+    free(value);
+    return NULL;
+  }
+  value->type_id = type_id;
+  value->content.dummy_id = id;
+  return value;
+}
+
 Value *
-new_variable_value(sl_LogicState *state, const char *name, const sl_SymbolPath *type)
+new_variable_value(sl_LogicState *state, const char *name,
+    const sl_SymbolPath *type)
 {
   Value *value = malloc(sizeof(Value));
-
-  value->variable_name_id = logic_state_add_string(state, name);
+  uint32_t type_id;
+  sl_LogicError err;
+  value->content.variable_name_id = logic_state_add_string(state, name);
   value->value_type = ValueTypeVariable;
   value->parent = NULL;
-  sl_LogicSymbol *type_symbol = locate_symbol_with_type(state,
-    type, sl_LogicSymbolType_Type);
-  if (type_symbol == NULL)
+  err = sl_logic_get_symbol_id(state, type, &type_id);
+  if (err != sl_LogicError_None)
   {
     char *type_str = sl_string_from_symbol_path(state, type);
     LOG_NORMAL(state->log_out,
@@ -940,8 +987,7 @@ new_variable_value(sl_LogicState *state, const char *name, const sl_SymbolPath *
     free(value);
     return NULL;
   }
-  value->type = (struct Type *)type_symbol->object;
-
+  value->type_id = type_id;
   return value;
 }
 
@@ -952,7 +998,7 @@ new_constant_value(sl_LogicState *state, const sl_SymbolPath *constant)
   value = SL_NEW(Value);
   value->value_type = ValueTypeConstant;
   value->parent = NULL;
-  value->constant_latex = NULL;
+  value->content.constant.constant_latex = NULL;
 
   /* Is this a member of a constspace or a is it an individually declared
      constant? */
@@ -969,8 +1015,8 @@ new_constant_value(sl_LogicState *state, const sl_SymbolPath *constant)
     {
       const struct Constspace *constspace_obj;
       constspace_obj = (struct Constspace *)constspace->object;
-      value->type = constspace_obj->type;
-      value->constant_path = sl_copy_symbol_path(constant);
+      value->type_id = constspace_obj->type_id;
+      value->content.constant.constant_path = sl_copy_symbol_path(constant);
       return value;
     }
   }
@@ -987,14 +1033,10 @@ new_constant_value(sl_LogicState *state, const sl_SymbolPath *constant)
   }
   const struct Constant *constant_obj =
     (struct Constant *)constant_symbol->object;
-  value->constant_path = sl_copy_symbol_path(constant_obj->path);
-  {
-    /* TODO: the value should reference its type by id, not pointer. */
-    sl_LogicSymbol *type_symbol = sl_logic_get_symbol_by_id(state,
-        constant_obj->type_id);
-    value->type = (struct Type *)type_symbol->object;
-  }
-  value->constant_latex = strdup(constant_obj->latex_format);
+  value->content.constant.constant_path =
+      sl_copy_symbol_path(constant_obj->path);
+  value->type_id = constant_obj->type_id;
+  value->content.constant.constant_latex = strdup(constant_obj->latex_format);
 
   return value;
 }
@@ -1004,12 +1046,12 @@ new_composition_value(sl_LogicState *state, const sl_SymbolPath *expr_path,
   Value * const *args)
 {
   Value *value = malloc(sizeof(Value));
-
+  uint32_t expr_id;
+  sl_LogicError err;
   value->value_type = ValueTypeComposition;
   value->parent = NULL;
-  sl_LogicSymbol *expr_symbol = locate_symbol_with_type(state,
-    expr_path, sl_LogicSymbolType_Expression);
-  if (expr_symbol == NULL)
+  err = sl_logic_get_symbol_id(state, expr_path, &expr_id);
+  if (err != sl_LogicError_None)
   {
     char *expr_str = sl_string_from_symbol_path(state, expr_path);
     LOG_NORMAL(state->log_out,
@@ -1019,65 +1061,66 @@ new_composition_value(sl_LogicState *state, const sl_SymbolPath *expr_path,
     free(value);
     return NULL;
   }
-  value->expression = (struct Expression *)expr_symbol->object;
+  value->content.composition.expression_id = expr_id;
   {
-    /* TODO: the value should reference its type by id, not pointer. */
-    sl_LogicSymbol *type_symbol = sl_logic_get_symbol_by_id(state,
-        value->expression->type_id);
-    value->type = (struct Type *)type_symbol->object;
+    const sl_LogicSymbol *expr_sym = sl_logic_get_symbol_by_id(state,
+        expr_id);
+    const struct Expression *expr = (struct Expression *)expr_sym->object;
+    value->type_id = expr->type_id;
   }
 
-  ARR_INIT(value->arguments);
+  ARR_INIT(value->content.composition.arguments);
   for (Value * const *arg = args;
     *arg != NULL; ++arg)
   {
     Value *arg_copy = copy_value(*arg);
     arg_copy->parent = value;
-    ARR_APPEND(value->arguments, arg_copy);
+    ARR_APPEND(value->content.composition.arguments, arg_copy);
   }
 
   /* Make sure that the arguments match the types of the parameters of
      the expression. */
-  if (ARR_LENGTH(value->arguments) != ARR_LENGTH(value->expression->parameters))
   {
-    char *expr_str = sl_string_from_symbol_path(state, expr_path);
-    LOG_NORMAL(state->log_out,
-      "Cannot create value because the wrong number of arguments are supplied to the expression '%s'\n",
-      expr_str);
-    free(expr_str);
-    free_value(value);
-    return NULL;
-  }
-  ArgumentArray args_array;
-  ARR_INIT(args_array);
-  for (size_t i = 0; i < ARR_LENGTH(value->arguments); ++i)
-  {
-    Value *arg = *ARR_GET(value->arguments, i);
-    const struct Parameter *param = ARR_GET(value->expression->parameters, i);
-    struct Argument argument;
-    const sl_LogicSymbol *type_symbol;
-    const struct Type *type;
-    type_symbol = sl_logic_get_symbol_by_id(state, param->type_id);
-    type = (struct Type *)type_symbol->object;
-    argument.name_id = param->name_id;
-    argument.value = copy_value(arg);
-    ARR_APPEND(args_array, argument);
-    if (!types_equal(arg->type, type))
-    {
+    const sl_LogicSymbol *expr_sym = sl_logic_get_symbol_by_id(state,
+        expr_id);
+    const struct Expression *expr = (struct Expression *)expr_sym->object;
+    if (ARR_LENGTH(value->content.composition.arguments)
+        != ARR_LENGTH(expr->parameters)) {
       char *expr_str = sl_string_from_symbol_path(state, expr_path);
       LOG_NORMAL(state->log_out,
-        "Cannot create value because the type of an argument does not match the required value of the corresponding parameter of expression '%s'\n",
+        "Cannot create value because the wrong number of arguments are supplied to the expression '%s'\n",
         expr_str);
       free(expr_str);
       free_value(value);
       return NULL;
     }
+    ArgumentArray args_array;
+    ARR_INIT(args_array);
+    for (size_t i = 0; i < ARR_LENGTH(value->content.composition.arguments);
+        ++i) {
+      Value *arg = *ARR_GET(value->content.composition.arguments, i);
+      const struct Parameter *param = ARR_GET(expr->parameters, i);
+      struct Argument argument;
+      argument.name_id = param->name_id;
+      argument.value = copy_value(arg);
+      ARR_APPEND(args_array, argument);
+      if (arg->type_id != param->type_id)
+      {
+        char *expr_str = sl_string_from_symbol_path(state, expr_path);
+        LOG_NORMAL(state->log_out,
+          "Cannot create value because the type of an argument does not match the required value of the corresponding parameter of expression '%s'\n",
+          expr_str);
+        free(expr_str);
+        free_value(value);
+        return NULL;
+      }
+    }
+    for (size_t i = 0; i < ARR_LENGTH(args_array); ++i) {
+      struct Argument *arg = ARR_GET(args_array, i);
+      free_value(arg->value);
+    }
+    ARR_FREE(args_array);
   }
-  for (size_t i = 0; i < ARR_LENGTH(args_array); ++i) {
-    struct Argument *arg = ARR_GET(args_array, i);
-    free_value(arg->value);
-  }
-  ARR_FREE(args_array);
 
   return value;
 }
@@ -1245,7 +1288,7 @@ instantiate_theorem_in_env(struct sl_LogicState *state, const struct Theorem *sr
     {
       const Value *assumption = *ARR_GET(src->assumptions, i);
       Value *instantiated_0 = instantiate_value(assumption, args);
-      Value *instantiated = reduce_expressions(instantiated_0);
+      Value *instantiated = reduce_expressions(state, instantiated_0);
       free_value(instantiated_0);
       if (instantiated == NULL)
         return 1;
@@ -1277,7 +1320,7 @@ instantiate_theorem_in_env(struct sl_LogicState *state, const struct Theorem *sr
   {
     const Value *inference = *ARR_GET(src->inferences, i);
     Value *instantiated_0 = instantiate_value(inference, args);
-    Value *instantiated = reduce_expressions(instantiated_0);
+    Value *instantiated = reduce_expressions(state, instantiated_0);
     free_value(instantiated_0);
     if (instantiated == NULL)
       return 1;
@@ -1372,7 +1415,7 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
     *assume != NULL; ++assume)
   {
     ARR_APPEND(a->assumptions, copy_value(*assume));
-    Value *reduced = reduce_expressions(*assume);
+    Value *reduced = reduce_expressions(state, *assume);
     ARR_APPEND(env->proven, reduced);
   }
   for (Value **infer = proto.inferences;
@@ -1416,16 +1459,12 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
       struct Parameter *param = ARR_GET(ref.theorem->parameters, i);
 
       struct Argument arg;
-      const sl_LogicSymbol *type_sym;
-      const struct Type *type;
       arg.name_id = param->name_id;
       arg.value = copy_value((*step)->arguments[i]);
-      type_sym = sl_logic_get_symbol_by_id(state, param->type_id);
-      type = (struct Type *)type_sym->object;
 
       ARR_APPEND(ref.arguments, copy_value(arg.value));
 
-      if (!types_equal(type, arg.value->type))
+      if (arg.value->type_id != param->type_id)
       {
         LOG_NORMAL(state->log_out,
           "Cannot add theorem because an axiom/theorem referenced received an argument with the wrong type.\n");
@@ -1456,7 +1495,7 @@ add_theorem(sl_LogicState *state, struct PrototypeTheorem proto)
   for (size_t i = 0; i < ARR_LENGTH(a->inferences); ++i)
   {
     Value *infer = *ARR_GET(a->inferences, i);
-    Value *reduced = reduce_expressions(infer);
+    Value *reduced = reduce_expressions(state, infer);
     if (!statement_proven(reduced, env))
     {
       LOG_NORMAL(state->log_out,

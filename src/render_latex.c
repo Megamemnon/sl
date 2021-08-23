@@ -247,37 +247,51 @@ latex_render_value(const sl_LogicState *state, const Value *v)
 {
   switch (v->value_type)
   {
+    case ValueTypeDummy:
+      {
+        char *str, *result;
+        asprintf(&str, "D_{%u}", v->content.dummy_id);
+        result = latex_render_string(str);
+        free(str);
+        return result;
+      }
+      break;
     case ValueTypeConstant:
-      if (v->constant_latex != NULL)
-        return latex_render_string(v->constant_latex);
+      if (v->content.constant.constant_latex != NULL)
+        return latex_render_string(v->content.constant.constant_latex);
       else
         return latex_render_string(sl_get_symbol_path_last_segment(state,
-          v->constant_path));
+            v->content.constant.constant_path));
       break;
     case ValueTypeVariable:
       return latex_render_string(logic_state_get_string(state,
-          v->variable_name_id));
+          v->content.variable_name_id));
       break;
     case ValueTypeComposition:
-      if (v->expression->has_latex)
+      const sl_LogicSymbol *expr_sym;
+      const struct Expression *expr;
+      expr_sym = sl_logic_get_symbol_by_id(state,
+          v->content.composition.expression_id);
+      expr = (struct Expression *)expr_sym->object;
+      if (expr->has_latex)
       {
         char *result;
         ARR(char *) segments;
         ARR_INIT(segments);
         size_t len = 1;
-        for (size_t i = 0; i < ARR_LENGTH(v->expression->latex.segments); ++i)
+        for (size_t i = 0; i < ARR_LENGTH(expr->latex.segments); ++i)
         {
           const struct LatexFormatSegment *seg =
-            ARR_GET(v->expression->latex.segments, i);
+            ARR_GET(expr->latex.segments, i);
           char *str;
           if (seg->is_variable)
           {
             /* Find the corresponding argument. */
             size_t arg_index;
-            for (size_t j = 0; j < ARR_LENGTH(v->expression->parameters); ++j)
+            for (size_t j = 0; j < ARR_LENGTH(expr->parameters); ++j)
             {
               const struct Parameter *param =
-                ARR_GET(v->expression->parameters, j);
+                ARR_GET(expr->parameters, j);
               if (strcmp(logic_state_get_string(state, param->name_id),
                   seg->string) == 0)
               {
@@ -285,7 +299,7 @@ latex_render_value(const sl_LogicState *state, const Value *v)
                 break;
               }
             }
-            Value *arg = *ARR_GET(v->arguments, arg_index);
+            Value *arg = *ARR_GET(v->content.composition.arguments, arg_index);
             str = latex_render_value(state, arg);
           }
           else

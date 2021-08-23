@@ -28,7 +28,8 @@ static const struct SymbolToken symbols[] = {
   { ";", sl_LexerTokenType_Semicolon },
   { ":", sl_LexerTokenType_Colon },
   { "%", sl_LexerTokenType_Percent },
-  { "$", sl_LexerTokenType_DollarSign }
+  { "$", sl_LexerTokenType_DollarSign },
+  { "@", sl_LexerTokenType_At }
 };
 
 struct sl_LexerState

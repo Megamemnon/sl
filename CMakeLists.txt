@@ -9,6 +9,7 @@ add_library(sl
   src/arg.c
   src/common.c
   src/input.c
+  src/interchange.c
   src/lex.c
   src/logic.c
   src/parse.c

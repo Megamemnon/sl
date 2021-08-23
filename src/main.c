@@ -109,6 +109,9 @@ main(int argc, char **argv)
   {
     render_html(state, html_opt.argument);
   }
+  { /* TODO: add a command line option for this. */
+    sl_logic_state_write_to_interchange_file(state, "math.sli");
+  }
   sl_free_logic_state(state);
 
   if (out_opt.argument != NULL)

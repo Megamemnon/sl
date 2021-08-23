@@ -182,6 +182,9 @@ print_node(char *buf, size_t len, const sl_ASTNode *node)
     case sl_ASTNodeType_Step:
       snprintf(buf, len, "Step<>");
       break;
+    case sl_ASTNodeType_Builtin:
+      snprintf(buf, len, "Builtin<\"%s\">", node->name);
+      break;
     case sl_ASTNodeType_Composition:
       snprintf(buf, len, "Composition<\"%s\">", node->name);
       break;
@@ -1040,19 +1043,75 @@ parse_composition(struct ParserState *state,
 }
 
 static int
+parse_builtin_argument(struct ParserState *state,
+  union ParserStepUserData user_data);
+
+static int
+parse_builtin_argument_separator(struct ParserState *state,
+  union ParserStepUserData user_data)
+{
+  if (next_is_type(state, sl_LexerTokenType_Comma))
+  {
+    add_step_to_stack(state, &parse_builtin_argument, user_data_none());
+    add_step_to_stack(state, &consume_symbol,
+      user_data_token_type(sl_LexerTokenType_Comma));
+  }
+  return 0;
+}
+
+static int
+parse_builtin_argument(struct ParserState *state,
+  union ParserStepUserData user_data)
+{
+  if (!next_is_type(state, sl_LexerTokenType_ClosingParenthesis)) {
+    add_step_to_stack(state, &parse_builtin_argument_separator,
+        user_data_none());
+    add_step_to_stack(state, &parse_path, user_data_none());
+  }
+  return 0;
+}
+
+static int
+parse_builtin_argument_list(struct ParserState *state,
+  union ParserStepUserData user_data)
+{
+  add_step_to_stack(state, &ascend, user_data_none());
+  add_step_to_stack(state, &consume_symbol,
+    user_data_token_type(sl_LexerTokenType_ClosingParenthesis));
+  add_step_to_stack(state, &parse_builtin_argument, user_data_none());
+  add_step_to_stack(state, &consume_symbol,
+    user_data_token_type(sl_LexerTokenType_OpeningParenthesis));
+  add_step_to_stack(state, &set_node_location, user_data_none());
+  add_step_to_stack(state, &descend,
+    user_data_node_type(sl_ASTNodeType_ArgumentList));
+  return 0;
+}
+
+static int parse_builtin(struct ParserState *state,
+    union ParserStepUserData user_data)
+{
+  add_step_to_stack(state, &ascend, user_data_none());
+  add_step_to_stack(state, &parse_builtin_argument_list, user_data_none());
+  add_step_to_stack(state, &consume_name, user_data_none());
+  add_step_to_stack(state, &set_node_location, user_data_none());
+  add_step_to_stack(state, &consume_symbol,
+      user_data_token_type(sl_LexerTokenType_At));
+  add_step_to_stack(state, &descend,
+    user_data_node_type(sl_ASTNodeType_Builtin));
+  return 0;
+}
+
+static int
 parse_value(struct ParserState *state,
   union ParserStepUserData user_data)
 {
-  if (next_is_type(state, sl_LexerTokenType_DollarSign))
-  {
+  if (next_is_type(state, sl_LexerTokenType_DollarSign)) {
     add_step_to_stack(state, &parse_variable, user_data_none());
-  }
-  else if (next_is_type(state, sl_LexerTokenType_Percent))
-  {
+  } else if (next_is_type(state, sl_LexerTokenType_Percent)) {
     add_step_to_stack(state, &parse_placeholder, user_data_none());
-  }
-  else
-  {
+  } else if (next_is_type(state, sl_LexerTokenType_At)) {
+    add_step_to_stack(state, &parse_builtin, user_data_none());
+  } else {
     /* TODO: implement lookahead. */
     add_step_to_stack(state, &parse_composition, user_data_none());
   }
@@ -1122,24 +1181,6 @@ parse_def(struct ParserState *state,
 }
 
 static int
-parse_dummy(struct ParserState *state,
-    union ParserStepUserData user_data)
-{
-  add_step_to_stack(state, &ascend, user_data_none());
-  add_step_to_stack(state, &consume_symbol,
-      user_data_token_type(sl_LexerTokenType_Semicolon));
-  add_step_to_stack(state, &parse_path, user_data_none());
-  add_step_to_stack(state, &consume_symbol,
-      user_data_token_type(sl_LexerTokenType_Colon));
-  add_step_to_stack(state, &consume_name, user_data_none());
-  add_step_to_stack(state, &set_node_location, user_data_none());
-  add_step_to_stack(state, &consume_keyword, user_data_str("dummy"));
-  add_step_to_stack(state, &descend,
-      user_data_node_type(sl_ASTNodeType_Dummy));
-  return 0;
-}
-
-static int
 parse_axiom_item(struct ParserState *state,
   union ParserStepUserData user_data)
 {
@@ -1160,10 +1201,7 @@ parse_axiom_item(struct ParserState *state,
   else if (next_is_keyword(state, "def"))
   {
     exec = &parse_def;
-  } else if (next_is_keyword(state, "dummy")) {
-    exec = &parse_dummy;
-  } else if (!next_is_type(state, sl_LexerTokenType_ClosingBrace))
-  {
+  } else if (!next_is_type(state, sl_LexerTokenType_ClosingBrace)) {
     sl_lexer_show_message_at_current_token(state->input,
       "Unknown expression in axiom body.", sl_MessageType_Error);
   }
@@ -1250,11 +1288,7 @@ parse_theorem_item(struct ParserState *state,
   else if (next_is_keyword(state, "def"))
   {
     exec = &parse_def;
-  }
-  else if (next_is_keyword(state, "dummy")) {
-    exec = &parse_dummy;
-  } else if (next_is_keyword(state, "step"))
-  {
+  } else if (next_is_keyword(state, "step")) {
     exec = &parse_step;
   }
   else if (!next_is_type(state, sl_LexerTokenType_ClosingBrace))
