@@ -3,14 +3,20 @@
 
 #define MSG_VIEW_SIZE 256
 
-struct sl_TextInput
-{
+struct sl_TextInput {
   void *data;
 
   void (* free_data)(void *);
   bool (* at_end)(void *);
   char * (* gets)(char *, size_t, void *);
   void (* get_line)(char *, size_t, size_t, void *);
+};
+
+struct sl_TextInputLineBuffer {
+  char *main_buffer;
+  size_t main_buffer_size;
+  char *overflow_buffer;
+  char *active_buffer;
 };
 
 bool
@@ -31,6 +37,83 @@ sl_input_gets(char *dst, size_t n, sl_TextInput *input)
   if (input->at_end == NULL)
     return NULL;
   return input->gets(dst, n, input->data);
+}
+
+sl_TextInputLineBuffer
+sl_input_make_line_buffer(size_t main_buffer_size)
+{
+  sl_TextInputLineBuffer buf;
+  buf.main_buffer = SL_NEW(main_buffer_size);
+  buf.main_buffer_size = main_buffer_size;
+  buf.overflow_buffer = NULL;
+  buf.active_buffer = NULL;
+  return buf;
+}
+
+void
+sl_input_free_line_buffer(sl_TextInputLineBuffer buffer)
+{
+  if (buffer.main_buffer != NULL)
+    free(buffer.main_buffer);
+  if (buffer.overflow_buffer != NULL)
+    free(buffer.overflow_buffer);
+}
+
+const char *
+sl_input_get_line_buffer_contents(sl_TextInputLineBuffer buffer)
+{
+  return buffer.active_buffer;
+}
+
+int
+sl_input_get_line(sl_TextInput *input, sl_TextInputLineBuffer *buffer)
+{
+  char *result;
+  if (buffer->overflow_buffer != NULL)
+    free(buffer->overflow_buffer);
+  if (sl_input_at_end(input)) {
+    buffer->active_buffer = NULL;
+    return 0;
+  }
+  result = sl_input_gets(buffer->main_buffer, buffer->main_buffer_size, input);
+  if (result == NULL) {
+    buffer->active_buffer = NULL;
+    return 1;
+  }
+
+  /* If the result doesn't end in a newline, copy this into the overflow
+     buffer and keep consuming until we get to a newline. */
+  if (buffer->main_buffer[strlen(buffer->main_buffer) - 1] != '\n') {
+    buffer->overflow_buffer = strdup(buffer->main_buffer);
+    if (buffer->overflow_buffer == NULL) {
+      buffer->active_buffer = NULL;
+      return 1;
+    }
+    do {
+      char *reallocated;
+      result = sl_input_gets(buffer->main_buffer, buffer->main_buffer_size,
+          input);
+      if (result == NULL) {
+        free(buffer->overflow_buffer);
+        buffer->overflow_buffer = NULL;
+        return 1;
+      }
+      reallocated = realloc(buffer->overflow_buffer,
+          strlen(buffer->main_buffer) + strlen(buffer->overflow_buffer) + 1);
+      if (reallocated == NULL) {
+        free(buffer->overflow_buffer);
+        buffer->active_buffer = NULL;
+        return 1;
+      }
+      buffer->overflow_buffer = reallocated;
+      strcat(buffer->overflow_buffer, buffer->main_buffer);
+    } while (buffer->overflow_buffer[strlen(buffer->overflow_buffer) - 1]
+        != '\n');
+    buffer->active_buffer = buffer->overflow_buffer;
+  } else {
+    buffer->active_buffer = buffer->main_buffer;
+  }
+  return 0;
 }
 
 /* --- File Input --- */

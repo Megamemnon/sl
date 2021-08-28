@@ -5,6 +5,48 @@
 #include <string.h>
 #include <sys/stat.h>
 
+typedef int (* sl_html_generator_t)(void *);
+
+struct sl_HTMLTemplateSubstituion {
+  const char *target;
+  sl_html_generator_t generate;
+  void *userdata;
+};
+
+int sl_load_html_template(const char *template_path, FILE *out,
+    struct sl_HTMLTemplateSubstituion *substitutions, size_t substitutions_n)
+{
+  FILE *f;
+  /* Load the file, and read through until we find special tags. Then
+     replace the content of each special tag using the provided callback. If
+     there is no such tag, just leave it in place. */
+  f = fopen(template_path, "r");
+  if (f == NULL)
+    return 1;
+
+  fclose(f);
+  return 0;
+}
+
+struct sl_HTMLFileInfo;
+
+typedef int (* sl_html_write_content_t)(struct sl_HTMLFileInfo *);
+
+struct sl_HTMLFileInfo {
+  FILE *file;
+  const char *page_name;
+  sl_html_write_content_t content;
+  void *userdata;
+};
+
+int sl_generate_full_html_file(struct sl_HTMLFileInfo *info)
+{
+  if (info == NULL)
+    return 0;
+
+  return 0;
+}
+
 #define HTML_HEAD_FORMAT \
   "<!doctype html>\n" \
   "<html>\n" \
@@ -661,6 +703,14 @@ int
 render_html(const sl_LogicState *state, const char *output_dir)
 {
   mkdir(output_dir, 0777); /* TODO: handle errors. */
+  {
+    char *style_dst, *style_src;
+    asprintf(&style_dst, "%s/style.css", output_dir);
+    asprintf(&style_src, "./res/style.css", style_src);
+    sl_copy_file(style_dst, style_src);
+    free(style_dst);
+    free(style_src);
+  }
   {
     char symbol_dir[1024];
     snprintf(symbol_dir, 1024, "%s/symbols", output_dir);

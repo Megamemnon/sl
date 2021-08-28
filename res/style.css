@@ -1,0 +1,70 @@
+/* #226666 */
+
+/* #AFAFAF */
+/* #598585 */
+/* #004747 */
+/* #002828 */
+
+body {
+  margin: 0px;
+  background-color: #AFAFAF;
+}
+
+.container {
+  width: 100%;
+}
+
+#header {
+  padding: 8px;
+  background-color: #226666;
+}
+
+#logo {
+  display: inline-block;
+  height: 64px;
+}
+
+#logo a {
+  color: #004747;
+  text-decoration: none;
+}
+
+#logo a:hover {
+  color: #002828;
+}
+
+#logo a:active {
+  color: #000000;
+}
+
+#logo p {
+  font-family: sans-serif;
+  font-size: 48px;
+  margin: 0px;
+}
+
+#links {
+  position: absolute;
+  right: 0px;
+  height: 64px;
+  display: inline-block;
+}
+
+#links ul {
+  list-style: none;
+  display: inline-block;
+  margin: 0px;
+  padding: 0px;
+}
+
+#links li {
+  display: inline-block;
+}
+
+#links .link {
+  display: inline-block;
+}
+
+#links .link a {
+  text-decoration: none;
+}

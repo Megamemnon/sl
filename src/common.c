@@ -1,6 +1,36 @@
 #include "common.h"
-#include <stdio.h>
 #include <string.h>
+
+#define SL_COPY_FILE_BUFFER_SIZE 4096
+
+int sl_copy_file(const char *dst_path, const char *src_path)
+{
+  FILE *dst, *src;
+  unsigned char buf[SL_COPY_FILE_BUFFER_SIZE];
+  dst = fopen(dst_path, "w");
+  if (dst == NULL)
+    return 1;
+  src = fopen(src_path, "r");
+  if (src == NULL) {
+    fclose(dst);
+    return 2;
+  }
+  while (1) {
+    size_t read, written;
+    read = fread(buf, 1, SL_COPY_FILE_BUFFER_SIZE, src);
+    if (read == 0) /* TODO: check for errors. */
+      break;
+    written = fwrite(buf, 1, read, dst);
+    if (written != read) {
+      fclose(dst);
+      fclose(src);
+      return 2;
+    }
+  }
+  fclose(dst);
+  fclose(src);
+  return 0;
+}
 
 int
 strslicecmp(const struct sl_StringSlice a, const struct sl_StringSlice b)

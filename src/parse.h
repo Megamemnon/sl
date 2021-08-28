@@ -9,6 +9,7 @@
 
 /* --- Text Input Interface --- */
 typedef struct sl_TextInput sl_TextInput;
+typedef struct sl_TextInputLineBuffer sl_TextInputLineBuffer;
 
 enum sl_MessageType
 {
@@ -23,6 +24,18 @@ sl_input_at_end(sl_TextInput *input);
 
 char *
 sl_input_gets(char *dst, size_t n, sl_TextInput *input);
+
+sl_TextInputLineBuffer
+sl_input_make_line_buffer(size_t main_buffer_size);
+
+void
+sl_input_free_line_buffer(sl_TextInputLineBuffer buffer);
+
+const char *
+sl_input_get_line_buffer_contents(sl_TextInputLineBuffer buffer);
+
+int
+sl_input_get_line(sl_TextInput *input, sl_TextInputLineBuffer *buffer);
 
 sl_TextInput *
 sl_input_from_file(const char *file_path);

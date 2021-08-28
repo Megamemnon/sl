@@ -957,6 +957,13 @@ namespace propositional_calculus {
     step biconditional_introduction_meta(and($phi, F), F);
   }
 
+  theorem identity_biconditional(phi : Formula) {
+    infer iff($phi, $phi);
+
+    step identity($phi);
+    step biconditional_introduction_meta($phi, $phi);
+  }
+
   /* TODO: prove the tautological form. */
   axiom conjunction_biconditional_distribution_meta(phi : Formula,
       psi : Formula, chi : Formula, theta : Formula) {

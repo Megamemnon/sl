@@ -49,6 +49,11 @@ namespace predicate_calculus {
     infer any($x, $phi);
   }
 
+  /* TODO: Is this necessary as an axiom? */
+  axiom quantifier_commutation(x : Variable, y : Variable, phi : Formula) {
+    infer implies(any($x, any($y, $phi)), any($y, any($x, $phi)));
+  }
+
   theorem instantiation_meta(x : Variable, phi : Formula, t : Term,
       phi_0 : Formula) {
     require free_for($t, t($x), $phi);
@@ -382,10 +387,14 @@ namespace predicate_calculus {
   expr Formula exists(x : Variable, phi : Formula) {
     latex "\\exists " + $x + " " + $phi;
     bind $x;
+    as not(any($x, not($phi)));
   }
 
-  axiom existential_quantification(x : Variable, phi : Formula) {
+  /* TODO: this isn't necessary? */
+  theorem existential_quantification(x : Variable, phi : Formula) {
     infer iff(exists($x, $phi), not(any($x, not($phi))));
+
+    step identity_biconditional(exists($x, $phi));
   }
 
   theorem generalization_existential(x : Variable, phi : Formula, t : Term,
@@ -417,6 +426,38 @@ namespace predicate_calculus {
 
     step generalization_existential($x, $phi, $t, $phi_0);
     step modus_ponens($phi_0, exists($x, $phi));
+  }
+
+  theorem specialization(x : Variable, phi : Formula) {
+    infer implies($phi, exists($x, $phi));
+
+    step instantiation_elimination($x, not($phi));
+    step transposition_2(any($x, not($phi)), not($phi));
+    step modus_ponens(implies(any($x, not($phi)), not($phi)),
+        implies(not(not($phi)), not(any($x, not($phi)))));
+    step double_negation_right($phi);
+    step hypothetical_syllogism_meta($phi, not(not($phi)), exists($x, $phi));
+  }
+
+  theorem universal_implies_existential(x : Variable, phi : Formula) {
+    infer implies(any($x, $phi), exists($x, $phi));
+
+    step instantiation_elimination($x, $phi);
+    step specialization($x, $phi);
+    step hypothetical_syllogism_meta(any($x, $phi), $phi, exists($x, $phi));
+  }
+
+  theorem bound_despecialization(x : Variable, phi : Formula) {
+    require not_free($x, $phi);
+
+    infer implies(exists($x, $phi), $phi);
+
+    step bound_generalization($x, not($phi));
+    step transposition_2(not($phi), any($x, not($phi)));
+    step modus_ponens(implies(not($phi), any($x, not($phi))),
+        implies(not(any($x, not($phi))), not(not($phi))));
+    step double_negation_left($phi);
+    step hypothetical_syllogism_meta(exists($x, $phi), not(not($phi)), $phi);
   }
 
   theorem equality_existence(x : Variable, y : Variable) {
@@ -468,6 +509,42 @@ namespace predicate_calculus {
     step implication_generalization_existential($x, $phi, $psi);
     step implication_generalization_existential($x, $psi, $phi);
     step biconditional_introduction_meta(exists($x, $phi), exists($x, $psi));
+  }
+
+  theorem quantified_implication_mixed(x : Variable, phi : Formula,
+      psi : Formula) {
+    infer implies(any($x, implies($phi, $psi)),
+        implies(exists($x, $phi), exists($x, $psi)));
+
+    step transposition_2($phi, $psi);
+    step implication_generalization($x, implies($phi, $psi),
+        implies(not($psi), not($phi)));
+    step quantified_implication($x, not($psi), not($phi));
+    step hypothetical_syllogism_meta(any($x, implies($phi, $psi)),
+        any($x, implies(not($psi), not($phi))),
+        implies(any($x, not($psi)), any($x, not($phi))));
+    step transposition_2(any($x, not($psi)), any($x, not($phi)));
+    step hypothetical_syllogism_meta(any($x, implies($phi, $psi)),
+        implies(any($x, not($psi)), any($x, not($phi))),
+        implies(exists($x, $phi), exists($x, $psi)));
+  }
+
+  theorem quantified_implication_mixed_despecialized(x : Variable,
+      phi : Formula, psi : Formula) {
+    require not_free($x, $psi);
+
+    infer implies(any($x, implies($phi, $psi)),
+        implies(exists($x, $phi), $psi));
+
+    step bound_despecialization($x, $psi);
+    step hypothetical_syllogism(exists($x, $phi), exists($x, $psi), $psi);
+    step modus_ponens(implies(exists($x, $psi), $psi),
+        implies(implies(exists($x, $phi), exists($x, $psi)),
+        implies(exists($x, $phi), $psi)));
+    step quantified_implication_mixed($x, $phi, $psi);
+    step hypothetical_syllogism_meta(any($x, implies($phi, $psi)),
+        implies(exists($x, $phi), exists($x, $psi)),
+        implies(exists($x, $phi), $psi));
   }
 
   expr Formula exists_unique(x : Variable, phi : Formula) {

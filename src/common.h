@@ -2,12 +2,16 @@
 #define COMMON_H
 
 #include <stdint.h>
+#include <stdio.h>
 #include <stdarg.h>
 
 /* Booleans */
 typedef int bool;
 #define TRUE 1
 #define FALSE 0
+
+/* File helper */
+int sl_copy_file(const char *dst_path, const char *src_path);
 
 /* Misc helpers */
 #define PROPAGATE_ERROR(err) \
