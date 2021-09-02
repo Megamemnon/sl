@@ -7,6 +7,7 @@ set(CMAKE_BUILD_TYPE Debug)
 # Library
 add_library(sl
   src/arg.c
+  src/arith.c
   src/common.c
   src/input.c
   src/interchange.c

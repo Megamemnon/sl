@@ -1,11 +1,14 @@
 #include "render.h"
 #include "common.h"
 #include "core.h"
+#include "parse.h"
 #include <unistd.h>
 #include <string.h>
 #include <sys/stat.h>
 
-typedef int (* sl_html_generator_t)(void *);
+#define LINE_BUFFER_SIZE 4096
+
+typedef int (* sl_html_generator_t)(FILE *, void *);
 
 struct sl_HTMLTemplateSubstituion {
   const char *target;
@@ -13,18 +16,84 @@ struct sl_HTMLTemplateSubstituion {
   void *userdata;
 };
 
-int sl_load_html_template(const char *template_path, FILE *out,
+static int sl_load_html_template(const char *template_path, FILE *out,
     struct sl_HTMLTemplateSubstituion *substitutions, size_t substitutions_n)
 {
-  FILE *f;
+  sl_TextInput *input;
+  sl_TextInputLineBuffer *buf;
+  const char *line;
   /* Load the file, and read through until we find special tags. Then
      replace the content of each special tag using the provided callback. If
      there is no such tag, just leave it in place. */
-  f = fopen(template_path, "r");
-  if (f == NULL)
+  input = sl_input_from_file(template_path);
+  if (input == NULL)
     return 1;
+  buf = sl_input_make_line_buffer(LINE_BUFFER_SIZE);
+  if (buf == NULL) {
+    sl_input_free(input);
+    return 1;
+  }
 
-  fclose(f);
+  while (sl_input_get_line(input, buf) == 0) {
+    /* Look through the line for special tags. If we find any, find the
+       corresponding substitution and insert it. If no such substitution
+       exists or another error occurs, just emit a warning and write the
+       name of the substitution. */
+    bool in_tag;
+    char output_buf[LINE_BUFFER_SIZE];
+    char *output_cursor;
+    line = sl_input_get_line_buffer_contents(buf);
+    output_cursor = output_buf;
+    for (const char *c = line; *c != '\0'; ++c) {
+      if (!in_tag) {
+        if (strlen(c) >= 2 && strncmp(c, "<@", 2) == 0) {
+          in_tag = TRUE;
+          ++c;
+          /* TODO: handle errors. */
+          fwrite(output_buf, 1, output_cursor - output_buf, out);
+          output_cursor = output_buf;
+        } else {
+          *output_cursor = *c;
+          ++output_cursor;
+        }
+      } else {
+        if (strlen(c) >= 2 && strncmp(c, "@>", 2) == 0) {
+          bool found_sub = FALSE;
+          in_tag = FALSE;
+          ++c;
+          /* TODO: handle errors. */
+          *output_cursor = '\0';
+          ++output_cursor;
+          for (size_t i = 0; i < substitutions_n; ++i) {
+            struct sl_HTMLTemplateSubstituion sub = substitutions[i];
+            if (strcmp(sub.target, output_buf) == 0) {
+              sub.generate(out, sub.userdata);
+              found_sub = TRUE;
+            }
+          }
+          if (!found_sub) {
+            printf("found tag \"%s\" without a corresponding generator\n",
+                output_buf);
+            fwrite(output_buf, 1, output_cursor - output_buf, out);
+          }
+          output_cursor = output_buf;
+        } else if (!isspace(*c)) {
+          *output_cursor = *c;
+          ++output_cursor;
+        }
+      }
+    }
+    /* If we have an unterminated tag, just fill it in and emit a warning. */
+    if (in_tag) {
+      /* TODO: warning. */
+    } else {
+      fwrite(output_buf, 1, output_cursor - output_buf, out);
+      output_cursor = output_buf;
+    }
+  }
+
+  sl_input_free(input);
+  sl_input_free_line_buffer(buf);
   return 0;
 }
 
@@ -33,17 +102,35 @@ struct sl_HTMLFileInfo;
 typedef int (* sl_html_write_content_t)(struct sl_HTMLFileInfo *);
 
 struct sl_HTMLFileInfo {
-  FILE *file;
+  const char *output_path;
   const char *page_name;
   sl_html_write_content_t content;
   void *userdata;
 };
 
+static int substitute_title(FILE *out, void *userdata)
+{
+  struct sl_HTMLFileInfo *info = (struct sl_HTMLFileInfo *)userdata;
+  fputs(info->page_name, out); /* TODO: handle error. */
+  return 0;
+}
+
 int sl_generate_full_html_file(struct sl_HTMLFileInfo *info)
 {
+  struct sl_HTMLTemplateSubstituion substitutions[1];
   if (info == NULL)
     return 0;
-
+  {
+    /* Title */
+    substitutions[0].target = "page_title";
+    substitutions[0].generate = &substitute_title;
+    substitutions[0].userdata = info;
+  }
+  {
+    FILE *f = fopen(info->output_path, "w");
+    sl_load_html_template("res/page.html", f, substitutions, 1);
+    fclose(f);
+  }
   return 0;
 }
 
@@ -485,6 +572,13 @@ static void render_symbol_count(const sl_LogicState *state,
 static int html_render_index_page(const sl_LogicState *state,
   const char *filepath)
 {
+  struct sl_HTMLFileInfo file_info;
+  file_info.output_path = filepath;
+  file_info.page_name = "Index";
+  file_info.content = NULL;
+  file_info.userdata = NULL;
+  sl_generate_full_html_file(&file_info);
+#if 0
   FILE *f = fopen(filepath, "w");
   if (f == NULL)
     return 1;
@@ -520,6 +614,7 @@ static int html_render_index_page(const sl_LogicState *state,
 
   fputs(HTML_END, f);
   fclose(f);
+#endif
   return 0;
 }
 

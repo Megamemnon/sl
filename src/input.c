@@ -39,30 +39,40 @@ sl_input_gets(char *dst, size_t n, sl_TextInput *input)
   return input->gets(dst, n, input->data);
 }
 
-sl_TextInputLineBuffer
+sl_TextInputLineBuffer *
 sl_input_make_line_buffer(size_t main_buffer_size)
 {
-  sl_TextInputLineBuffer buf;
-  buf.main_buffer = SL_NEW(main_buffer_size);
-  buf.main_buffer_size = main_buffer_size;
-  buf.overflow_buffer = NULL;
-  buf.active_buffer = NULL;
+  sl_TextInputLineBuffer *buf;
+  buf = SL_NEW(sl_TextInputLineBuffer);
+  if (buf == NULL)
+    return NULL;
+  buf->main_buffer = malloc(main_buffer_size);
+  if (buf->main_buffer == NULL) {
+    free(buf);
+    return NULL;
+  }
+  buf->main_buffer_size = main_buffer_size;
+  buf->overflow_buffer = NULL;
+  buf->active_buffer = NULL;
   return buf;
 }
 
 void
-sl_input_free_line_buffer(sl_TextInputLineBuffer buffer)
+sl_input_free_line_buffer(sl_TextInputLineBuffer *buffer)
 {
-  if (buffer.main_buffer != NULL)
-    free(buffer.main_buffer);
-  if (buffer.overflow_buffer != NULL)
-    free(buffer.overflow_buffer);
+  if (buffer == NULL)
+    return;
+  if (buffer->main_buffer != NULL)
+    free(buffer->main_buffer);
+  if (buffer->overflow_buffer != NULL)
+    free(buffer->overflow_buffer);
+  free(buffer);
 }
 
 const char *
-sl_input_get_line_buffer_contents(sl_TextInputLineBuffer buffer)
+sl_input_get_line_buffer_contents(sl_TextInputLineBuffer *buffer)
 {
-  return buffer.active_buffer;
+  return buffer->active_buffer;
 }
 
 int

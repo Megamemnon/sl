@@ -6,9 +6,15 @@
 #include <stdarg.h>
 
 /* Booleans */
+#if __STDC_VERSION__ >= 199001L || defined(__cplusplus)
+#include <stdbool.h>
+#define TRUE true
+#define FALSE false
+#else
 typedef int bool;
 #define TRUE 1
 #define FALSE 0
+#endif
 
 /* File helper */
 int sl_copy_file(const char *dst_path, const char *src_path);
@@ -160,6 +166,42 @@ while (0)
 #define ARR_APPEND(array, item) MANAGED_ARRAY_APPEND(array, item)
 #define ARR_POP(array) MANAGED_ARRAY_POP(array)
 #define ARR_FREE(array) MANAGED_ARRAY_FREE(array)
+
+/* --- Arbitrary Size Integer Arithmetic. --- */
+typedef struct sl_Natural sl_Natural;
+
+int sl_natural_from_string(const char *str, sl_Natural *nat);
+int sl_natural_from_uint64_t(uint64_t n, sl_Natural *nat);
+int sl_natural_copy(sl_Natural src, sl_Natural *dst);
+void sl_natural_free(sl_Natural *nat);
+bool sl_natural_equal(sl_Natural a, sl_Natural b);
+bool sl_natural_less_than(sl_Natural a, sl_Natural b);
+bool sl_natural_less_than_equal(sl_Natural a, sl_Natural b);
+bool sl_natural_greater_than(sl_Natural a, sl_Natural b);
+bool sl_natural_greater_than_equal(sl_Natural a, sl_Natural b);
+int sl_natural_add(sl_Natural a, sl_Natural b, sl_Natural *result);
+int sl_natural_multiply(sl_Natural a, sl_Natural b, sl_Natural *result);
+int sl_natural_divide(sl_Natural a, sl_Natural b, sl_Natural *result);
+int sl_natural_modulo(sl_Natural a, sl_Natural b, sl_Natural *result);
+
+typedef struct sl_Integer sl_Integer;
+
+int sl_integer_from_string(const char *str, sl_Integer *intg);
+int sl_integer_from_int64_t(int64_t n, sl_Integer *intg);
+int sl_integer_from_natural(sl_Natural nat, sl_Integer *intg);
+int sl_integer_copy(sl_Integer src, sl_Integer *dst);
+void sl_integer_free(sl_Integer *intg);
+bool sl_integer_equal(sl_Integer a, sl_Integer b);
+bool sl_integer_less_than(sl_Integer a, sl_Integer b);
+bool sl_integer_less_than_equal(sl_Integer a, sl_Integer b);
+bool sl_integer_greater_than(sl_Integer a, sl_Integer b);
+bool sl_integer_greater_than_equal(sl_Integer a, sl_Integer b);
+int sl_integer_add(sl_Integer a, sl_Integer b, sl_Integer *result);
+int sl_integer_negate(sl_Integer n, sl_Integer *result);
+int sl_integer_subtract(sl_Integer a, sl_Integer b, sl_Integer *result);
+int sl_integer_multiply(sl_Integer a, sl_Integer b, sl_Integer *result);
+int sl_integer_divide(sl_Integer a, sl_Integer b, sl_Integer *result);
+int sl_integer_modulo(sl_Integer a, sl_Integer b, sl_Integer *result);
 
 /* String helpers. */
 struct sl_StringSlice

@@ -1,16 +1,45 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title><@ page_title @></title>
+  <title>SL - <@ page_title @></title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div id="container">
     <div id="header">
+      <div id="logo">
+        <a href="#"><p>SL</p></a>
+      </div>
+      <div id="links">
+        <ul>
+          <li>
+            <div class="link">
+              <a href="#"><p>Home</p></a>
+            </div>
+          </li>
+          <li>
+            <div class="link">
+              <a href="#"><p>Table of Contents</p></a>
+            </div>
+          </li>
+          <li>
+            <div class="link">
+              <a href="#"><p>Symbol List</p></a>
+            </div>
+          </li>
+          <li>
+            <div class="link">
+              <a href="#"><p>Source Code</p></a>
+            </div>
+          </li>
+        </ul>
+      </div>
     </div>
     <div id="content">
+      <@ page_content @>
     </div>
     <div id="footer">
+      <p>Last updated 8/31/21.</p>
     </div>
   </div>
 </body>

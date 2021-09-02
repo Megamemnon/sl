@@ -25,14 +25,14 @@ sl_input_at_end(sl_TextInput *input);
 char *
 sl_input_gets(char *dst, size_t n, sl_TextInput *input);
 
-sl_TextInputLineBuffer
+sl_TextInputLineBuffer *
 sl_input_make_line_buffer(size_t main_buffer_size);
 
 void
-sl_input_free_line_buffer(sl_TextInputLineBuffer buffer);
+sl_input_free_line_buffer(sl_TextInputLineBuffer *buffer);
 
 const char *
-sl_input_get_line_buffer_contents(sl_TextInputLineBuffer buffer);
+sl_input_get_line_buffer_contents(sl_TextInputLineBuffer *buffer);
 
 int
 sl_input_get_line(sl_TextInput *input, sl_TextInputLineBuffer *buffer);
@@ -73,6 +73,11 @@ enum sl_LexerTokenType
   sl_LexerTokenType_OpeningBracket,
   sl_LexerTokenType_ClosingBracket,
   sl_LexerTokenType_Plus,
+  sl_LexerTokenType_Minus,
+  sl_LexerTokenType_Star,
+  sl_LexerTokenType_Slash,
+  sl_LexerTokenType_Equals,
+  sl_LexerTokenType_Exclamation,
   sl_LexerTokenType_Dot,
   sl_LexerTokenType_Comma,
   sl_LexerTokenType_Semicolon,
