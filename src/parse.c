@@ -2,12 +2,12 @@
 #include "common.h"
 #include <string.h>
 
-typedef ARR(sl_ASTNode) NodeArray;
-
-struct sl_ASTNode
-{
-  sl_ASTNode *parent;
-  NodeArray children;
+struct sl_ASTNode {
+  size_t index;
+  size_t parent_index;
+  size_t first_child_index;
+  size_t left_sibling_index;
+  size_t right_sibling_index;
 
   sl_ASTNodeType type;
   size_t line;
@@ -15,32 +15,103 @@ struct sl_ASTNode
   char *name;
 };
 
+struct sl_ASTContainer {
+  ARR(sl_ASTNode) nodes;
+  size_t root_index;
+};
+
 int verbose = 0;
 
-const sl_ASTNode *
-sl_node_get_parent(const sl_ASTNode *node)
+static sl_ASTNode * sl_ast_container_get_root_mutable(
+    sl_ASTContainer *container)
 {
-  if (node == NULL)
+  if (container == NULL)
     return NULL;
-  return node->parent;
+  if (container->root_index == SIZE_MAX)
+    return NULL;
+  return ARR_GET(container->nodes, container->root_index);
 }
 
-size_t
-sl_node_get_child_count(const sl_ASTNode *node)
+const sl_ASTNode * sl_ast_container_get_root(const sl_ASTContainer *container)
 {
+  if (container == NULL)
+    return NULL;
+  if (container->root_index == SIZE_MAX)
+    return NULL;
+  return ARR_GET(container->nodes, container->root_index);
+}
+
+static const sl_ASTNode * sl_ast_container_get_node(const sl_ASTContainer
+    *container, size_t index)
+{
+  return ARR_GET(container->nodes, index);
+}
+
+static sl_ASTNode * sl_ast_container_get_node_mutable(sl_ASTContainer
+    *container, size_t index)
+{
+  return ARR_GET(container->nodes, index);
+}
+
+const sl_ASTNode * sl_node_get_parent(const sl_ASTContainer *container,
+    const sl_ASTNode *node)
+{
+  if (container == NULL || node == NULL)
+    return NULL;
+  return ARR_GET(container->nodes, node->parent_index);
+}
+
+size_t sl_node_get_child_count(const sl_ASTContainer *container,
+    const sl_ASTNode *node)
+{
+  size_t n, index;
   if (node == NULL)
     return 0;
-  return ARR_LENGTH(node->children);
+  n = 0;
+  index = node->first_child_index;
+  while (index != SIZE_MAX) {
+    const sl_ASTNode *child;
+    child = sl_ast_container_get_node(container, index);
+    index = child->right_sibling_index;
+    ++n;
+  }
+  return n;
 }
 
-const sl_ASTNode *
-sl_node_get_child(const sl_ASTNode *node, size_t index)
+const sl_ASTNode * sl_node_get_child(const sl_ASTContainer *container,
+    const sl_ASTNode *node, size_t child_index)
 {
+  const sl_ASTNode *child;
+  size_t index;
   if (node == NULL)
     return NULL;
-  if (index >= ARR_LENGTH(node->children))
+  if (child_index >= sl_node_get_child_count(container, node))
     return NULL;
-  return ARR_GET(node->children, index);
+  index = node->first_child_index;
+  child = sl_ast_container_get_node(container, index);
+  for (size_t i = 0; i < child_index; ++i) {
+    index = child->right_sibling_index;
+    child = sl_ast_container_get_node(container, index);
+  }
+  return child;
+}
+
+static sl_ASTNode * sl_node_get_child_mutable(sl_ASTContainer *container,
+    sl_ASTNode *node, size_t child_index)
+{
+  sl_ASTNode *child;
+  size_t index;
+  if (node == NULL)
+    return NULL;
+  if (child_index >= sl_node_get_child_count(container, node))
+    return NULL;
+  index = node->first_child_index;
+  child = sl_ast_container_get_node_mutable(container, index);
+  for (size_t i = 0; i < child_index; ++i) {
+    index = child->right_sibling_index;
+    child = sl_ast_container_get_node_mutable(container, index);
+  }
+  return child;
 }
 
 sl_ASTNodeType
@@ -59,54 +130,22 @@ sl_node_get_name(const sl_ASTNode *node)
   return node->name;
 }
 
-sl_ASTNode *
-sl_node_new()
+static void free_children(sl_ASTContainer *container, sl_ASTNode *root)
 {
-  sl_ASTNode *node = SL_NEW(sl_ASTNode);
-  node->parent = NULL;
-  node->name = NULL;
-  ARR_INIT(node->children);
-  return node;
-}
-
-static void
-free_children(sl_ASTNode *root)
-{
-  for (size_t i = 0; i < ARRAY_LENGTH(root->children); ++i)
+  for (size_t i = 0; i < sl_node_get_child_count(container, root); ++i)
   {
-    free_children(ARR_GET(root->children, i));
+    sl_ASTNode *child = sl_node_get_child_mutable(container, root, i);
+    free_children(container, child);
   }
-  ARR_FREE(root->children);
   if (root->name != NULL)
     free(root->name);
 }
 
-void
-sl_node_free(sl_ASTNode *node)
+void sl_ast_container_free(sl_ASTContainer *container)
 {
-  /* Recursively free the children of this node. */
-  free_children(node);
-  free(node);
-}
-
-static void
-copy_node_and_children(sl_ASTNode *dst, const sl_ASTNode *src)
-{
-  ARR_INIT_RESERVE(dst->children, ARR_LENGTH(src->children));
-  for (size_t i = 0; i < ARR_LENGTH(src->children); ++i)
-  {
-    sl_ASTNode *dst_child = ARR_GET(dst->children, i);
-    const sl_ASTNode *src_child = ARR_GET(src->children, i);
-    copy_node_and_children(dst_child, src_child);
-    dst_child->parent = dst;
-  }
-  {
-    dst->type = src->type;
-    if (src->name != NULL)
-      dst->name = strdup(src->name);
-    else
-      dst->name = NULL;
-  }
+  free_children(container, sl_ast_container_get_root_mutable(container));
+  ARR_FREE(container->nodes);
+  free(container);
 }
 
 static void
@@ -215,24 +254,23 @@ print_node(char *buf, size_t len, const sl_ASTNode *node)
   }
 }
 
-static void
-print_children(const sl_ASTNode *root, unsigned int depth)
+static void print_children(const sl_ASTContainer *container,
+    const sl_ASTNode *root, unsigned int depth)
 {
   for (size_t i = 0; i < depth; ++i)
     printf(" ");
   char buf[1024];
   print_node(buf, 1024, root);
   printf("%s\n", buf);
-  for (size_t i = 0; i < ARR_LENGTH(root->children); ++i)
-  {
-    print_children(ARR_GET(root->children, i), depth + 1);
+  for (size_t i = 0; i < sl_node_get_child_count(container, root); ++i) {
+    print_children(container, sl_node_get_child(container, root, i),
+        depth + 1);
   }
 }
 
-void
-sl_print_tree(const sl_ASTNode *root)
+void sl_ast_print(const sl_ASTContainer *container)
 {
-  print_children(root, 0);
+  print_children(container, sl_ast_container_get_root(container), 0);
 }
 
 void
@@ -242,16 +280,47 @@ sl_node_show_message(sl_TextInput *input, const sl_ASTNode *node,
   sl_input_show_message(input, node->line, node->column, message, type);
 }
 
-static sl_ASTNode *
-new_child(sl_ASTNode *parent)
+static sl_ASTNode * sl_node_new(sl_ASTContainer *container)
 {
-  sl_ASTNode child = {};
-  child.parent = parent;
-  ARR_INIT(child.children);
+  sl_ASTNode node;
+  node.index = ARR_LENGTH(container->nodes);
+  node.parent_index = SIZE_MAX;
+  node.first_child_index = SIZE_MAX;
+  node.left_sibling_index = SIZE_MAX;
+  node.right_sibling_index = SIZE_MAX;
+  node.name = NULL;
+  ARR_APPEND(container->nodes, node);
+  return ARR_GET(container->nodes, node.index);
+}
 
-  ARR_APPEND(parent->children, child);
+static sl_ASTNode * new_child(sl_ASTContainer *container, sl_ASTNode *parent)
+{
+  sl_ASTNode *child, *parent_node;
+  size_t parent_index = parent->index;
+  child = sl_node_new(container);
+  child->parent_index = parent_index;
+  parent_node = sl_ast_container_get_node_mutable(container, parent_index);
+  if (sl_node_get_child_count(container, parent_node) > 0) {
+    sl_ASTNode *sibling = sl_node_get_child_mutable(container, parent_node,
+        sl_node_get_child_count(container, parent_node) - 1);
+    sibling->right_sibling_index = child->index;
+    child->left_sibling_index = sibling->index;
+  } else {
+    parent_node->first_child_index = child->index;
+  }
+  return child;
+}
 
-  return ARR_GET(parent->children, ARR_LENGTH(parent->children) - 1);
+static sl_ASTContainer * new_container()
+{
+  sl_ASTContainer *container;
+  container = SL_NEW(sl_ASTContainer);
+  if (container == NULL)
+    return NULL;
+  ARR_INIT(container->nodes);
+  sl_node_new(container);
+  container->root_index = 0;
+  return container;
 }
 
 /* --- Parser --- */
@@ -278,8 +347,8 @@ struct ParserStep
 struct ParserState
 {
   sl_LexerState *input;
-  sl_ASTNode *tree;
-  sl_ASTNode *current;
+  sl_ASTContainer *container;
+  size_t current_node_index;
   bool panic;
 
   ARR(struct ParserStep) stack;
@@ -385,7 +454,8 @@ advance(struct ParserState *state)
 static sl_ASTNode *
 current(struct ParserState *state)
 {
-  return state->current;
+  return sl_ast_container_get_node_mutable(state->container,
+      state->current_node_index);
 }
 
 static struct ParserStep *
@@ -472,15 +542,16 @@ set_node_location(struct ParserState *state,
 static int
 descend(struct ParserState *state, union ParserStepUserData user_data)
 {
-  state->current = new_child(state->current);
-  state->current->type = user_data.node_type;
+  state->current_node_index =
+      new_child(state->container, current(state))->index;
+  current(state)->type = user_data.node_type;
   return 0;
 }
 
 static int
 ascend(struct ParserState *state, union ParserStepUserData user_data)
 {
-  state->current = state->current->parent;
+  state->current_node_index = current(state)->parent_index;
   return 0;
 }
 
@@ -1405,16 +1476,16 @@ parse_namespace(struct ParserState *state,
   return 0;
 }
 
-sl_ASTNode *
-sl_parse_input(sl_LexerState *input, int *error)
+sl_ASTContainer * sl_parse_input(sl_LexerState *input, int *error)
 {
   struct ParserState state = {};
   state.input = input;
-  state.tree = sl_node_new();
-  if (state.tree == NULL)
+  state.container = new_container();
+  if (state.container == NULL)
     return NULL;
-  state.tree->type = sl_ASTNodeType_Namespace;
-  state.current = state.tree;
+  sl_ast_container_get_root_mutable(state.container)->type =
+      sl_ASTNodeType_Namespace;
+  state.current_node_index = state.container->root_index;
   state.panic = FALSE;
   ARR_INIT(state.stack);
 
@@ -1444,5 +1515,5 @@ sl_parse_input(sl_LexerState *input, int *error)
   ARR_FREE(state.stack);
   if (error != NULL)
     *error = 0;
-  return state.tree;
+  return state.container;
 }

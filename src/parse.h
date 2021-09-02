@@ -171,17 +171,20 @@ enum sl_ASTNodeType
 };
 typedef enum sl_ASTNodeType sl_ASTNodeType;
 
+struct sl_ASTContainer;
+typedef struct sl_ASTContainer sl_ASTContainer;
+
 struct sl_ASTNode;
 typedef struct sl_ASTNode sl_ASTNode;
 
-const sl_ASTNode *
-sl_node_get_parent(const sl_ASTNode *node);
+const sl_ASTNode * sl_node_get_parent(const sl_ASTContainer *container,
+    const sl_ASTNode *node);
 
-size_t
-sl_node_get_child_count(const sl_ASTNode *node);
+size_t sl_node_get_child_count(const sl_ASTContainer *container,
+    const sl_ASTNode *node);
 
-const sl_ASTNode *
-sl_node_get_child(const sl_ASTNode *node, size_t index);
+const sl_ASTNode * sl_node_get_child(const sl_ASTContainer *container,
+    const sl_ASTNode *node, size_t child_index);
 
 sl_ASTNodeType
 sl_node_get_type(const sl_ASTNode *node);
@@ -189,21 +192,19 @@ sl_node_get_type(const sl_ASTNode *node);
 const char *
 sl_node_get_name(const sl_ASTNode *node);
 
-sl_ASTNode *
-sl_node_new();
+void sl_ast_container_free(sl_ASTContainer *container);
 
-void
-sl_node_free(sl_ASTNode *node);
+const sl_ASTNode * sl_ast_container_get_root(const sl_ASTContainer *container);
 
-void
-sl_print_tree(const sl_ASTNode *root);
+void sl_ast_print(const sl_ASTContainer *container);
 
 void
 sl_node_show_message(sl_TextInput *input, const sl_ASTNode *node,
   const char *message, sl_MessageType type);
 
-sl_ASTNode *
-sl_parse_input(sl_LexerState *input, int *error);
+sl_ASTContainer * sl_parse_input(sl_LexerState *input, int *error);
+
+void sl_ast_container_free(sl_ASTContainer *container);
 
 /* --- Verifier --- */
 extern int verbose;
